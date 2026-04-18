@@ -5,8 +5,15 @@ import java.nio.ByteOrder;
 
 import net.fabricmc.api.ModInitializer;
 
+import net.minecraft.registry.Registries;
+import net.minecraft.registry.Registry;
+import net.minecraft.util.Identifier;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import me.apika.apikaprobe.worldgen.BlockRegistry;
+import me.apika.apikaprobe.worldgen.RustChunkGenerator;
 
 public class ExampleMod implements ModInitializer {
 	public static final String MOD_ID = "apikaprobe";
@@ -19,6 +26,20 @@ public class ExampleMod implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		LOGGER.info("Hello Fabric world!");
+
+		// Block table must be built before any chunk gen can fire. Safe to run
+		// even if the native library fails to load — BlockRegistry.get() then
+		// returns stone fallbacks and the world would still be consistent.
+		BlockRegistry.init();
+
+		// Register the chunk generator CODEC. The BiomeSource inside each
+		// RustChunkGenerator instance is supplied by the dimension datapack
+		// JSON (data/apikaprobe/dimension/rust_dim.json), not here.
+		Registry.register(
+			Registries.CHUNK_GENERATOR,
+			Identifier.of(MOD_ID, "rust_generator"),
+			RustChunkGenerator.CODEC
+		);
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			LOGGER.warn("Native engine unavailable — skipping Rust init and heightmap bench.");

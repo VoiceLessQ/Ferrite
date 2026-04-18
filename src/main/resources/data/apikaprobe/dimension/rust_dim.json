@@ -1,0 +1,11 @@
+{
+  "type": "apikaprobe:rust_dim",
+  "generator": {
+    "type": "apikaprobe:rust_generator",
+    "seed": 12345,
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "minecraft:plains"
+    }
+  }
+}

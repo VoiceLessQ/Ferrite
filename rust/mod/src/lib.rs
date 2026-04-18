@@ -11,6 +11,7 @@ mod items;
 mod worldgen;
 
 pub use engine::Java_me_apika_apikaprobe_RustBridge_initEngine;
+pub use worldgen::Java_me_apika_apikaprobe_RustBridge_generateChunk;
 pub use worldgen::Java_me_apika_apikaprobe_RustBridge_generateHeightmap;
 
 const MOD_ID: &str = "apikaprobe";
