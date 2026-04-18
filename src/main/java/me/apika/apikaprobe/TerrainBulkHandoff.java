@@ -87,24 +87,41 @@ public final class TerrainBulkHandoff {
 		ByteBuffer cornerBuf = ByteBuffer.allocateDirect(CORNER_BYTES).order(ByteOrder.nativeOrder());
 		ByteBuffer outBuf = ByteBuffer.allocateDirect(BLOCK_ID_BYTES).order(ByteOrder.nativeOrder());
 
-		int startX = chunk.getPos().getStartX();
-		int startZ = chunk.getPos().getStartZ();
+		final int startX = chunk.getPos().getStartX();
+		final int startZ = chunk.getPos().getStartZ();
 
-		// Sample finalDensity at every cell corner.
-		long tSampleStart = System.nanoTime();
-		for (int cy = 0; cy < CORNERS_Y; cy++) {
-			int worldY = MIN_Y + cy * CELL_HEIGHT;
-			for (int cz = 0; cz < CORNERS_Z; cz++) {
-				int worldZ = startZ + cz * CELL_WIDTH;
-				for (int cx = 0; cx < CORNERS_X; cx++) {
-					int worldX = startX + cx * CELL_WIDTH;
-					double d = finalDensity.sample(new DensityFunction.UnblendedNoisePos(worldX, worldY, worldZ));
-					int idx = (cy * (CORNERS_X * CORNERS_Z) + cz * CORNERS_X + cx) * 4;
-					cornerBuf.putFloat(idx, (float) d);
+		// Batched fill via DensityFunction.fill(double[], EachApplier).
+		// Concrete density function implementations can override fill to
+		// batch-process more efficiently than 1225 individual sample() calls.
+		// Applier.at(i) maps flat-array index to cell-corner world position.
+		double[] cornerValues = new double[CORNER_COUNT];
+		DensityFunction.EachApplier applier = new DensityFunction.EachApplier() {
+			@Override
+			public DensityFunction.NoisePos at(int index) {
+				int cy = index / (CORNERS_X * CORNERS_Z);
+				int cz = (index / CORNERS_X) % CORNERS_Z;
+				int cx = index % CORNERS_X;
+				return new DensityFunction.UnblendedNoisePos(
+						startX + cx * CELL_WIDTH,
+						MIN_Y + cy * CELL_HEIGHT,
+						startZ + cz * CELL_WIDTH);
+			}
+
+			@Override
+			public void fill(double[] densities, DensityFunction function) {
+				for (int i = 0; i < densities.length; i++) {
+					densities[i] = function.sample(at(i));
 				}
 			}
-		}
+		};
+
+		long tSampleStart = System.nanoTime();
+		finalDensity.fill(cornerValues, applier);
 		long sampleNs = System.nanoTime() - tSampleStart;
+
+		for (int i = 0; i < CORNER_COUNT; i++) {
+			cornerBuf.putFloat(i * 4, (float) cornerValues[i]);
+		}
 
 		// Hand off to Rust: interpolates + decides + fills output buffer.
 		long tRustStart = System.nanoTime();
