@@ -81,6 +81,18 @@ public final class ChunkGenMonitor {
 		recordEnd(SURFACE_START, SURFACE_COUNT, SURFACE_TOTAL_NS, SURFACE_MAX_NS);
 	}
 
+	// Live read accessors for cross-monitor use (e.g. NoiseStageMonitor uses
+	// these to compute inferred blockstate cost before this monitor resets).
+	// Values reflect the current 5-second window's accumulators in progress.
+
+	public static long getSyncNoiseCount() {
+		return SYNC_NOISE_COUNT.get();
+	}
+
+	public static long getSyncNoiseTotalNs() {
+		return SYNC_NOISE_TOTAL_NS.get();
+	}
+
 	// --- Internals ----------------------------------------------------------
 
 	private static void recordEnd(

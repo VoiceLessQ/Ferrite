@@ -3,7 +3,8 @@
 	"package": "me.apika.apikaprobe.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"ChunkPhaseMixin"
+		"ChunkPhaseMixin",
+		"NoiseStageMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

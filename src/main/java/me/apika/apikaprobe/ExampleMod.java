@@ -14,6 +14,9 @@ public class ExampleMod implements ModInitializer {
 		LOGGER.info("Hello Fabric world!");
 
 		TpsMonitor.register();
+		// NoiseStageMonitor must register BEFORE ChunkGenMonitor so its tick
+		// listener fires first and can read sync-noise counters pre-reset.
+		NoiseStageMonitor.register();
 		ChunkGenMonitor.register();
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
