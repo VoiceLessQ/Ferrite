@@ -48,9 +48,26 @@ class RustBridge {
 
   public static Item SERJIO = null;
 
+  public static final boolean NATIVE_AVAILABLE;
+
   static {
-    System.loadLibrary("rust_mod");
+    boolean loaded;
+    try {
+      System.loadLibrary("rust_mod");
+      loaded = true;
+    } catch (UnsatisfiedLinkError e) {
+      ExampleMod.LOGGER.error(
+          "rust_mod native library failed to load — falling back to Java. Reason: {}",
+          e.getMessage());
+      loaded = false;
+    }
+    NATIVE_AVAILABLE = loaded;
   }
 
   public static native void main();
+
+  public static native int initEngine();
+
+  public static native void generateHeightmap(
+      java.nio.ByteBuffer buffer, long seed, int originX, int originZ, int size);
 }

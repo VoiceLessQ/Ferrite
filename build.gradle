@@ -1,5 +1,5 @@
 plugins {
-	id 'fabric-loom' version '1.9-SNAPSHOT'
+	id 'fabric-loom' version '1.14-SNAPSHOT'
 	id 'maven-publish'
 }
 
@@ -28,6 +28,12 @@ loom {
 		}
 	}
 
+	runs {
+		configureEach {
+			def rustLibDir = file("rust/mod/../../target/x86_64-pc-windows-gnu/release").absolutePath
+			vmArg "-Djava.library.path=${rustLibDir}"
+		}
+	}
 }
 
 dependencies {
