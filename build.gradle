@@ -32,6 +32,9 @@ loom {
 		configureEach {
 			def rustLibDir = file("rust/mod/../../target/x86_64-pc-windows-gnu/release").absolutePath
 			vmArg "-Djava.library.path=${rustLibDir}"
+			// Simulate low-end hardware — cap heap so GC pressure resembles 8GB-RAM laptops.
+			vmArg "-Xmx3G"
+			vmArg "-Xms512M"
 		}
 	}
 }

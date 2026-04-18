@@ -27,6 +27,8 @@ public class ExampleMod implements ModInitializer {
 	public void onInitialize() {
 		LOGGER.info("Hello Fabric world!");
 
+		TpsMonitor.register();
+
 		// Block table must be built before any chunk gen can fire. Safe to run
 		// even if the native library fails to load — BlockRegistry.get() then
 		// returns stone fallbacks and the world would still be consistent.
