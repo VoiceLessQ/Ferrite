@@ -4,7 +4,8 @@
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
 		"ChunkPhaseMixin",
-		"NoiseStageMixin"
+		"NoiseStageMixin",
+		"AquiferMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
