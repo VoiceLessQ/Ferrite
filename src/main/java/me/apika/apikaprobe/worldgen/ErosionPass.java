@@ -10,8 +10,11 @@ import me.apika.apikaprobe.RustBridge;
 
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.Heightmap;
+import net.minecraft.world.biome.Biome;
+import net.minecraft.world.biome.BiomeKeys;
 import net.minecraft.world.chunk.Chunk;
 
 /**
@@ -38,8 +41,39 @@ public final class ErosionPass {
 	private static final int ITERATIONS = 2000;
 
 	private static final BlockState AIR = Blocks.AIR.getDefaultState();
-	private static final BlockState DIRT = Blocks.DIRT.getDefaultState();
-	private static final BlockState GRASS = Blocks.GRASS_BLOCK.getDefaultState();
+
+	private record SurfaceBlocks(BlockState top, BlockState filler) {}
+
+	private static final SurfaceBlocks GRASS =
+		new SurfaceBlocks(Blocks.GRASS_BLOCK.getDefaultState(), Blocks.DIRT.getDefaultState());
+	private static final SurfaceBlocks SAND =
+		new SurfaceBlocks(Blocks.SAND.getDefaultState(), Blocks.SANDSTONE.getDefaultState());
+	private static final SurfaceBlocks RED_SAND =
+		new SurfaceBlocks(Blocks.RED_SAND.getDefaultState(), Blocks.RED_SANDSTONE.getDefaultState());
+	private static final SurfaceBlocks STONE =
+		new SurfaceBlocks(Blocks.STONE.getDefaultState(), Blocks.STONE.getDefaultState());
+
+	private static SurfaceBlocks surfaceFor(RegistryEntry<Biome> biome) {
+		if (biome.matchesKey(BiomeKeys.DESERT)
+				|| biome.matchesKey(BiomeKeys.BEACH)
+				|| biome.matchesKey(BiomeKeys.SNOWY_BEACH)) {
+			return SAND;
+		}
+		if (biome.matchesKey(BiomeKeys.BADLANDS)
+				|| biome.matchesKey(BiomeKeys.ERODED_BADLANDS)
+				|| biome.matchesKey(BiomeKeys.WOODED_BADLANDS)) {
+			return RED_SAND;
+		}
+		if (biome.matchesKey(BiomeKeys.STONY_PEAKS)
+				|| biome.matchesKey(BiomeKeys.STONY_SHORE)) {
+			return STONE;
+		}
+		// Snowy biomes (FROZEN_PEAKS, SNOWY_SLOPES, GROVE, SNOWY_TAIGA,
+		// SNOWY_PLAINS, JAGGED_PEAKS) fall through to grass/dirt for now —
+		// snow layer placement requires a SnowBlock with `layers` state and
+		// deferred on purpose, same rationale as the water retention gap.
+		return GRASS;
+	}
 
 	private ErosionPass() {}
 
@@ -95,23 +129,29 @@ public final class ErosionPass {
 				int worldX = startX + x;
 				int worldZ = startZ + z;
 
+				// Pick surface blocks from the biome at the new surface height.
+				// getBiomeForNoiseGen expects biome-cell coords (block coords >> 2).
+				RegistryEntry<Biome> biome =
+					chunk.getBiomeForNoiseGen(worldX >> 2, newY >> 2, worldZ >> 2);
+				SurfaceBlocks surface = surfaceFor(biome);
+
 				if (newY > oldY) {
-					// Raised — fill new column with dirt, cap with grass.
+					// Raised — fill new column with filler, cap with top.
 					for (int y = oldY + 1; y < newY; y++) {
 						pos.set(worldX, y, worldZ);
-						chunk.setBlockState(pos, DIRT, 0);
+						chunk.setBlockState(pos, surface.filler(), 0);
 					}
 					pos.set(worldX, newY, worldZ);
-					chunk.setBlockState(pos, GRASS, 0);
+					chunk.setBlockState(pos, surface.top(), 0);
 				} else {
 					// Lowered — blow away everything from newY+1 up to old surface,
-					// put a fresh grass cap at newY.
+					// put a fresh top cap at newY.
 					for (int y = newY + 1; y <= oldY; y++) {
 						pos.set(worldX, y, worldZ);
 						chunk.setBlockState(pos, AIR, 0);
 					}
 					pos.set(worldX, newY, worldZ);
-					chunk.setBlockState(pos, GRASS, 0);
+					chunk.setBlockState(pos, surface.top(), 0);
 				}
 			}
 		}
