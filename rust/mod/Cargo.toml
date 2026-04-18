@@ -9,6 +9,4 @@ crate-type = ["cdylib"]
 [dependencies]
 rosttasse = { path = "../api/" }
 rosttasse-mc = { path = "../mc/" }
-noise = "0.9"
 rayon = "1.10"
-rand = "0.8"
