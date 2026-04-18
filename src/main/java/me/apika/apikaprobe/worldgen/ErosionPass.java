@@ -121,6 +121,8 @@ public final class ErosionPass {
 				int newY = Math.round(raw);
 				if (newY < MIN_Y_SAFE) newY = MIN_Y_SAFE;
 				if (newY > MAX_Y_SAFE) newY = MAX_Y_SAFE;
+				// Cap single-column drop to avoid chunk-boundary pits.
+				if (newY < oldY - 3) newY = oldY - 3;
 
 				if (newY == oldY) {
 					continue;
