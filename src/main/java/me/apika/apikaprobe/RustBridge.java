@@ -20,4 +20,14 @@ public class RustBridge {
   private RustBridge() {}
 
   public static native int initEngine();
+
+  public static native void computeChunkTerrain(
+      java.nio.ByteBuffer cornerDensities,
+      java.nio.ByteBuffer outBlockIds,
+      int cellWidth,
+      int cellHeight,
+      int minY,
+      int seaLevel,
+      int chunkX,
+      int chunkZ);
 }
