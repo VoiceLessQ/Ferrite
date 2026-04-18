@@ -1,17 +1,15 @@
 package me.apika.apikaprobe.mixin;
 
-import java.util.concurrent.CompletableFuture;
-
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.worldgen.ErosionPass;
 
+import net.minecraft.world.ChunkRegion;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.gen.StructureAccessor;
-import net.minecraft.world.gen.chunk.Blender;
 import net.minecraft.world.gen.chunk.NoiseChunkGenerator;
 import net.minecraft.world.gen.noise.NoiseConfig;
 
@@ -19,16 +17,16 @@ import net.minecraft.world.gen.noise.NoiseConfig;
 public abstract class ChunkNoiseMixin {
 
 	@Inject(
-		method = "populateNoise",
-		at = @At("RETURN")
+		method = "buildSurface",
+		at = @At("HEAD")
 	)
-	private void apikaprobe$onPopulateNoiseDone(
-			Blender blender,
+	private void apikaprobe$onBuildSurfaceHead(
+			ChunkRegion region,
+			StructureAccessor structures,
 			NoiseConfig noiseConfig,
-			StructureAccessor structureAccessor,
 			Chunk chunk,
-			CallbackInfoReturnable<CompletableFuture<Chunk>> cir) {
+			CallbackInfo ci) {
 		long seed = chunk.getPos().toLong();
-		ErosionPass.apply(chunk, seed);
+		ErosionPass.apply(region, chunk, seed);
 	}
 }
