@@ -4,7 +4,7 @@ import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 
 public final class BlockRegistry {
-	private static final BlockState[] TABLE = new BlockState[6];
+	private static final BlockState[] TABLE = new BlockState[7];
 
 	private BlockRegistry() {}
 
@@ -15,6 +15,7 @@ public final class BlockRegistry {
 		TABLE[3] = Blocks.GRASS_BLOCK.getDefaultState();
 		TABLE[4] = Blocks.WATER.getDefaultState();
 		TABLE[5] = Blocks.BEDROCK.getDefaultState();
+		TABLE[6] = Blocks.DEEPSLATE.getDefaultState();
 	}
 
 	public static BlockState get(int id) {

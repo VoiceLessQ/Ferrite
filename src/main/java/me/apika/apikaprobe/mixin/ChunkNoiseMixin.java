@@ -6,6 +6,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.worldgen.ErosionPass;
+import me.apika.apikaprobe.worldgen.FeatureInjector;
 
 import net.minecraft.world.ChunkRegion;
 import net.minecraft.world.chunk.Chunk;
@@ -28,5 +29,19 @@ public abstract class ChunkNoiseMixin {
 			CallbackInfo ci) {
 		long seed = chunk.getPos().toLong();
 		ErosionPass.apply(region, chunk, seed);
+	}
+
+	@Inject(
+		method = "buildSurface",
+		at = @At("RETURN")
+	)
+	private void apikaprobe$onBuildSurfaceDone(
+			ChunkRegion region,
+			StructureAccessor structures,
+			NoiseConfig noiseConfig,
+			Chunk chunk,
+			CallbackInfo ci) {
+		long seed = chunk.getPos().toLong();
+		FeatureInjector.apply(chunk, seed);
 	}
 }

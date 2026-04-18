@@ -8,11 +8,13 @@ use crate::items::SerjioItem;
 
 mod engine;
 mod erosion;
+mod features;
 mod items;
 mod worldgen;
 
 pub use engine::Java_me_apika_apikaprobe_RustBridge_initEngine;
 pub use erosion::Java_me_apika_apikaprobe_RustBridge_erodeHeightmap;
+pub use features::Java_me_apika_apikaprobe_RustBridge_injectFeatures;
 pub use worldgen::Java_me_apika_apikaprobe_RustBridge_generateChunk;
 pub use worldgen::Java_me_apika_apikaprobe_RustBridge_generateHeightmap;
 
