@@ -28,7 +28,7 @@ public abstract class ChunkNoiseMixin {
 			Chunk chunk,
 			CallbackInfo ci) {
 		long seed = chunk.getPos().toLong();
-		ErosionPass.apply(region, chunk, seed);
+		// ErosionPass.apply(region, chunk, seed); // disabled: per-chunk seams unfixable
 	}
 
 	@Inject(

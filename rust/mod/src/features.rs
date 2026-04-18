@@ -34,8 +34,9 @@ pub const MAX_PLACEMENTS: usize = 256;
 const PLACEMENT_INTS: usize = 4;
 pub const BUFFER_BYTES: usize = 4 + MAX_PLACEMENTS * PLACEMENT_INTS * 4;
 
-// Monolith feature.
-const MONOLITH_SPAWN_PCT: u64 = 2;
+// Monolith feature — ~1 in 300 chunks (roughly 0.33%).
+const MONOLITH_SPAWN_NUM: u64 = 1;
+const MONOLITH_SPAWN_DEN: u64 = 300;
 const MONOLITH_HEIGHT: i32 = 6;
 const MONOLITH_BASE_Y: i32 = 64;
 const MONOLITH_LOCAL_X: i32 = 8;
@@ -73,7 +74,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_injectFeatures<'local
     let mut count: usize = 0;
 
     let h = chunk_hash(seed as u64, chunk_x, chunk_z);
-    if h % 100 < MONOLITH_SPAWN_PCT {
+    if h % MONOLITH_SPAWN_DEN < MONOLITH_SPAWN_NUM {
         count = emit_monolith(slots, count);
     }
 
