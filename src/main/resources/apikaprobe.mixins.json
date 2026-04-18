@@ -5,7 +5,8 @@
 	"mixins": [
 		"ChunkPhaseMixin",
 		"NoiseStageMixin",
-		"AquiferMixin"
+		"AquiferMixin",
+		"TerrainBulkHandoffMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

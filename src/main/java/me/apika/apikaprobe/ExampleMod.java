@@ -19,6 +19,7 @@ public class ExampleMod implements ModInitializer {
 		// pre-reset.
 		NoiseStageMonitor.register();
 		AquiferMonitor.register();
+		TerrainBulkHandoff.register();
 		ChunkGenMonitor.register();
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
