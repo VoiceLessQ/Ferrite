@@ -2,7 +2,9 @@
 	"required": true,
 	"package": "me.apika.apikaprobe.mixin",
 	"compatibilityLevel": "JAVA_21",
-	"mixins": [],
+	"mixins": [
+		"ChunkPhaseMixin"
+	],
 	"injectors": {
 		"defaultRequire": 1
 	}
