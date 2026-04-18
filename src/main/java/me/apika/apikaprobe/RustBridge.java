@@ -49,4 +49,7 @@ public class RustBridge {
 
   public static native void generateChunk(
       java.nio.ByteBuffer buffer, long seed, int chunkX, int chunkZ);
+
+  public static native void erodeHeightmap(
+      java.nio.ByteBuffer buffer, int width, int height, int iterations, long seed);
 }
