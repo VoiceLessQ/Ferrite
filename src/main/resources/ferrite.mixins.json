@@ -26,8 +26,7 @@
 		"EntityAdjustInvoker",
 		"MovementRedirectMixin",
 		"PhysicsPreTickMixin",
-		"CrammingCancelMixin",
-		"SurfacePhaseMixin"
+		"CrammingCancelMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
