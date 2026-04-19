@@ -15,7 +15,10 @@
 		"EntityCategoryMixin",
 		"MonsterBaseTickMixin",
 		"MonsterMovementMixin",
-		"MonsterMobTickMixin"
+		"MonsterMobTickMixin",
+		"CrammingMixin",
+		"BlockCollisionMixin",
+		"NavigatorTickMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

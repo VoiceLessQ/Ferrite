@@ -89,6 +89,18 @@ public final class MonsterPhaseMonitor {
 		recordPhaseEnd(PHASE_MOBTICK);
 	}
 
+	/**
+	 * Live read of movement-self cost for cross-monitor use
+	 * (MovementInternalsMonitor reads this at report time to compute
+	 * the "other" bucket = movement_self − sum(its own phases)).
+	 *
+	 * Must be called BEFORE this monitor's own report-and-reset fires
+	 * this tick. Registration order in ExampleMod ensures that.
+	 */
+	public static long getMovementSelfNs() {
+		return Math.max(0L, TOTAL_NS[PHASE_MOVEMENT].get() - TOTAL_NS[PHASE_MOBTICK].get());
+	}
+
 	// --- Internals ----------------------------------------------------------
 
 	private static void recordPhaseEnd(int phase) {

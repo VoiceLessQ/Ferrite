@@ -23,6 +23,10 @@ public class ExampleMod implements ModInitializer {
 		ChunkGenMonitor.register();
 		WorldTickMonitor.register();
 		EntityTickMonitor.register();
+		// MovementInternalsMonitor must register BEFORE MonsterPhaseMonitor so
+		// its END_SERVER_TICK listener fires first and reads
+		// MonsterPhaseMonitor.getMovementSelfNs() before that monitor resets.
+		MovementInternalsMonitor.register();
 		MonsterPhaseMonitor.register();
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
