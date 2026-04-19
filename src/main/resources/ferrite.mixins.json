@@ -11,7 +11,8 @@
 		"DensityInterpolatorAccessor",
 		"InterpolatorDiagnosticMixin",
 		"WorldTickMixin",
-		"ServerWorldTickMixin"
+		"ServerWorldTickMixin",
+		"EntityCategoryMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
