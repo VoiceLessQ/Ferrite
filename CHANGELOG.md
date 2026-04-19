@@ -6,6 +6,69 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/) with the
 `-alpha` suffix indicating pre-release research builds.
 
+## [0.2.0-alpha] — 2026-04-19
+
+First release with a real gameplay-affecting optimization. Previous
+`0.1.0-alpha` was instrumentation only.
+
+### Added
+
+- **Cramming Rust port (the win).** `LivingEntity.tickCramming` on mobs
+  is now handled by a Rust spatial-hash push accumulator.
+  - `cramming.rs` — 2-block 2D spatial hash, pair iteration with
+    array-index guard, exact vanilla push formula (Chebyshev distance,
+    `f >= 0.01`, `1/sqrt(f)` magnitude clamped to 1, × 0.05 scale)
+  - `cramming_jni.rs` — zero-copy direct-ByteBuffer handoff, bounds-
+    checked, fallback-safe on parse failure
+  - `CrammingHandoff` — pre-allocated request/result buffers (80 + 64 KB)
+  - `CrammingDispatcher` — per-tick batch via `world.getTime()` guard:
+    first `tickCramming` call of a tick triggers the batch, all
+    subsequent cancels are no-ops
+  - `CrammingCancelMixin` — `@Inject(HEAD, cancellable=true)` on
+    `tickCramming()V`; only mobs go through the Rust path
+  - **Measured result at 1000+ mobs:** cramming cost 14 ms → 0.03 ms
+    (450× reduction). Total entity tick: ~60 ms → ~21 ms (~3×). TPS held
+    at 20, zero crashes, zero fallbacks observed.
+- **Movement-phase instrumentation.** Seven-bucket breakdown of
+  `LivingEntity.tickMovement` internals:
+  - `cramming`, `blockCollision`, `navigator`, `move`, `adjustColl`,
+    `travel`, `gravity` + computed `other`
+  - Cross-monitor live read pattern (reads `movement_self` from
+    `MonsterPhaseMonitor` at report time to compute `other` bucket
+    without reset-race)
+  - New `[movement-internals]` log line, 5-second window
+- **`[cramming-dispatch]` diagnostic log** — per-5s window: batches
+  executed, total mobs processed, pushed count.
+- **Physics (Entity.adjustMovementForCollisions) port — shelved but
+  documented.** Full end-to-end JNI pipeline, AABB sweep engine, and
+  chunk-section bucketing snapshot model were built and verified
+  correct (18K successful dispatches, 0 fallback, end-to-end math
+  matches vanilla). Benchmark showed snapshot materialization cost
+  dominates sweep savings at realistic mob counts: ~0.8 ms/bucket ×
+  100 buckets = 80 ms/tick overhead vs ~8 ms/tick of sweep wins.
+  Framework kept disabled (`PhysicsDispatcher.ENABLED=false`) for
+  future invalidation-cache redesign. Full architectural findings in
+  the commit log under `c991ac8`, `5dbf40c`, `18ce009`.
+- **Full end-to-end `@Redirect` + `@Invoker` Mixin pattern.** New
+  `EntityAdjustInvoker` accessor interface provides a bypass-the-redirect
+  path for vanilla fallback — reusable for future per-method Rust ports.
+
+### Changed
+
+- `CrammingMixin` (timing instrumentation) now gates itself off when
+  `CrammingDispatcher.ENABLED` is true, preventing ThreadLocal timer
+  imbalance when the cancel-mixin skips the method body.
+- `ferrite.mixins.json` — registered 8 new mixins across the physics +
+  cramming ports.
+
+### Known limitations
+
+- **Cramming damage deferred.** 1.21.11's `GameRules.getInt` was
+  refactored out; the `maxEntityCramming` game-rule damage is not
+  applied while the Rust path is active. Push is applied normally.
+- **Physics port shelved**, as noted above. The instrumentation buckets
+  it produced are still shipped.
+
 ## [0.1.0-alpha] — 2026-04-18
 
 First public alpha. Research mod framing — instrumentation only, no

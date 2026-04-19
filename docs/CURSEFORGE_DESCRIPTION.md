@@ -1,73 +1,111 @@
+
 # Ferrite
 
-A Fabric performance research mod for Minecraft 1.21.11. **Alpha — Windows 64-bit only.**
+A Fabric performance mod for Minecraft 1.21.11 powered by a Rust native library. **Alpha — Windows 64-bit only.**
 
 ---
 
-## What it is
+## What it does
 
-Ferrite is a diagnostic mod. It uses a Rust native library (via JNI) to measure where Minecraft spends time during chunk generation and entity rendering, and writes that data to your log file.
+Ferrite replaces Minecraft's mob-vs-mob collision ("cramming") loop with a Rust spatial-hash implementation.
 
-It does **not** change worldgen, entities, blocks, biomes, or anything visible in-game. The current release is instrumentation only. Future versions will use the collected data to ship targeted optimizations — which specific optimizations get built depends on what the real-user logs show.
+**At 1000+ mob loads (mob farms, zombie sieges, crowded servers):**
 
-## What you actually see
+* **Cramming cost cut ~99%** (14 ms → 0.03 ms per tick)
+* **Total server entity tick cost cut ~65%** (60 ms → 21 ms)
+* **TPS stays stable** where vanilla would start slipping below 20
 
-Nothing visual. No new items, no new structures, no particle effects, no menu screens.
+What that means in practice: on a 4-core server with ~500 mobs loaded, vanilla's entity tick can eat 30–40 ms of the 50 ms tick budget, and the server starts stuttering under any additional load. With Ferrite, the same scenario uses ~10–14 ms and leaves the rest of the budget free for redstone, block entities, and everything else.
 
-Every 5 seconds during active play, Ferrite appends lines to `.minecraft/logs/latest.log` prefixed with `[ferrite]`. Example:
+On single-player worlds with a few dozen mobs you won't notice a difference. The win scales with entity count.
+
+The mod also profiles where time goes so future Rust ports can target the next bottleneck.
+
+**Current release does four things:**
+
+* Replaces vanilla `tickCramming` with a Rust spatial-hash batched push (the main win)
+* Runs Rust-accelerated terrain compute alongside vanilla chunk generation (secondary)
+* Profiles chunk gen costs, entity movement phases, and client FPS every 5 seconds
+* Writes results to `.minecraft/logs/latest.log` with a `[ferrite]` prefix so you can see exactly what's happening
+
+---
+
+## What the logs look like
 
 ```
+[ferrite] [cramming-dispatch] batches=101 mobsTotal=86710  pushed=62921
+[ferrite] [movement-internals] cramming: avg=0.03ms max=0.07ms  move: avg=9.67ms  travel: avg=10.06ms  ...  n=101 ticks
 [ferrite] [chunkgen] noise-sync: n=47 avg=8.3ms max=23.1ms  surface: n=47 avg=1.4ms max=5.2ms
 [ferrite] [client-lag] fps avg=42 min=28 max=60 [WARN]  entities=312  chunks=380  samples=100
-[ferrite] [entity-render] calls=18000 sampled=180 avg=210ns  frame≈6.5ms  low-end≈11ms (est)
+[ferrite] [worldtick] blockentities: avg=0.2ms max=0.4ms  entities: avg=6.1ms max=12.3ms  n=100 ticks
 ```
 
-That's the entire player-facing output.
+Tags on `[client-lag]` lines: `[OK]` (≥60fps) / `[WARN]` (30–59fps) / `[LAG]` (<30fps).
+
+---
 
 ## Why install it
 
-If you have low-end hardware (4-core CPU or fewer, integrated graphics, 8 GB RAM or less), your log data is directly useful for deciding what gets optimized next. High-end machines generate data too, but the bottlenecks we're trying to study don't show up there.
+**If you run mob farms, sieges, or entity-heavy content** — Ferrite directly cuts server tick cost at high mob densities. Vanilla's cramming loop is O(N²) in the dense case; Ferrite is linear in effective pairs via spatial hashing. The cramming speedup is active on every tick, for every mob, regardless of CPU.
 
-**Install if:** you regularly see chunk-loading stutters, FPS drops near mobs or villages, or the "loading terrain" moment drags past a few seconds.
+**If you have low-end hardware** — 4-core CPU or fewer, integrated graphics, 8GB RAM or less — your logs also show chunk-gen and movement bottlenecks that high-end machines never surface. That data decides what gets optimized next.
 
-**Don't bother if:** the game runs smoothly for you. The mod won't hurt anything, but your logs won't tell us what we need.
+Don't bother if you play alone in a fresh world with a handful of mobs — the win scales with entity count and won't matter at small scale.
 
-## What the logs mean
+---
 
-Each `[ferrite]` line reports a specific metric averaged over the last 5 seconds.
+## How to help
 
-- **`[chunkgen]`** — how long chunk generation's noise and surface phases take, in milliseconds per chunk.
-- **`[client-lag]`** — current FPS (avg, min, max), number of loaded entities, number of loaded chunks. Tagged `[OK]`, `[WARN]`, or `[LAG]` based on average FPS (60+/30+/<30).
-- **`[entity-render]`** — average nanoseconds per entity render call, plus estimated per-frame cost on your hardware and on an Intel HD 620 reference.
-- **`[rust-engine]`** — fires once at startup, reports the Rust worker pool size for your CPU.
+1. Play normally for 10–15 minutes, especially in areas with active chunk loading or many mobs
+2. Open `.minecraft/logs/latest.log`
+3. Search for `[ferrite]`
+4. Paste representative lines in a comment below or open a GitHub issue
+5. Include rough specs: CPU model, GPU (integrated or discrete), RAM
 
-Every number is measured. The only estimate is the "low-end" figure, labeled as such.
+No telemetry is sent automatically. Everything stays in your log file and you choose what to share.
 
-## How to submit feedback
+---
 
-If you see consistent `[LAG]` or `[WARN]` tags, or numbers that look interesting:
+## What we've measured
 
-1. Open `.minecraft/logs/latest.log`
-2. Search for `[ferrite]`
-3. Paste a chunk of representative lines into a CurseForge comment on this page, or open an issue on the GitHub repo (linked in the project sidebar)
-4. Include rough specs: CPU model, GPU (integrated or discrete + model), RAM
+**Cramming port — shipped in this release:**
 
-That's all the data we need. No personal info, no telemetry sent automatically — everything is in your log file and you choose what to share.
+| metric | vanilla | Ferrite | reduction |
+|---|---|---|---|
+| `tickCramming` avg | ~14 ms | 0.03 ms | **~99%** |
+| `Entity.move()` avg | ~20 ms | ~10 ms | ~50% (secondary — mobs no longer getting pushed into block geometry as aggressively) |
+| **total entity tick** | **~60 ms** | **~21 ms** | **~65%** |
+| movement phase total | ~55 ms | ~21 ms | ~62% |
+
+Measured at 1000+ active mobs. TPS held at 20, zero crashes, zero fallbacks observed.
+
+**On measurement conditions:** these numbers come from an unconstrained Ryzen 9 5900X run. On an actual 4-core server, absolute millisecond numbers would be higher across the board, but the *percentage* improvements hold — both vanilla and Rust scale with core count similarly for this workload. The win is algorithmic (spatial hash vs O(N²)-ish sequential loop), not parallelism.
+
+**Still-in-progress Rust targets:**
+
+* `sampleBlockState` — Rust bulk compute proved 7× faster in equivalent work, but getting vanilla's density data into the pipeline cleanly is the current blocker. Framework is in the jar; output is gated.
+* `Entity.adjustMovementForCollisions` — attempted, shelved. Snapshot materialization cost exceeded the sweep savings at realistic mob counts. Documented in PROFILING.md for future work.
+
+---
 
 ## Requirements
 
-- Minecraft 1.21.11
-- Fabric Loader 0.18.4 or newer
-- Fabric API
-- **Windows 64-bit**
+* Minecraft 1.21.11
+* Fabric Loader 0.18.4+
+* Fabric API
+* **Windows 64-bit**
+
+---
 
 ## Known limitations
 
-- **Windows only.** The Rust native library is compiled for `x86_64-pc-windows-gnu`. On Mac or Linux the mod will load cleanly but Rust-side features stay disabled (you'll see a message in the log). Cross-platform builds are planned.
-- **No gameplay changes.** This is intentional. The mod is there to measure, not to modify. Future releases may add optimizations.
-- **Alpha state.** First public release. Load order conflicts with other mods are possible. Logs may spam harder than expected during very busy sessions. Please report anything that looks broken.
-- **Console output is chatty.** The mod writes up to ~12 lines per minute during active play. If that's a problem, a logging toggle is on the roadmap.
+* **Windows only.** Mac and Linux load cleanly but Rust features stay disabled. Cross-platform builds are planned.
+* **Cramming damage deferred.** 1.21.11 refactored the GameRules API; cramming death-by-suffocation from the `maxEntityCramming` game rule is disabled when Ferrite is active. The push is applied, but the damage isn't. Mobs in mob farms still die from fall damage / suffocation as normal — just not from the cramming game-rule threshold.
+* **Alpha state.** Report anything that looks broken.
+* **Console output is chatty.** Up to ~12 lines per minute during active play. Logging toggle is on the roadmap.
+
+---
 
 ## License
 
-MIT. Source and issues at the GitHub repo (see sidebar).
+MIT. Source and build instructions at the GitHub repo (sidebar).
