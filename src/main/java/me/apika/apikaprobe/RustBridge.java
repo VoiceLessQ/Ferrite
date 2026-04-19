@@ -8,7 +8,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 
 public class RustBridge {
-  private static final String NATIVE_RESOURCE_PATH = "/assets/rusty/natives/rust_mod.dll";
+  private static final String NATIVE_RESOURCE_PATH = "/assets/ferrite/natives/rust_mod.dll";
 
   public static final boolean NATIVE_AVAILABLE;
 

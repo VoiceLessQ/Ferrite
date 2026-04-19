@@ -1,8 +1,8 @@
-# Rusty
+# Ferrite
 
 A Fabric performance research mod for Minecraft 1.21.11.
 
-Rusty uses a Rust native library (via JNI) to profile and accelerate
+Ferrite uses a Rust native library (via JNI) to profile and accelerate
 Minecraft's chunk generation and entity rendering pipelines. The current
 release is instrumentation-only — it measures where time goes and logs
 it to console. Future versions will use that data to ship targeted
@@ -12,7 +12,7 @@ optimizations.
 
 Low-end hardware users (4-core CPUs, integrated graphics, 8GB RAM)
 experience chunk loading stutters and entity lag that high-end machines
-never see. Rusty collects real performance data from real hardware so we
+never see. Ferrite collects real performance data from real hardware so we
 can fix the right things.
 
 ## What it does right now
@@ -20,14 +20,14 @@ can fix the right things.
 - Logs chunk generation phase costs every 5 seconds during active play
 - Logs client FPS, entity count, and chunk count every 5 seconds
 - Logs entity render cost per frame (sampled)
-- All logging uses the `[rusty]` prefix — searchable in your log file
+- All logging uses the `[ferrite]` prefix — searchable in your log file
 
 ## What the logs look like
 
 ```
-[rusty] [chunkgen] noise-sync: n=47 avg=8.3ms max=23.1ms  surface: n=47 avg=1.4ms max=5.2ms
-[rusty] [client-lag] fps avg=42 min=28 max=60 [WARN]  entities=312  chunks=380  samples=100
-[rusty] [entity-render] calls=18000 sampled=180 avg=210ns  frame≈6.5ms
+[ferrite] [chunkgen] noise-sync: n=47 avg=8.3ms max=23.1ms  surface: n=47 avg=1.4ms max=5.2ms
+[ferrite] [client-lag] fps avg=42 min=28 max=60 [WARN]  entities=312  chunks=380  samples=100
+[ferrite] [entity-render] calls=18000 sampled=180 avg=210ns  frame≈6.5ms
 ```
 
 ## Platform support
@@ -45,7 +45,7 @@ If you have low-end hardware (integrated graphics, 4 cores or fewer,
 2. Play normally for 10–15 minutes, especially in areas with many
    entities or active chunk loading
 3. Find your `latest.log` file
-4. Search for `[rusty]` lines and paste them in a CurseForge comment
+4. Search for `[ferrite]` lines and paste them in a CurseForge comment
    or open a GitHub issue
 
 That data directly drives what gets optimized next.

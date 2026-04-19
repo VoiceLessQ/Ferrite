@@ -23,7 +23,7 @@ import net.minecraft.world.gen.noise.NoiseConfig;
 public abstract class ChunkPhaseMixin {
 
 	static {
-		LoggerFactory.getLogger("rusty").info("[chunkgen] ChunkPhaseMixin loaded");
+		LoggerFactory.getLogger("ferrite").info("[chunkgen] ChunkPhaseMixin loaded");
 	}
 
 	@Inject(method = "populateNoise", at = @At("HEAD"))

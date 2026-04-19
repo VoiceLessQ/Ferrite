@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory;
  * are effectively single-threaded and need no synchronization.
  */
 public final class TpsMonitor {
-	private static final Logger LOGGER = LoggerFactory.getLogger("rusty");
+	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
 
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L; // 5 seconds
 

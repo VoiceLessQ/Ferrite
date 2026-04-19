@@ -1,4 +1,4 @@
-# Rusty
+# Ferrite
 
 A Fabric performance research mod for Minecraft 1.21.11. **Alpha — Windows 64-bit only.**
 
@@ -6,7 +6,7 @@ A Fabric performance research mod for Minecraft 1.21.11. **Alpha — Windows 64-
 
 ## What it is
 
-Rusty is a diagnostic mod. It uses a Rust native library (via JNI) to measure where Minecraft spends time during chunk generation and entity rendering, and writes that data to your log file.
+Ferrite is a diagnostic mod. It uses a Rust native library (via JNI) to measure where Minecraft spends time during chunk generation and entity rendering, and writes that data to your log file.
 
 It does **not** change worldgen, entities, blocks, biomes, or anything visible in-game. The current release is instrumentation only. Future versions will use the collected data to ship targeted optimizations — which specific optimizations get built depends on what the real-user logs show.
 
@@ -14,12 +14,12 @@ It does **not** change worldgen, entities, blocks, biomes, or anything visible i
 
 Nothing visual. No new items, no new structures, no particle effects, no menu screens.
 
-Every 5 seconds during active play, Rusty appends lines to `.minecraft/logs/latest.log` prefixed with `[rusty]`. Example:
+Every 5 seconds during active play, Ferrite appends lines to `.minecraft/logs/latest.log` prefixed with `[ferrite]`. Example:
 
 ```
-[rusty] [chunkgen] noise-sync: n=47 avg=8.3ms max=23.1ms  surface: n=47 avg=1.4ms max=5.2ms
-[rusty] [client-lag] fps avg=42 min=28 max=60 [WARN]  entities=312  chunks=380  samples=100
-[rusty] [entity-render] calls=18000 sampled=180 avg=210ns  frame≈6.5ms  low-end≈11ms (est)
+[ferrite] [chunkgen] noise-sync: n=47 avg=8.3ms max=23.1ms  surface: n=47 avg=1.4ms max=5.2ms
+[ferrite] [client-lag] fps avg=42 min=28 max=60 [WARN]  entities=312  chunks=380  samples=100
+[ferrite] [entity-render] calls=18000 sampled=180 avg=210ns  frame≈6.5ms  low-end≈11ms (est)
 ```
 
 That's the entire player-facing output.
@@ -34,7 +34,7 @@ If you have low-end hardware (4-core CPU or fewer, integrated graphics, 8 GB RAM
 
 ## What the logs mean
 
-Each `[rusty]` line reports a specific metric averaged over the last 5 seconds.
+Each `[ferrite]` line reports a specific metric averaged over the last 5 seconds.
 
 - **`[chunkgen]`** — how long chunk generation's noise and surface phases take, in milliseconds per chunk.
 - **`[client-lag]`** — current FPS (avg, min, max), number of loaded entities, number of loaded chunks. Tagged `[OK]`, `[WARN]`, or `[LAG]` based on average FPS (60+/30+/<30).
@@ -48,7 +48,7 @@ Every number is measured. The only estimate is the "low-end" figure, labeled as 
 If you see consistent `[LAG]` or `[WARN]` tags, or numbers that look interesting:
 
 1. Open `.minecraft/logs/latest.log`
-2. Search for `[rusty]`
+2. Search for `[ferrite]`
 3. Paste a chunk of representative lines into a CurseForge comment on this page, or open an issue on the GitHub repo (linked in the project sidebar)
 4. Include rough specs: CPU model, GPU (integrated or discrete + model), RAM
 

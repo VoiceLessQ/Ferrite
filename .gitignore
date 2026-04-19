@@ -43,5 +43,5 @@ replay_*.log
 target/
 
 # DLL staged into resources by copyRustDll at build time
-src/main/resources/assets/rusty/natives/
+src/main/resources/assets/ferrite/natives/
 

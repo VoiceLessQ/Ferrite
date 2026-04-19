@@ -25,7 +25,7 @@ import net.minecraft.world.gen.densityfunction.DensityFunction;
 @Mixin(ChunkNoiseSampler.class)
 public abstract class InterpolatorDiagnosticMixin {
 
-	private static final Logger LOGGER = LoggerFactory.getLogger("rusty");
+	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
 	private static final AtomicBoolean LOGGED = new AtomicBoolean(false);
 
 	@Inject(method = "sampleStartDensity", at = @At("RETURN"))

@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
  * ChunkGenMonitor so its END_SERVER_TICK listener fires first.
  */
 public final class NoiseStageMonitor {
-	private static final Logger LOGGER = LoggerFactory.getLogger("rusty");
+	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
 
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 

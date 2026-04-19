@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
-	"id": "rusty",
+	"id": "ferrite",
 	"version": "${version}",
-	"name": "Rusty",
+	"name": "Ferrite",
 	"description": "Performance research mod — Rust-powered diagnostics and world features for Minecraft. Logs chunk gen and entity render costs to console.",
 	"authors": [
 		"NoZeroG"
@@ -11,7 +11,7 @@
 		"issues": ""
 	},
 	"license": "MIT",
-	"icon": "assets/rusty/icon.png",
+	"icon": "assets/ferrite/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
@@ -22,9 +22,9 @@
 		]
 	},
 	"mixins": [
-		"rusty.mixins.json",
+		"ferrite.mixins.json",
 		{
-			"config": "rusty.client.mixins.json",
+			"config": "ferrite.client.mixins.json",
 			"environment": "client"
 		}
 	],

@@ -1,7 +1,7 @@
 # Profiling investigation — Rust worldgen on vanilla overworld
 
 This document captures the full measurement and architecture investigation
-performed on the `rusty` branch. The goal was to determine whether Rust
+performed on the `ferrite` branch. The goal was to determine whether Rust
 could meaningfully accelerate vanilla Minecraft 1.21.11 chunk generation
 under low-end hardware constraints.
 
@@ -164,7 +164,7 @@ layers don't override `fill` aggressively.
 vanilla. Only direct buffer extraction + composition-tree port wins, and
 that is a multi-week project.
 
-## What the rusty branch provides
+## What the ferrite branch provides
 
 ### Proven bulk handoff pattern
 
@@ -196,7 +196,7 @@ Reusable for profiling any MC hotspot — same pattern, different
 
 ### Clean foundation for non-worldgen targets
 
-The `rusty` branch keeps only the JNI scaffolding, the Rayon engine, and
+The `ferrite` branch keeps only the JNI scaffolding, the Rayon engine, and
 the instrumentation library. No worldgen-specific code. Suitable for:
 
 - Compute-heavy features that don't sit inside vanilla's noise router
@@ -211,5 +211,5 @@ the instrumentation library. No worldgen-specific code. Suitable for:
 architecture decision is documented. Continuing into the density tree
 port is a new project, not a continuation of this one.
 
-The `rusty` branch is sealed as a working foundation. Future work on
+The `ferrite` branch is sealed as a working foundation. Future work on
 different targets can build on it without repeating the investigation.

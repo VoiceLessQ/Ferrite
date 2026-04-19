@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Rusty are documented here.
+All notable changes to Ferrite are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/) with the
@@ -12,13 +12,13 @@ First public alpha. Research mod framing — instrumentation only, no
 gameplay changes. Windows 64-bit only.
 
 ### Added
-- **Client-side performance monitors.** All log under the `[rusty]` prefix on a 5-second window:
+- **Client-side performance monitors.** All log under the `[ferrite]` prefix on a 5-second window:
   - `[chunkgen]` — chunk generation phase costs (noise-dispatch, noise-sync, surface), per-chunk averages and maxes
   - `[client-lag]` — FPS avg/min/max, entity count, loaded chunk count, with qualitative tag (OK/WARN/LAG)
   - `[entity-render]` — sampled (1-in-100) per-entity render time, plus extrapolated per-frame cost on current hardware and estimated cost on low-end GPU (Intel HD 620 reference)
   - `[mspt]` — real server tick duration via START/END tick events
   - `[rust-engine]` — Rust worker pool initialization (Rayon, hardware-aware sizing)
-- **Rust native library** bundled in the jar at `assets/rusty/natives/rust_mod.dll`.
+- **Rust native library** bundled in the jar at `assets/ferrite/natives/rust_mod.dll`.
   - Extracted to a temp file at runtime on Windows, loaded via `System.load`
   - Graceful fallback on non-Windows — mod loads cleanly but native features stay disabled with a clear log message
 - **Automatic build integration.** `./gradlew build` invokes `cargo build --release` for the Rust side and bundles the resulting DLL into the jar automatically. Requires `cargo` on PATH.
@@ -40,7 +40,7 @@ gameplay changes. Windows 64-bit only.
 - Toolchain pinned via [rust-toolchain.toml](rust-toolchain.toml) to `nightly-2025-08-29` + `x86_64-pc-windows-gnu` target.
 - GNU linker path pinned in [.cargo/config.toml](.cargo/config.toml) to `C:/msys64/mingw64/bin/gcc.exe` so `cargo build` works without PATH juggling.
 - `build.gradle` simulates low-end hardware for dev runs via `-Xmx3G -Xms512M` JVM args, making baseline measurements comparable across sessions.
-- `.gitignore` excludes the DLL staging directory (`src/main/resources/assets/rusty/natives/`) since it's a build artifact.
+- `.gitignore` excludes the DLL staging directory (`src/main/resources/assets/ferrite/natives/`) since it's a build artifact.
 
 ### Research findings documented
 - Rust bulk compute is ~7× faster than vanilla noise-sync for equivalent work (2.5 ms vs 17 ms per chunk).
@@ -62,7 +62,7 @@ gameplay changes. Windows 64-bit only.
 ## Pre-release history
 
 The mod grew out of the `rust-mod-probe` research project. Key pre-release
-commits documenting the investigation path are preserved on the `rusty`
+commits documenting the investigation path are preserved on the `ferrite`
 and `main` branches. Notable milestones:
 
 - JNI framework + first end-to-end Rust call from a Fabric mod

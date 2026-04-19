@@ -22,7 +22,7 @@ loom {
 	splitEnvironmentSourceSets()
 
 	mods {
-		"rusty" {
+		"ferrite" {
 			sourceSet sourceSets.main
 			sourceSet sourceSets.client
 		}
@@ -58,12 +58,12 @@ dependencies {
 // be built without the DLL by skipping copyRustDll (e.g. `./gradlew build -x copyRustDll`).
 //
 // `copyRustDll` places the built DLL into the main resources under
-// assets/rusty/natives/, where RustBridge.loadNativeLibrary() extracts it
+// assets/ferrite/natives/, where RustBridge.loadNativeLibrary() extracts it
 // at runtime via classpath lookup.
 // ---------------------------------------------------------------------------
 
 def rustDllPath = 'target/x86_64-pc-windows-gnu/release/rust_mod.dll'
-def nativesDir = 'src/main/resources/assets/rusty/natives'
+def nativesDir = 'src/main/resources/assets/ferrite/natives'
 
 tasks.register('buildRustLib', Exec) {
 	group = 'rust'
