@@ -60,14 +60,28 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v4
+      - name: add x86_64 rust target
+        run: rustup target add x86_64-apple-darwin
       - name: cargo build (aarch64-apple-darwin)
         shell: bash
         run: cargo build --release --target aarch64-apple-darwin --manifest-path=rust/mod/Cargo.toml
+      - name: cargo build (x86_64-apple-darwin)
+        shell: bash
+        run: cargo build --release --target x86_64-apple-darwin --manifest-path=rust/mod/Cargo.toml
+      - name: lipo into universal binary
+        shell: bash
+        run: |
+          lipo -create \
+            target/aarch64-apple-darwin/release/librust_mod.dylib \
+            target/x86_64-apple-darwin/release/librust_mod.dylib \
+            -output target/librust_mod.dylib
+          # sanity-check both slices are present
+          lipo -info target/librust_mod.dylib
       - name: upload native
         uses: actions/upload-artifact@v4
         with:
           name: native-macos
-          path: target/aarch64-apple-darwin/release/librust_mod.dylib
+          path: target/librust_mod.dylib
           if-no-files-found: error
 
   assemble-jar:
