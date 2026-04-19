@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
  *   [0] cramming        — LivingEntity.tickCramming() — mob-vs-mob push-away
  *   [1] blockCollision  — Entity.tickBlockCollision() — block collision
  *   [2] navigator       — EntityNavigation.tick() — path step execution
+ *   [3] move            — Entity.move(MovementType,Vec3d) — voxel-shape sweep
  *        other          — computed: movement_self − (sum of above)
  *
  * Must register BEFORE MonsterPhaseMonitor so its END_SERVER_TICK
@@ -30,7 +31,8 @@ public final class MovementInternalsMonitor {
 	private static final int PHASE_CRAMMING = 0;
 	private static final int PHASE_BLOCK_COLLISION = 1;
 	private static final int PHASE_NAVIGATOR = 2;
-	private static final int PHASE_COUNT = 3;
+	private static final int PHASE_MOVE = 3;
+	private static final int PHASE_COUNT = 4;
 
 	private static final ThreadLocal<long[]> PHASE_START = ThreadLocal.withInitial(() -> new long[PHASE_COUNT]);
 	private static final long[] THIS_TICK_NS = new long[PHASE_COUNT];
@@ -80,6 +82,14 @@ public final class MovementInternalsMonitor {
 		recordPhaseEnd(PHASE_NAVIGATOR);
 	}
 
+	public static void onMoveBegin() {
+		PHASE_START.get()[PHASE_MOVE] = System.nanoTime();
+	}
+
+	public static void onMoveEnd() {
+		recordPhaseEnd(PHASE_MOVE);
+	}
+
 	// --- Internals ----------------------------------------------------------
 
 	private static void recordPhaseEnd(int phase) {
@@ -125,6 +135,8 @@ public final class MovementInternalsMonitor {
 		long collisionMax = MAX_TICK_NS[PHASE_BLOCK_COLLISION].getAndSet(0L);
 		long navTotal = TOTAL_NS[PHASE_NAVIGATOR].getAndSet(0L);
 		long navMax = MAX_TICK_NS[PHASE_NAVIGATOR].getAndSet(0L);
+		long moveTotal = TOTAL_NS[PHASE_MOVE].getAndSet(0L);
+		long moveMax = MAX_TICK_NS[PHASE_MOVE].getAndSet(0L);
 
 		lastReportNs = now;
 
@@ -132,18 +144,20 @@ public final class MovementInternalsMonitor {
 			return;
 		}
 
-		// other = movement_self − (cramming + blockCollision + navigator)
+		// other = movement_self − (cramming + blockCollision + navigator + move)
 		// Computed on TOTALS (not per-tick avgs) so the arithmetic is clean.
-		long accountedTotal = crammingTotal + collisionTotal + navTotal;
+		long accountedTotal = crammingTotal + collisionTotal + navTotal + moveTotal;
 		long otherTotal = Math.max(0L, movementSelfNs - accountedTotal);
 
-		LOGGER.info("[movement-internals] cramming: avg={} max={}  blockCollision: avg={} max={}  navigator: avg={} max={}  other: avg={}  n={} ticks",
+		LOGGER.info("[movement-internals] cramming: avg={} max={}  blockCollision: avg={} max={}  navigator: avg={} max={}  move: avg={} max={}  other: avg={}  n={} ticks",
 				formatMs(crammingTotal / ticks),
 				formatMs(crammingMax),
 				formatMs(collisionTotal / ticks),
 				formatMs(collisionMax),
 				formatMs(navTotal / ticks),
 				formatMs(navMax),
+				formatMs(moveTotal / ticks),
+				formatMs(moveMax),
 				formatMs(otherTotal / ticks),
 				ticks);
 	}

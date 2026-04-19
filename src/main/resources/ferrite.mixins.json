@@ -18,7 +18,8 @@
 		"MonsterMobTickMixin",
 		"CrammingMixin",
 		"BlockCollisionMixin",
-		"NavigatorTickMixin"
+		"NavigatorTickMixin",
+		"EntityMoveMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
