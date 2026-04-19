@@ -21,6 +21,7 @@ public class ExampleMod implements ModInitializer {
 		AquiferMonitor.register();
 		TerrainBulkHandoff.register();
 		ChunkGenMonitor.register();
+		SurfacePhaseMonitor.register();
 		WorldTickMonitor.register();
 		EntityTickMonitor.register();
 		// MovementInternalsMonitor must register BEFORE MonsterPhaseMonitor so
