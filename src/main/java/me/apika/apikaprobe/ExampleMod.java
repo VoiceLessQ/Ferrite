@@ -23,6 +23,7 @@ public class ExampleMod implements ModInitializer {
 		ChunkGenMonitor.register();
 		WorldTickMonitor.register();
 		EntityTickMonitor.register();
+		MonsterPhaseMonitor.register();
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			LOGGER.warn("Native engine unavailable — falling back to pure Java.");

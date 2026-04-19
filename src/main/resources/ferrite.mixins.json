@@ -12,7 +12,10 @@
 		"InterpolatorDiagnosticMixin",
 		"WorldTickMixin",
 		"ServerWorldTickMixin",
-		"EntityCategoryMixin"
+		"EntityCategoryMixin",
+		"MonsterBaseTickMixin",
+		"MonsterMovementMixin",
+		"MonsterMobTickMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
