@@ -33,6 +33,10 @@ That data drives the next version.
 - Fabric API
 - **Windows 64-bit only** (Mac/Linux planned)
 
+## Credits
+
+Inspired by and originally forked from [Brayan-724/rust-mod-probe](https://github.com/Brayan-724/rust-mod-probe) — the original PoC that demonstrated calling Rust from Fabric via JNI.
+
 ## License
 
 MIT
