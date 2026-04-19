@@ -45,3 +45,16 @@ target/
 # DLL staged into resources by copyRustDll at build time
 src/main/resources/assets/ferrite/natives/
 
+# claude code local state
+.claude/
+
+# release/build artifacts at repo root
+/*.zip
+
+# built jars (Gradle output) — kept explicit in case build/ pattern changes
+*.jar
+gradle/wrapper/gradle-wrapper.jar
+
+# windows
+Thumbs.db
+
