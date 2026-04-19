@@ -53,28 +53,22 @@ public abstract class ServerTickPhaseMixin {
 		ServerTickPhaseMonitor.onScheduledTicksEnd();
 	}
 
-	// --- chunkTick ---------------------------------------------------------
-
-	@Inject(
-		method = "tick(Ljava/util/function/BooleanSupplier;)V",
-		at = @At(
-			value = "INVOKE",
-			target = "Lnet/minecraft/server/world/ServerChunkManager;tick(Ljava/util/function/BooleanSupplier;Z)V"
-		)
-	)
-	private void ferrite$onChunkTickBegin(CallbackInfo ci) {
-		ServerTickPhaseMonitor.onChunkTickBegin();
-	}
-
-	@Inject(
-		method = "tick(Ljava/util/function/BooleanSupplier;)V",
-		at = @At(
-			value = "INVOKE",
-			target = "Lnet/minecraft/server/world/ServerChunkManager;tick(Ljava/util/function/BooleanSupplier;Z)V",
-			shift = At.Shift.AFTER
-		)
-	)
-	private void ferrite$onChunkTickEnd(CallbackInfo ci) {
-		ServerTickPhaseMonitor.onChunkTickEnd();
-	}
+	// chunkTick hook removed intentionally. BEFORE+AFTER @Inject on the
+	// ServerChunkManager.tick INVOKE added ~1.1 ms of per-world-tick
+	// overhead (measured: total 11.45 ms with hook -> 8.53 ms without),
+	// even though the hook fires only ~60 times per second — too rare
+	// for nanoTime self-contamination. The most likely cause is that
+	// @Inject splits the surrounding ServerWorld.tick body in a way
+	// that inhibits JIT inlining across the call site.
+	//
+	// chunkTick cost is still recoverable indirectly:
+	//   chunkTick_approx = other - (worldBorder + weather + raid
+	//                                + blockEvents + entityManagement)
+	// On measured data, other ≈ 3.95 ms and the housekeeping phases are
+	// ~0.5 ms total, so chunkTick ≈ 3.4 ms.
+	//
+	// Lesson for future instrumentation: even low-call-count @Inject
+	// pairs on hot methods can deoptimize the calling method. Prefer
+	// computed-other buckets over direct hooks when the target is in
+	// an inner server tick loop.
 }

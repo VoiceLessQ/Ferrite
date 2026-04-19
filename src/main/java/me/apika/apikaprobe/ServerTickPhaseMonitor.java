@@ -34,7 +34,6 @@ public final class ServerTickPhaseMonitor {
 	private static final AtomicLong TOTAL_NS = new AtomicLong();
 	private static final AtomicLong MAX_TICK_NS = new AtomicLong();
 	private static final AtomicLong SCHEDULED_TICKS_NS = new AtomicLong();
-	private static final AtomicLong CHUNK_TICK_NS = new AtomicLong();
 	private static final AtomicLong TICK_COUNT = new AtomicLong();
 
 	private static volatile long lastReportNs = System.nanoTime();
@@ -42,8 +41,6 @@ public final class ServerTickPhaseMonitor {
 	// --- Phase hooks (called from ServerTickPhaseMixin) --------------------
 
 	private static final ThreadLocal<Long> SCHEDULED_START =
-			ThreadLocal.withInitial(() -> 0L);
-	private static final ThreadLocal<Long> CHUNK_START =
 			ThreadLocal.withInitial(() -> 0L);
 
 	private ServerTickPhaseMonitor() {}
@@ -76,17 +73,6 @@ public final class ServerTickPhaseMonitor {
 		SCHEDULED_TICKS_NS.addAndGet(System.nanoTime() - start);
 	}
 
-	public static void onChunkTickBegin() {
-		CHUNK_START.set(System.nanoTime());
-	}
-
-	public static void onChunkTickEnd() {
-		long start = CHUNK_START.get();
-		if (start == 0L) return;
-		CHUNK_START.set(0L);
-		CHUNK_TICK_NS.addAndGet(System.nanoTime() - start);
-	}
-
 	// --- Report -------------------------------------------------------------
 
 	private static void maybeReport() {
@@ -98,7 +84,6 @@ public final class ServerTickPhaseMonitor {
 		long total = TOTAL_NS.getAndSet(0L);
 		long maxTick = MAX_TICK_NS.getAndSet(0L);
 		long scheduled = SCHEDULED_TICKS_NS.getAndSet(0L);
-		long chunkTick = CHUNK_TICK_NS.getAndSet(0L);
 
 		// WorldTickMonitor also uses a 5s window accumulator with the same
 		// REPORT_INTERVAL_NS. Our handler registers first, so we read its
@@ -109,16 +94,19 @@ public final class ServerTickPhaseMonitor {
 
 		if (ticks == 0L) return;
 
-		long accounted = scheduled + chunkTick + entityPlusBe;
+		long accounted = scheduled + entityPlusBe;
 		long other = Math.max(0L, total - accounted);
 
+		// "other" is dominated by ServerChunkManager.tick (~3.4 ms on
+		// measured load) plus the small housekeeping phases (~0.5 ms).
+		// Not split out via @Inject — see ServerTickPhaseMixin comment
+		// for why (JIT deoptimization from @Inject on the hot tick method).
 		LOGGER.info(
-			"[server-tick-phase] total: avg={} max={}  scheduledTicks: avg={}  chunkTick: avg={}  "
+			"[server-tick-phase] total: avg={} max={}  scheduledTicks: avg={}  "
 			+ "entities+be: avg={}  other: avg={}  n={} ticks",
 			formatMs(total / ticks),
 			formatMs(maxTick),
 			formatMs(scheduled / ticks),
-			formatMs(chunkTick / ticks),
 			formatMs(entityPlusBe / ticks),
 			formatMs(other / ticks),
 			ticks
