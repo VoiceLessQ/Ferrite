@@ -336,6 +336,53 @@ public final class PhysicsHandoff {
 		return new Results(adjusted, flags, entityIds, fallbackCount);
 	}
 
+	/**
+	 * Single-entity fast path for the per-entity dispatch model. Writes one
+	 * 96B request entry to the head of REQUEST_BUF. Server tick is single-
+	 * threaded, so overwriting on every call is safe.
+	 */
+	public static void fillSingleRequest(
+			Entity e,
+			Vec3d motion,
+			float maxStepUp,
+			byte flags,
+			int snapshotTickId) {
+		Box aabb = e.getBoundingBox();
+		REQUEST_BUF.clear();
+		REQUEST_BUF.putInt(e.getId());
+		REQUEST_BUF.putInt(0);
+		REQUEST_BUF.putDouble(aabb.minX);
+		REQUEST_BUF.putDouble(aabb.minY);
+		REQUEST_BUF.putDouble(aabb.minZ);
+		REQUEST_BUF.putDouble(aabb.maxX);
+		REQUEST_BUF.putDouble(aabb.maxY);
+		REQUEST_BUF.putDouble(aabb.maxZ);
+		REQUEST_BUF.putDouble(motion.x);
+		REQUEST_BUF.putDouble(motion.y);
+		REQUEST_BUF.putDouble(motion.z);
+		REQUEST_BUF.putFloat(maxStepUp);
+		REQUEST_BUF.put(flags);
+		REQUEST_BUF.put((byte) 0);
+		REQUEST_BUF.put((byte) 0);
+		REQUEST_BUF.put((byte) 0);
+		REQUEST_BUF.putInt(snapshotTickId);
+		REQUEST_BUF.putInt(0);
+		REQUEST_BUF.flip();
+	}
+
+	/**
+	 * Reads the single-entity result at offset 0. Returns null when the
+	 * FALLBACK flag is set — caller must invoke vanilla.
+	 */
+	public static Vec3d readSingleResult() {
+		byte f = RESULT_BUF.get(32);
+		if ((f & RES_FLAG_FALLBACK) != 0) return null;
+		double x = RESULT_BUF.getDouble(8);
+		double y = RESULT_BUF.getDouble(16);
+		double z = RESULT_BUF.getDouble(24);
+		return new Vec3d(x, y, z);
+	}
+
 	public static final class Results {
 		public final Vec3d[] adjusted;     // null entry = must fall back
 		public final byte[] flags;         // raw result flag byte per entity

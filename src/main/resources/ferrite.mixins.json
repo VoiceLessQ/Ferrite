@@ -24,7 +24,8 @@
 		"GravityMixin",
 		"AdjustCollisionsMixin",
 		"EntityAdjustInvoker",
-		"MovementRedirectMixin"
+		"MovementRedirectMixin",
+		"PhysicsPreTickMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
