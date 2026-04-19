@@ -1,65 +1,73 @@
-# rust-mod-probe
+# Rusty
 
-An experimental Fabric mod for Minecraft 1.21.11 that lets mod logic run in **Rust** via JNI. The goal is to evaluate whether native code can meaningfully improve performance for compute-heavy tasks (worldgen, pathfinding, meshing, AI) inside a Minecraft mod.
+A Fabric performance research mod for Minecraft 1.21.11.
 
-## Project layout
+Rusty uses a Rust native library (via JNI) to profile and accelerate
+Minecraft's chunk generation and entity rendering pipelines. The current
+release is instrumentation-only — it measures where time goes and logs
+it to console. Future versions will use that data to ship targeted
+optimizations.
+
+## Why
+
+Low-end hardware users (4-core CPUs, integrated graphics, 8GB RAM)
+experience chunk loading stutters and entity lag that high-end machines
+never see. Rusty collects real performance data from real hardware so we
+can fix the right things.
+
+## What it does right now
+
+- Logs chunk generation phase costs every 5 seconds during active play
+- Logs client FPS, entity count, and chunk count every 5 seconds
+- Logs entity render cost per frame (sampled)
+- All logging uses the `[rusty]` prefix — searchable in your log file
+
+## What the logs look like
 
 ```
-rust/
-  api/      rosttasse          — JNI abstraction layer (traits, conversion, class defs)
-  macros/   rosttasse_macros   — proc macros (#[bind], #[export], #[main])
-  mc/       rosttasse-mc       — Rust bindings to Minecraft types
-  mod/      rust-mod           — the example mod's native library (cdylib)
-src/main/java/me/apika/apikaprobe/
-  ExampleMod.java      — Fabric entrypoint, calls RustBridge.main()
-  Bridge.java          — loads rust_mod.dll, declares native methods
-  ModItems.java        — (stub)
-  mixin/               — mixin hooks
+[rusty] [chunkgen] noise-sync: n=47 avg=8.3ms max=23.1ms  surface: n=47 avg=1.4ms max=5.2ms
+[rusty] [client-lag] fps avg=42 min=28 max=60 [WARN]  entities=312  chunks=380  samples=100
+[rusty] [entity-render] calls=18000 sampled=180 avg=210ns  frame≈6.5ms
 ```
 
-The Rust workspace is a multi-crate layout driven by the root [Cargo.toml](Cargo.toml). The Java side is a standard Fabric / Loom project driven by [build.gradle](build.gradle).
+## Platform support
 
-## Building
+Windows only (64-bit). The Rust native library is compiled for
+x86_64-pc-windows-gnu. Mac and Linux support is planned for a future
+release.
 
-**Prerequisites**
-- Nightly Rust toolchain (uses `#![feature(associated_type_defaults)]`)
-- MSYS2 with `mingw-w64-x86_64-gcc` (the `x86_64-pc-windows-gnu` target's linker)
-- JDK 21
+## How to help
 
-**One-time setup**
-```bash
-rustup override set nightly-2025-08-29-x86_64-pc-windows-gnu
+If you have low-end hardware (integrated graphics, 4 cores or fewer,
+8GB RAM or less):
+
+1. Install the mod
+2. Play normally for 10–15 minutes, especially in areas with many
+   entities or active chunk loading
+3. Find your `latest.log` file
+4. Search for `[rusty]` lines and paste them in a CurseForge comment
+   or open a GitHub issue
+
+That data directly drives what gets optimized next.
+
+## Requirements
+
+- Minecraft 1.21.11
+- Fabric Loader 0.18.4+
+- Fabric API
+
+## Building from source
+
+Requires Rust (nightly-2025-08-29), MSYS2 with mingw-w64-x86_64-gcc,
+and JDK 21.
+
+```
+./gradlew build
 ```
 
-**Build**
-```bash
-cargo build --release --manifest-path=rust/mod/Cargo.toml
-```
-
-The linker path is pinned in [.cargo/config.toml](.cargo/config.toml) to `C:/msys64/mingw64/bin/gcc.exe`. If your MSYS2 is installed elsewhere, edit that file.
-
-Output: `target/x86_64-pc-windows-gnu/release/rust_mod.dll`.
-
-See [SETUP_MINGW.md](SETUP_MINGW.md) for alternatives (portable MinGW, MSVC).
-
-## Running
-
-The Gradle `runClient` task is wired to pass `-Djava.library.path` pointing at the Rust build output, so once the DLL is built:
-
-```bash
-./gradlew runClient
-```
-
-The mod loads `rust_mod.dll` on init and calls `RustBridge.main()` (a `native` method), which executes Rust code that registers a `serjio` item in the Redstone creative tab via JNI.
-
-## Status
-
-- ✅ Rust workspace builds clean on nightly + MSYS2 gcc
-- ✅ Native library loads in Fabric 1.21.11
-- ✅ Item registration from Rust through JNI works end-to-end
-- ⚠️ `rosttasse-mc` covers a small subset of MC (entity / item / registry / text / util / world)
-- ❌ No bindings yet for worldgen, pathfinding, chunk generation, or rendering
+The build process compiles the Rust library and bundles it into the jar
+automatically.
 
 ## License
 
-CC0-1.0. See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
