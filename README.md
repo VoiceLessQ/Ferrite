@@ -55,7 +55,16 @@ Low-end hardware (4-core CPU, integrated graphics) is especially useful — the 
 - Minecraft 1.21.11
 - Fabric Loader 0.18.4+
 - Fabric API
-- **Platforms**: Windows 64-bit · Linux 64-bit · macOS (Intel + Apple Silicon)
+
+### Platform verification
+
+| platform          | status                                                  |
+|-------------------|---------------------------------------------------------|
+| Windows x86_64    | ✅ Developed and tested throughout                      |
+| Linux x86_64      | ✅ Verified — WSL Ubuntu 24.04, OpenJDK 21, server loads `/tmp/rust_mod_*.so`, `initEngine` returns Rayon pool size, reaches "Done" with no errors |
+| macOS (universal) | ⚠️ Binary confirmed structurally correct (`lipo -info` shows both x86_64 + arm64 slices); runtime load not yet verified on real Apple hardware |
+
+The macOS `.dylib` is a fat binary produced by `lipo -create` on the CI `macos-latest` runner. Happy to mark it verified once a Mac user confirms `System.load` succeeds — a log snippet showing `Loaded rust_mod from /tmp/rust_mod_*.dylib` is enough.
 
 > The native library is bundled for Windows, Linux, and macOS. If it fails to load on your platform, Ferrite falls back to vanilla behavior automatically — no crashes, no broken worlds. ARM Linux isn't bundled yet.
 
