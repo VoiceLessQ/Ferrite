@@ -41,3 +41,7 @@ replay_*.log
 
 # rust
 target/
+
+# DLL staged into resources by copyRustDll at build time
+src/main/resources/assets/rusty/natives/
+

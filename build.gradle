@@ -50,11 +50,53 @@ dependencies {
 	
 }
 
+// ---------------------------------------------------------------------------
+// Rust native library build + bundle into jar.
+//
+// `buildRustLib` invokes cargo. Requires cargo on PATH. If the Rust toolchain
+// isn't available, the task fails with a clear message — the jar can still
+// be built without the DLL by skipping copyRustDll (e.g. `./gradlew build -x copyRustDll`).
+//
+// `copyRustDll` places the built DLL into the main resources under
+// assets/rusty/natives/, where RustBridge.loadNativeLibrary() extracts it
+// at runtime via classpath lookup.
+// ---------------------------------------------------------------------------
+
+def rustDllPath = 'target/x86_64-pc-windows-gnu/release/rust_mod.dll'
+def nativesDir = 'src/main/resources/assets/rusty/natives'
+
+tasks.register('buildRustLib', Exec) {
+	group = 'rust'
+	description = 'Builds the Rust native library via cargo.'
+	workingDir = projectDir
+	commandLine 'cargo', 'build', '--release', '--manifest-path=rust/mod/Cargo.toml'
+}
+
+tasks.register('copyRustDll', Copy) {
+	group = 'rust'
+	description = 'Copies the built Rust DLL into main resources so processResources bundles it into the jar.'
+	dependsOn tasks.named('buildRustLib')
+	from rustDllPath
+	into nativesDir
+}
+
 processResources {
+	dependsOn tasks.named('copyRustDll')
+
 	inputs.property "version", project.version
 
 	filesMatching("fabric.mod.json") {
 		expand "version": project.version
+	}
+}
+
+// sourcesJar also reads main resources — declare the dependency so Gradle
+// doesn't complain about an implicit task ordering. sourcesJar is created
+// lazily by `java { withSourcesJar() }`, so wire it up in afterEvaluate.
+afterEvaluate {
+	def sourcesJar = tasks.findByName('sourcesJar')
+	if (sourcesJar != null) {
+		sourcesJar.dependsOn(tasks.named('copyRustDll'))
 	}
 }
 
