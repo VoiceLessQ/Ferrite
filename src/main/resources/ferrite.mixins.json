@@ -22,7 +22,9 @@
 		"EntityMoveMixin",
 		"TravelMixin",
 		"GravityMixin",
-		"AdjustCollisionsMixin"
+		"AdjustCollisionsMixin",
+		"EntityAdjustInvoker",
+		"MovementRedirectMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

@@ -61,4 +61,10 @@ public class RustBridge {
       int seaLevel,
       int chunkX,
       int chunkZ);
+
+  public static native void computeEntityPhysics(
+      java.nio.ByteBuffer snapshot,
+      java.nio.ByteBuffer requests,
+      java.nio.ByteBuffer results,
+      int entityCount);
 }
