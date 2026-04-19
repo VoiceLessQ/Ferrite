@@ -168,6 +168,18 @@ public final class PhysicsHandoff {
 		int sy = ey - oy + 1;
 		int sz = ez - oz + 1;
 
+		// Hard per-bucket clamp: one chunk column + 4-block expansion on each
+		// side stays under 24×384×24. A bucket that blows this limit means
+		// a mob moved >20 blocks since pre-tick (teleport, long-range
+		// knockback) — that mob falls back to vanilla rather than growing
+		// the snapshot unbounded.
+		if (sx > 24 || sz > 24 || sy > 384) {
+			LAST_REJECTED_SX = sx;
+			LAST_REJECTED_SY = sy;
+			LAST_REJECTED_SZ = sz;
+			return false;
+		}
+
 		if ((long) sx * sy * sz > MAX_SNAPSHOT_CELLS) {
 			LAST_REJECTED_SX = sx;
 			LAST_REJECTED_SY = sy;
