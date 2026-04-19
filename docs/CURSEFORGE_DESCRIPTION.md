@@ -1,7 +1,7 @@
 
 # Ferrite
 
-A Fabric performance mod for Minecraft 1.21.11 powered by a Rust native library. **Alpha — Windows 64-bit only.**
+A Fabric performance mod for Minecraft 1.21.11 powered by a Rust native library. **Alpha — Windows x86_64 · Linux x86_64 · macOS aarch64 (Apple Silicon).**
 
 ---
 
@@ -93,13 +93,13 @@ Measured at 1000+ active mobs. TPS held at 20, zero crashes, zero fallbacks obse
 * Minecraft 1.21.11
 * Fabric Loader 0.18.4+
 * Fabric API
-* **Windows 64-bit**
+* **Windows x86_64 · Linux x86_64 · macOS aarch64 (Apple Silicon)**
 
 ---
 
 ## Known limitations
 
-* **Windows only.** Mac and Linux load cleanly but Rust features stay disabled. Cross-platform builds are planned.
+* **Three platforms, not all architectures.** Windows x86_64, Linux x86_64, and macOS aarch64 (Apple Silicon) are supported. Intel Macs and ARM Linux aren't bundled yet — the mod loads on those but the native stays disabled with a clear log message (falls back to vanilla, no crashes).
 * **Cramming damage deferred.** 1.21.11 refactored the GameRules API; cramming death-by-suffocation from the `maxEntityCramming` game rule is disabled when Ferrite is active. The push is applied, but the damage isn't. Mobs in mob farms still die from fall damage / suffocation as normal — just not from the cramming game-rule threshold.
 * **Alpha state.** Report anything that looks broken.
 * **Console output is chatty.** Up to ~12 lines per minute during active play. Logging toggle is on the roadmap.
