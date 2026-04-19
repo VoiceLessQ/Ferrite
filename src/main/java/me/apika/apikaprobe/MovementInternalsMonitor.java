@@ -15,7 +15,15 @@ import org.slf4j.LoggerFactory;
  *   [1] blockCollision  — Entity.tickBlockCollision() — block collision
  *   [2] navigator       — EntityNavigation.tick() — path step execution
  *   [3] move            — Entity.move(MovementType,Vec3d) — voxel-shape sweep
+ *   [4] travel          — LivingEntity.travel(Vec3d) — velocity/input (wraps gravity+move)
+ *   [5] gravity         — Entity.applyGravity() — gravity term
  *        other          — computed: movement_self − (sum of above)
+ *
+ * Nesting note: travel() internally calls applyGravity() and move(). This
+ * means travel's number overlaps with gravity and move. When reading the
+ * log, travel ≈ gravity + move + (travel's own non-delegated work); subtracting
+ * all three from movement_self under-counts other. If travel is large,
+ * the "net travel-only" cost = travel − gravity − move.
  *
  * Must register BEFORE MonsterPhaseMonitor so its END_SERVER_TICK
  * listener fires first and reads MonsterPhaseMonitor.getMovementSelfNs()
@@ -32,7 +40,9 @@ public final class MovementInternalsMonitor {
 	private static final int PHASE_BLOCK_COLLISION = 1;
 	private static final int PHASE_NAVIGATOR = 2;
 	private static final int PHASE_MOVE = 3;
-	private static final int PHASE_COUNT = 4;
+	private static final int PHASE_TRAVEL = 4;
+	private static final int PHASE_GRAVITY = 5;
+	private static final int PHASE_COUNT = 6;
 
 	private static final ThreadLocal<long[]> PHASE_START = ThreadLocal.withInitial(() -> new long[PHASE_COUNT]);
 	private static final long[] THIS_TICK_NS = new long[PHASE_COUNT];
@@ -90,6 +100,22 @@ public final class MovementInternalsMonitor {
 		recordPhaseEnd(PHASE_MOVE);
 	}
 
+	public static void onTravelBegin() {
+		PHASE_START.get()[PHASE_TRAVEL] = System.nanoTime();
+	}
+
+	public static void onTravelEnd() {
+		recordPhaseEnd(PHASE_TRAVEL);
+	}
+
+	public static void onGravityBegin() {
+		PHASE_START.get()[PHASE_GRAVITY] = System.nanoTime();
+	}
+
+	public static void onGravityEnd() {
+		recordPhaseEnd(PHASE_GRAVITY);
+	}
+
 	// --- Internals ----------------------------------------------------------
 
 	private static void recordPhaseEnd(int phase) {
@@ -137,6 +163,10 @@ public final class MovementInternalsMonitor {
 		long navMax = MAX_TICK_NS[PHASE_NAVIGATOR].getAndSet(0L);
 		long moveTotal = TOTAL_NS[PHASE_MOVE].getAndSet(0L);
 		long moveMax = MAX_TICK_NS[PHASE_MOVE].getAndSet(0L);
+		long travelTotal = TOTAL_NS[PHASE_TRAVEL].getAndSet(0L);
+		long travelMax = MAX_TICK_NS[PHASE_TRAVEL].getAndSet(0L);
+		long gravityTotal = TOTAL_NS[PHASE_GRAVITY].getAndSet(0L);
+		long gravityMax = MAX_TICK_NS[PHASE_GRAVITY].getAndSet(0L);
 
 		lastReportNs = now;
 
@@ -144,12 +174,15 @@ public final class MovementInternalsMonitor {
 			return;
 		}
 
-		// other = movement_self − (cramming + blockCollision + navigator + move)
+		// other = movement_self − (cramming + blockCollision + navigator + move + travel + gravity)
 		// Computed on TOTALS (not per-tick avgs) so the arithmetic is clean.
-		long accountedTotal = crammingTotal + collisionTotal + navTotal + moveTotal;
+		// Note: travel() wraps applyGravity() and calls move() — the three overlap.
+		// Subtracting all three from movement_self double-counts overlap; see the
+		// "nesting note" below when interpreting other.
+		long accountedTotal = crammingTotal + collisionTotal + navTotal + moveTotal + travelTotal + gravityTotal;
 		long otherTotal = Math.max(0L, movementSelfNs - accountedTotal);
 
-		LOGGER.info("[movement-internals] cramming: avg={} max={}  blockCollision: avg={} max={}  navigator: avg={} max={}  move: avg={} max={}  other: avg={}  n={} ticks",
+		LOGGER.info("[movement-internals] cramming: avg={} max={}  blockCollision: avg={} max={}  navigator: avg={} max={}  move: avg={} max={}  travel: avg={} max={}  gravity: avg={} max={}  other: avg={}  n={} ticks",
 				formatMs(crammingTotal / ticks),
 				formatMs(crammingMax),
 				formatMs(collisionTotal / ticks),
@@ -158,6 +191,10 @@ public final class MovementInternalsMonitor {
 				formatMs(navMax),
 				formatMs(moveTotal / ticks),
 				formatMs(moveMax),
+				formatMs(travelTotal / ticks),
+				formatMs(travelMax),
+				formatMs(gravityTotal / ticks),
+				formatMs(gravityMax),
 				formatMs(otherTotal / ticks),
 				ticks);
 	}

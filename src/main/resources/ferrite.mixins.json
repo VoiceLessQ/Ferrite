@@ -19,7 +19,9 @@
 		"CrammingMixin",
 		"BlockCollisionMixin",
 		"NavigatorTickMixin",
-		"EntityMoveMixin"
+		"EntityMoveMixin",
+		"TravelMixin",
+		"GravityMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
