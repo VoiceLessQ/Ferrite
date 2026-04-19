@@ -67,4 +67,9 @@ public class RustBridge {
       java.nio.ByteBuffer requests,
       java.nio.ByteBuffer results,
       int entityCount);
+
+  public static native void computeCramming(
+      java.nio.ByteBuffer requests,
+      java.nio.ByteBuffer results,
+      int entityCount);
 }

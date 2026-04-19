@@ -25,7 +25,8 @@
 		"AdjustCollisionsMixin",
 		"EntityAdjustInvoker",
 		"MovementRedirectMixin",
-		"PhysicsPreTickMixin"
+		"PhysicsPreTickMixin",
+		"CrammingCancelMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
