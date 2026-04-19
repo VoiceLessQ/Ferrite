@@ -25,7 +25,7 @@ public abstract class PhysicsPreTickMixin {
 
 	@Inject(
 		method = "tick(Ljava/util/function/BooleanSupplier;)V",
-		at = @At(value = "INVOKE_STRING", args = "ldc=entities")
+		at = @At("HEAD")
 	)
 	private void ferrite$onPreEntityTick(BooleanSupplier shouldKeepTicking, CallbackInfo ci) {
 		PhysicsDispatcher.onPreEntityTick((ServerWorld) (Object) this);

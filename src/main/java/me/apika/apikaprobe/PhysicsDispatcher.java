@@ -3,6 +3,9 @@ package me.apika.apikaprobe;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import me.apika.apikaprobe.mixin.EntityAdjustInvoker;
 
 import net.minecraft.entity.Entity;
@@ -38,6 +41,14 @@ public final class PhysicsDispatcher {
 	// Reused across ticks to avoid per-tick allocation.
 	private static final List<Entity> MOB_SCRATCH = new ArrayList<>(1024);
 
+	// --- Diagnostics --------------------------------------------------------
+	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
+	private static long diagBuildsAttempted = 0;
+	private static long diagBuildsOk = 0;
+	private static long diagDispatched = 0;
+	private static long diagFallback = 0;
+	private static long diagLastLogNs = System.nanoTime();
+
 	private PhysicsDispatcher() {}
 
 	// =========================================================================
@@ -62,11 +73,27 @@ public final class PhysicsDispatcher {
 		}
 
 		int newTickId = currentSnapshotTickId + 1;
+		diagBuildsAttempted++;
 		boolean ok = PhysicsHandoff.buildSnapshot(world, MOB_SCRATCH, newTickId);
 		if (ok) {
 			currentSnapshotTickId = newTickId;
 			snapshotValid = true;
+			diagBuildsOk++;
 		}
+		maybeLogDiag(MOB_SCRATCH.size());
+	}
+
+	private static void maybeLogDiag(int mobCount) {
+		long now = System.nanoTime();
+		if (now - diagLastLogNs < 5_000_000_000L) return;
+		diagLastLogNs = now;
+		LOGGER.info("[physics-dispatch] builds: {}/{} ok  dispatched={} fallback={} mobsThisTick={} lastReject={}x{}x{}",
+				diagBuildsOk, diagBuildsAttempted, diagDispatched, diagFallback, mobCount,
+				PhysicsHandoff.LAST_REJECTED_SX, PhysicsHandoff.LAST_REJECTED_SY, PhysicsHandoff.LAST_REJECTED_SZ);
+		diagBuildsAttempted = 0;
+		diagBuildsOk = 0;
+		diagDispatched = 0;
+		diagFallback = 0;
 	}
 
 	// =========================================================================
@@ -93,8 +120,10 @@ public final class PhysicsDispatcher {
 
 		Vec3d result = PhysicsHandoff.readSingleResult();
 		if (result == null) {
+			diagFallback++;
 			return ((EntityAdjustInvoker) self).ferrite$invokeAdjust(motion);
 		}
+		diagDispatched++;
 		return result;
 	}
 }

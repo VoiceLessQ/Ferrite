@@ -62,10 +62,18 @@ public final class PhysicsHandoff {
 	// --- Worst-case sizing -------------------------------------------------
 
 	public static final int MAX_ENTITIES = 2048;
-	public static final int MAX_SNAPSHOT_DIM = 64;
+	// 2,097,152 cells × 2 B = 4 MB cell array. Accommodates a horde spread
+	// over a 128-block region on any axis — covers the stress test and
+	// realistic mob farms without clustering logic.
+	public static final int MAX_SNAPSHOT_DIM = 128;
 	public static final int MAX_SNAPSHOT_CELLS = MAX_SNAPSHOT_DIM * MAX_SNAPSHOT_DIM * MAX_SNAPSHOT_DIM;
 	public static final int MAX_PALETTE_ENTRIES = 1024;
 	public static final int MAX_AABBS_IN_PALETTE = 4096;
+
+	/** Last rejected dimensions, for diagnostics. */
+	public static volatile int LAST_REJECTED_SX = 0;
+	public static volatile int LAST_REJECTED_SY = 0;
+	public static volatile int LAST_REJECTED_SZ = 0;
 
 	// --- Strides (must match Rust) -----------------------------------------
 
@@ -161,6 +169,9 @@ public final class PhysicsHandoff {
 		int sz = ez - oz + 1;
 
 		if ((long) sx * sy * sz > MAX_SNAPSHOT_CELLS) {
+			LAST_REJECTED_SX = sx;
+			LAST_REJECTED_SY = sy;
+			LAST_REJECTED_SZ = sz;
 			return false;
 		}
 
