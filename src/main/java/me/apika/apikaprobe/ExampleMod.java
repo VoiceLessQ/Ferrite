@@ -22,6 +22,11 @@ public class ExampleMod implements ModInitializer {
 		TerrainBulkHandoff.register();
 		ChunkGenMonitor.register();
 		SurfacePhaseMonitor.register();
+		// ServerTickPhaseMonitor must register BEFORE WorldTickMonitor so its
+		// END_SERVER_TICK handler fires first and reads
+		// WorldTickMonitor.getEntityPlusBlockEntityNs() before that monitor
+		// resets its cumulative counters.
+		ServerTickPhaseMonitor.register();
 		WorldTickMonitor.register();
 		EntityTickMonitor.register();
 		// MovementInternalsMonitor must register BEFORE MonsterPhaseMonitor so

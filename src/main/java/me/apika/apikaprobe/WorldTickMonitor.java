@@ -71,6 +71,18 @@ public final class WorldTickMonitor {
 		ENTITY_START.set(System.nanoTime());
 	}
 
+	/**
+	 * Live read of current cumulative entity+blockEntity nanos for the
+	 * active 5-second window. Does not modify state — caller takes its
+	 * own snapshot and computes deltas. Called by ServerTickPhaseMonitor
+	 * from its END_SERVER_TICK handler before WorldTickMonitor's own
+	 * handler resets these totals. Registration order in ExampleMod
+	 * enforces "ServerTickPhaseMonitor first".
+	 */
+	public static long getEntityPlusBlockEntityNs() {
+		return ENT_TOTAL_NS.get() + BE_TOTAL_NS.get();
+	}
+
 	public static void onEntityEnd() {
 		long start = ENTITY_START.get();
 		if (start == 0L) {
