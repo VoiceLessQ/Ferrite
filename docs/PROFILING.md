@@ -238,3 +238,27 @@ blockRead hooks fired 16K–65K times per chunk, adding ~7ms of overhead
 and inflating buildSurface from ~5ms baseline to ~12ms measured.
 The port verdict (tryApply at 25%, not a Rust candidate) still holds
 since even halving the measured cost doesn't change the conclusion.
+
+### Low-call-count @Inject deoptimizing the calling method
+
+A BEFORE+AFTER @Inject pair on a hot method can add significant overhead
+even when the hook fires rarely — not from nanoTime cost but from JIT
+deoptimization of the surrounding call site.
+
+ChunkManager.tick hook fired ~60 times/sec (once per world per tick).
+nanoTime overhead alone: ~60 × 100ns = ~6µs/sec — negligible.
+Actual measured overhead: ~1.1ms/tick = ~22ms/sec — 3600× more than
+nanoTime alone.
+
+Most likely cause: @Inject splits the hot ServerWorld.tick body at the
+call site, preventing JIT from inlining ChunkManager.tick into the
+surrounding loop. The deoptimization cost scales with how hot the
+calling method is, not how often the hook fires.
+
+**Rule:** for methods called inside hot loops, prefer:
+- Computed-other buckets (measure the envelope, subtract known phases)
+- Single HEAD inject only (RETURN/AFTER adds a second split point)
+- Avoid BEFORE+AFTER pairs on any method called inside a tick loop
+
+The chunkTick cost (~3.4ms) is still recoverable as `other =
+total - scheduledTicks - entities - blockEntities`.
