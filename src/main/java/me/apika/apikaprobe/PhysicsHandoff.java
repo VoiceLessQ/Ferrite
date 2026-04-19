@@ -461,17 +461,19 @@ public final class PhysicsHandoff {
 			return idx;
 		}
 
+		// BlockState.getCollisionShape(world, pos) returns LOCAL-coord boxes
+		// (0..1 for a unit cube). The Rust side adds the block origin at
+		// lookup time, so we store the coords as-is without subtracting pos.
 		float[] arr = new float[count * 6];
-		double ox = pos.getX(), oy = pos.getY(), oz = pos.getZ();
 		for (int i = 0; i < count; i++) {
 			Box b = boxes.get(i);
 			int base = i * 6;
-			arr[base    ] = (float) (b.minX - ox);
-			arr[base + 1] = (float) (b.minY - oy);
-			arr[base + 2] = (float) (b.minZ - oz);
-			arr[base + 3] = (float) (b.maxX - ox);
-			arr[base + 4] = (float) (b.maxY - oy);
-			arr[base + 5] = (float) (b.maxZ - oz);
+			arr[base    ] = (float) b.minX;
+			arr[base + 1] = (float) b.minY;
+			arr[base + 2] = (float) b.minZ;
+			arr[base + 3] = (float) b.maxX;
+			arr[base + 4] = (float) b.maxY;
+			arr[base + 5] = (float) b.maxZ;
 		}
 		STATE_TO_PALETTE.put(state, idx);
 		PALETTE_AABBS.add(arr);
