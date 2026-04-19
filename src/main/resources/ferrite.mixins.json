@@ -9,7 +9,9 @@
 		"TerrainBulkHandoffMixin",
 		"ChunkNoiseSamplerAccessor",
 		"DensityInterpolatorAccessor",
-		"InterpolatorDiagnosticMixin"
+		"InterpolatorDiagnosticMixin",
+		"WorldTickMixin",
+		"ServerWorldTickMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

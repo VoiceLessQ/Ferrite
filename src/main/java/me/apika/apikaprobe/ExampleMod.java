@@ -21,6 +21,7 @@ public class ExampleMod implements ModInitializer {
 		AquiferMonitor.register();
 		TerrainBulkHandoff.register();
 		ChunkGenMonitor.register();
+		WorldTickMonitor.register();
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			LOGGER.warn("Native engine unavailable — falling back to pure Java.");
