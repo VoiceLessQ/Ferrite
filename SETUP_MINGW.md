@@ -1,6 +1,25 @@
-# MinGW Setup Instructions
+# Native library build setup
 
-You need MinGW-w64 to build Rust with the GNU toolchain. Here are your options:
+The gradle `buildRustLib` task auto-detects the host OS and builds the
+right native for it:
+
+- **Windows** — requires MinGW-w64 (GNU toolchain). See instructions below.
+- **Linux** — just needs `rustup` and a system `gcc`. `cargo build` works
+  out of the box; gradle passes `--target x86_64-unknown-linux-gnu`.
+- **macOS** — just needs `rustup` + Xcode CLT. `--target
+  aarch64-apple-darwin` for Apple Silicon.
+
+The gradle task always passes `--target` explicitly, so plain `cargo build`
+without the flag will use the host default toolchain (which on Windows is
+MSVC unless overridden). If you prefer running cargo directly, use e.g.
+`cargo build --release --target x86_64-pc-windows-gnu --manifest-path=rust/mod/Cargo.toml`.
+
+---
+
+# Windows (MinGW-w64) setup
+
+You need MinGW-w64 to build Rust with the GNU toolchain on Windows.
+Here are your options:
 
 ## Option 1: Download Portable MinGW (Easiest)
 1. Download from: https://github.com/niXman/mingw-builds-binaries/releases/download/15.2.0-rt_v12-rev0/x86_64-15.2.0-release-posix-seh-ucrt-rt_v12-rev0.7z

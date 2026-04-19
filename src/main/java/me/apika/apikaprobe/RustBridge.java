@@ -8,7 +8,11 @@ import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 
 public class RustBridge {
-  private static final String NATIVE_RESOURCE_PATH = "/assets/ferrite/natives/rust_mod.dll";
+  // Per-platform resource paths. The jar bundles all three; loadNativeLibrary
+  // picks the one that matches the host OS at runtime.
+  private static final String NATIVE_WINDOWS = "/assets/ferrite/natives/windows/rust_mod.dll";
+  private static final String NATIVE_LINUX   = "/assets/ferrite/natives/linux/librust_mod.so";
+  private static final String NATIVE_MACOS   = "/assets/ferrite/natives/macos/librust_mod.dylib";
 
   public static final boolean NATIVE_AVAILABLE;
 
@@ -20,22 +24,33 @@ public class RustBridge {
 
   private static boolean loadNativeLibrary() {
     String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-    if (!osName.contains("win")) {
+    String resourcePath;
+    String tempSuffix;
+    if (osName.contains("win")) {
+      resourcePath = NATIVE_WINDOWS;
+      tempSuffix = ".dll";
+    } else if (osName.contains("linux")) {
+      resourcePath = NATIVE_LINUX;
+      tempSuffix = ".so";
+    } else if (osName.contains("mac") || osName.contains("darwin")) {
+      resourcePath = NATIVE_MACOS;
+      tempSuffix = ".dylib";
+    } else {
       ExampleMod.LOGGER.warn(
-          "rust_mod native library is Windows-only (OS detected: {}). Falling back to pure Java — no Rust-side features available.",
+          "rust_mod native library: unsupported OS \"{}\". Falling back to pure Java.",
           osName);
       return false;
     }
 
-    try (InputStream in = RustBridge.class.getResourceAsStream(NATIVE_RESOURCE_PATH)) {
+    try (InputStream in = RustBridge.class.getResourceAsStream(resourcePath)) {
       if (in == null) {
         ExampleMod.LOGGER.error(
-            "rust_mod native library not found in jar at {}. The jar is built without the DLL — performance diagnostics will run without native support.",
-            NATIVE_RESOURCE_PATH);
+            "rust_mod native not found in jar at {}. Jar built without native for this platform — running without native support.",
+            resourcePath);
         return false;
       }
 
-      File tempFile = File.createTempFile("rust_mod_", ".dll");
+      File tempFile = File.createTempFile("rust_mod_", tempSuffix);
       tempFile.deleteOnExit();
       Files.copy(in, tempFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
 

@@ -1,5 +1,12 @@
-[build]
-target = "x86_64-pc-windows-gnu"
+# Target-specific linker configs. No [build] target is set here — the
+# gradle buildRustLib task passes an explicit --target per host OS, and
+# CI jobs do the same. This file only supplies linker paths for targets
+# that need them.
+#
+# Windows GNU (x86_64-pc-windows-gnu): assumes MSYS2 at C:\msys64 with
+# mingw-w64 gcc installed. See SETUP_MINGW.md for the local setup. CI
+# overrides these via CARGO_TARGET_X86_64_PC_WINDOWS_GNU_{LINKER,AR}
+# env vars so the absolute path doesn't need to match the runner layout.
 
 [target.x86_64-pc-windows-gnu]
 linker = "C:/msys64/mingw64/bin/gcc.exe"

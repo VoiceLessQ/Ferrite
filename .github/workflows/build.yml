@@ -1,23 +1,80 @@
-# Automatically build the project and run any configured tests for every push
-# and submitted pull request. This can help catch issues that only occur on
-# certain platforms or Java versions, and provides a first line of defence
-# against bad commits.
+# Cross-platform native build + jar assembly.
 #
-# Runs on windows-latest because the Rust native library targets
-# x86_64-pc-windows-gnu (see rust-toolchain.toml). The MinGW-w64 toolchain
-# is installed fresh via msys2/setup-msys2 — windows runners don't ship it
-# pre-installed at the path hardcoded in .cargo/config.toml, so the build
-# step overrides the linker/ar paths via cargo environment variables to
-# pick the binaries up from PATH instead.
+# Four jobs:
+#   build-native-windows — mingw-w64 GCC via setup-msys2, cargo → rust_mod.dll
+#   build-native-linux   — system GCC,                    cargo → librust_mod.so
+#   build-native-macos   — system Clang,                  cargo → librust_mod.dylib
+#   assemble-jar         — downloads all three natives, runs ./gradlew build
+#                          with native tasks skipped (pre-placed artifacts)
+#
+# The final jar ships with all three binaries under
+# assets/ferrite/natives/{windows,linux,macos}/. RustBridge.java picks
+# the one matching the host OS at runtime and falls back cleanly on
+# unsupported platforms.
 
 name: build
 on: [pull_request, push]
 
 jobs:
-  build:
+  build-native-windows:
     runs-on: windows-latest
     steps:
-      - name: checkout repository
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: setup msys2 + mingw-w64 gcc
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc
+          path-type: inherit
+      - name: cargo build (x86_64-pc-windows-gnu)
+        shell: bash
+        env:
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: gcc
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_AR: ar
+        run: cargo build --release --target x86_64-pc-windows-gnu --manifest-path=rust/mod/Cargo.toml
+      - name: upload native
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-windows
+          path: target/x86_64-pc-windows-gnu/release/rust_mod.dll
+          if-no-files-found: error
+
+  build-native-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: cargo build (x86_64-unknown-linux-gnu)
+        shell: bash
+        run: cargo build --release --target x86_64-unknown-linux-gnu --manifest-path=rust/mod/Cargo.toml
+      - name: upload native
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-linux
+          path: target/x86_64-unknown-linux-gnu/release/librust_mod.so
+          if-no-files-found: error
+
+  build-native-macos:
+    runs-on: macos-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: cargo build (aarch64-apple-darwin)
+        shell: bash
+        run: cargo build --release --target aarch64-apple-darwin --manifest-path=rust/mod/Cargo.toml
+      - name: upload native
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-macos
+          path: target/aarch64-apple-darwin/release/librust_mod.dylib
+          if-no-files-found: error
+
+  assemble-jar:
+    needs: [build-native-windows, build-native-linux, build-native-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
         uses: actions/checkout@v4
       - name: validate gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
@@ -26,23 +83,25 @@ jobs:
         with:
           java-version: 21
           distribution: 'microsoft'
-      - name: setup msys2 + mingw-w64 gcc
-        uses: msys2/setup-msys2@v2
+      - name: download windows native
+        uses: actions/download-artifact@v4
         with:
-          msystem: MINGW64
-          install: mingw-w64-x86_64-gcc
-          path-type: inherit
-      - name: build
+          name: native-windows
+          path: src/main/resources/assets/ferrite/natives/windows
+      - name: download linux native
+        uses: actions/download-artifact@v4
+        with:
+          name: native-linux
+          path: src/main/resources/assets/ferrite/natives/linux
+      - name: download macos native
+        uses: actions/download-artifact@v4
+        with:
+          name: native-macos
+          path: src/main/resources/assets/ferrite/natives/macos
+      - name: assemble jar (skip rust build — natives already placed)
         shell: bash
-        env:
-          # Override .cargo/config.toml's hardcoded msys path — use whatever
-          # gcc/ar the setup-msys2 action put on PATH. Matches the local-dev
-          # config semantically (mingw-w64 gnu toolchain) without needing the
-          # exact install path to be C:\msys64.
-          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: gcc
-          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_AR: ar
-        run: ./gradlew build
-      - name: capture build artifacts
+        run: ./gradlew build -x buildRustLib -x copyRustDll
+      - name: upload jar
         uses: actions/upload-artifact@v4
         with:
           name: Artifacts

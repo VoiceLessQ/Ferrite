@@ -53,30 +53,59 @@ dependencies {
 // ---------------------------------------------------------------------------
 // Rust native library build + bundle into jar.
 //
-// `buildRustLib` invokes cargo. Requires cargo on PATH. If the Rust toolchain
-// isn't available, the task fails with a clear message — the jar can still
-// be built without the DLL by skipping copyRustDll (e.g. `./gradlew build -x copyRustDll`).
+// The build is host-aware: buildRustLib compiles the native for the current
+// OS and copyRustDll places it into a per-platform subfolder. The jar
+// always ships with at most one native per run (the host's), but CI
+// orchestrates three platform jobs + an assembly job so release jars
+// carry all three — see .github/workflows/build.yml.
 //
-// `copyRustDll` places the built DLL into the main resources under
-// assets/ferrite/natives/, where RustBridge.loadNativeLibrary() extracts it
-// at runtime via classpath lookup.
+// Local devs building on their own machine get a jar with just their
+// native; RustBridge.loadNativeLibrary falls back cleanly on platforms
+// whose binary isn't bundled.
+//
+// `buildRustLib` invokes cargo with an explicit --target so the output
+// path is deterministic regardless of .cargo/config.toml defaults. The
+// jar can be built without the native by skipping buildRustLib+copyRustDll
+// (e.g. `./gradlew build -x buildRustLib -x copyRustDll`) — used by the
+// CI assembly job after downloading pre-built artifacts from the three
+// native-build jobs.
 // ---------------------------------------------------------------------------
 
-def rustDllPath = 'target/x86_64-pc-windows-gnu/release/rust_mod.dll'
-def nativesDir = 'src/main/resources/assets/ferrite/natives'
+def hostOs = org.gradle.internal.os.OperatingSystem.current()
+def nativeTarget
+def nativeLibName
+def nativeOsDir
+if (hostOs.isWindows()) {
+	nativeTarget = 'x86_64-pc-windows-gnu'
+	nativeLibName = 'rust_mod.dll'
+	nativeOsDir = 'windows'
+} else if (hostOs.isLinux()) {
+	nativeTarget = 'x86_64-unknown-linux-gnu'
+	nativeLibName = 'librust_mod.so'
+	nativeOsDir = 'linux'
+} else if (hostOs.isMacOsX()) {
+	nativeTarget = 'aarch64-apple-darwin'
+	nativeLibName = 'librust_mod.dylib'
+	nativeOsDir = 'macos'
+} else {
+	throw new GradleException("Unsupported host OS for Rust native build: ${hostOs}")
+}
+
+def rustLibPath = "target/${nativeTarget}/release/${nativeLibName}"
+def nativesDir = "src/main/resources/assets/ferrite/natives/${nativeOsDir}"
 
 tasks.register('buildRustLib', Exec) {
 	group = 'rust'
-	description = 'Builds the Rust native library via cargo.'
+	description = "Builds the Rust native library for ${nativeTarget}."
 	workingDir = projectDir
-	commandLine 'cargo', 'build', '--release', '--manifest-path=rust/mod/Cargo.toml'
+	commandLine 'cargo', 'build', '--release', '--target', nativeTarget, '--manifest-path=rust/mod/Cargo.toml'
 }
 
 tasks.register('copyRustDll', Copy) {
 	group = 'rust'
-	description = 'Copies the built Rust DLL into main resources so processResources bundles it into the jar.'
+	description = "Copies the built Rust native into main resources/${nativeOsDir}/ so processResources bundles it into the jar."
 	dependsOn tasks.named('buildRustLib')
-	from rustDllPath
+	from rustLibPath
 	into nativesDir
 }
 
