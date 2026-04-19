@@ -16,8 +16,9 @@ speedup as Windows users.
 
 - **Linux support** — `librust_mod.so` built for `x86_64-unknown-linux-gnu`,
   bundled at `/assets/ferrite/natives/linux/` in the jar.
-- **macOS support** — `librust_mod.dylib` built for `aarch64-apple-darwin`
-  (Apple Silicon), bundled at `/assets/ferrite/natives/macos/`.
+- **macOS support** — universal `librust_mod.dylib` combining
+  `aarch64-apple-darwin` (Apple Silicon) and `x86_64-apple-darwin` (Intel)
+  via `lipo -create`. Bundled at `/assets/ferrite/natives/macos/`.
 - **Host-aware gradle build** — `buildRustLib` detects the current OS
   via `OperatingSystem.current()` and picks the right (target, lib-name,
   subdir) triple. Passes `--target` explicitly so output paths are
@@ -46,9 +47,6 @@ speedup as Windows users.
 
 ### Known limitations
 
-- **macOS ARM only** — Intel Mac (`x86_64-apple-darwin`) not built; most
-  new Macs are ARM, but if Intel Mac users need support, a universal
-  binary via `lipo` is planned.
 - **Linux x86_64 only** — no ARM (aarch64) Linux build yet.
 - **Cramming damage still deferred** (carried over from 0.1.1).
 

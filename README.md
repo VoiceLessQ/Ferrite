@@ -55,9 +55,9 @@ Low-end hardware (4-core CPU, integrated graphics) is especially useful — the 
 - Minecraft 1.21.11
 - Fabric Loader 0.18.4+
 - Fabric API
-- **Platforms**: Windows x86_64 · Linux x86_64 · macOS aarch64 (Apple Silicon)
+- **Platforms**: Windows 64-bit · Linux 64-bit · macOS (Intel + Apple Silicon)
 
-> If the native library fails to load (unsupported OS, classpath issue), Ferrite falls back to vanilla behavior automatically — no crashes, no broken worlds. Intel Mac and ARM Linux builds are not yet included.
+> The native library is bundled for Windows, Linux, and macOS. If it fails to load on your platform, Ferrite falls back to vanilla behavior automatically — no crashes, no broken worlds. ARM Linux isn't bundled yet.
 
 ---
 
