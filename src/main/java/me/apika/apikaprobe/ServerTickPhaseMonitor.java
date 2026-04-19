@@ -37,11 +37,6 @@ public final class ServerTickPhaseMonitor {
 	private static final AtomicLong CHUNK_TICK_NS = new AtomicLong();
 	private static final AtomicLong TICK_COUNT = new AtomicLong();
 
-	// Snapshot of WorldTickMonitor's cumulative entity+blockEntity nanos
-	// taken at the last report. We subtract this from the current live read
-	// to get the delta attributable to our current window.
-	private static long lastEntityPlusBeSnapshotNs = 0L;
-
 	private static volatile long lastReportNs = System.nanoTime();
 
 	// --- Phase hooks (called from ServerTickPhaseMixin) --------------------
@@ -105,11 +100,12 @@ public final class ServerTickPhaseMonitor {
 		long scheduled = SCHEDULED_TICKS_NS.getAndSet(0L);
 		long chunkTick = CHUNK_TICK_NS.getAndSet(0L);
 
-		// Live-read from WorldTickMonitor (must fire before it resets,
-		// guaranteed by registration order).
-		long entityPlusBeLive = WorldTickMonitor.getEntityPlusBlockEntityNs();
-		long entityPlusBe = Math.max(0L, entityPlusBeLive - lastEntityPlusBeSnapshotNs);
-		lastEntityPlusBeSnapshotNs = entityPlusBeLive;
+		// WorldTickMonitor also uses a 5s window accumulator with the same
+		// REPORT_INTERVAL_NS. Our handler registers first, so we read its
+		// cumulative value before it resets in its own END_SERVER_TICK
+		// handler later in the same tick event. The value at read time IS
+		// the current window's accumulation — no delta needed.
+		long entityPlusBe = WorldTickMonitor.getEntityPlusBlockEntityNs();
 
 		if (ticks == 0L) return;
 
