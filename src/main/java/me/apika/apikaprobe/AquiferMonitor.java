@@ -28,7 +28,7 @@ import org.slf4j.LoggerFactory;
  * sync-noise counters before they reset.
  */
 public final class AquiferMonitor {
-	private static final Logger LOGGER = LoggerFactory.getLogger("apikaprobe");
+	private static final Logger LOGGER = LoggerFactory.getLogger("rusty");
 
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 	private static final int SAMPLE_EVERY = 100;

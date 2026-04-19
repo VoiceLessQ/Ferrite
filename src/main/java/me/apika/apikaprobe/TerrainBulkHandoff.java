@@ -35,7 +35,7 @@ import net.minecraft.world.gen.noise.NoiseConfig;
  * worker pool, no shared state). Monitor counters are AtomicLong.
  */
 public final class TerrainBulkHandoff {
-	private static final Logger LOGGER = LoggerFactory.getLogger("apikaprobe");
+	private static final Logger LOGGER = LoggerFactory.getLogger("rusty");
 
 	// Overworld defaults — v2 reads these from NoiseSettings.
 	private static final int CHUNK_X = 16;

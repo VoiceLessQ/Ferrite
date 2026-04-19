@@ -29,7 +29,7 @@ import net.minecraft.client.world.ClientWorld;
  * nobody mistakes it for a real measurement.
  */
 public final class EntityRenderMonitor {
-	private static final Logger LOGGER = LoggerFactory.getLogger("apikaprobe");
+	private static final Logger LOGGER = LoggerFactory.getLogger("rusty");
 
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 	private static final int SAMPLE_EVERY = 100;

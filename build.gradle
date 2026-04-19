@@ -22,7 +22,7 @@ loom {
 	splitEnvironmentSourceSets()
 
 	mods {
-		"apika_probe_1" {
+		"rusty" {
 			sourceSet sourceSets.main
 			sourceSet sourceSets.client
 		}

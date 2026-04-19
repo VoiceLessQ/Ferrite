@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * exploring new chunks shows its own cost, not a session average.
  */
 public final class ChunkGenMonitor {
-	private static final Logger LOGGER = LoggerFactory.getLogger("apikaprobe");
+	private static final Logger LOGGER = LoggerFactory.getLogger("rusty");
 
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 

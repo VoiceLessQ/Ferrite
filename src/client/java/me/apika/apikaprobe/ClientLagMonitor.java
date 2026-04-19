@@ -27,7 +27,7 @@ import net.minecraft.client.world.ClientWorld;
  * the F3 overlay displays.
  */
 public final class ClientLagMonitor {
-	private static final Logger LOGGER = LoggerFactory.getLogger("apikaprobe");
+	private static final Logger LOGGER = LoggerFactory.getLogger("rusty");
 
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 

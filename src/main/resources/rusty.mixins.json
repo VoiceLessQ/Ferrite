@@ -6,7 +6,10 @@
 		"ChunkPhaseMixin",
 		"NoiseStageMixin",
 		"AquiferMixin",
-		"TerrainBulkHandoffMixin"
+		"TerrainBulkHandoffMixin",
+		"ChunkNoiseSamplerAccessor",
+		"DensityInterpolatorAccessor",
+		"InterpolatorDiagnosticMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
