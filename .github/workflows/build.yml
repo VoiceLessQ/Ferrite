@@ -4,11 +4,11 @@
 # against bad commits.
 #
 # Runs on windows-latest because the Rust native library targets
-# x86_64-pc-windows-gnu with a hardcoded MinGW linker at
-# C:/msys64/mingw64/bin/gcc.exe (see .cargo/config.toml). Windows runners
-# ship with MSYS2 pre-installed at that path. The mod is Windows-only by
-# design, so building on the target platform makes CI validate the
-# artifact that actually ships.
+# x86_64-pc-windows-gnu (see rust-toolchain.toml). The MinGW-w64 toolchain
+# is installed fresh via msys2/setup-msys2 — windows runners don't ship it
+# pre-installed at the path hardcoded in .cargo/config.toml, so the build
+# step overrides the linker/ar paths via cargo environment variables to
+# pick the binaries up from PATH instead.
 
 name: build
 on: [pull_request, push]
@@ -26,8 +26,21 @@ jobs:
         with:
           java-version: 21
           distribution: 'microsoft'
+      - name: setup msys2 + mingw-w64 gcc
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc
+          path-type: inherit
       - name: build
         shell: bash
+        env:
+          # Override .cargo/config.toml's hardcoded msys path — use whatever
+          # gcc/ar the setup-msys2 action put on PATH. Matches the local-dev
+          # config semantically (mingw-w64 gnu toolchain) without needing the
+          # exact install path to be C:\msys64.
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: gcc
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_AR: ar
         run: ./gradlew build
       - name: capture build artifacts
         uses: actions/upload-artifact@v4
