@@ -3,7 +3,8 @@
 	"package": "me.apika.apikaprobe.mixin.client",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
-		"ExampleClientMixin"
+		"ExampleClientMixin",
+		"EntityRenderMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

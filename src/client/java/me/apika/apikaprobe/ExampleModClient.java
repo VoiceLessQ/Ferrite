@@ -6,5 +6,6 @@ public class ExampleModClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		ClientLagMonitor.register();
+		EntityRenderMonitor.register();
 	}
 }
