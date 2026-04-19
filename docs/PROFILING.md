@@ -213,3 +213,28 @@ port is a new project, not a continuation of this one.
 
 The `ferrite` branch is sealed as a working foundation. Future work on
 different targets can build on it without repeating the investigation.
+
+---
+
+## Instrumentation lessons learned
+
+### High-call-count timing self-contamination
+
+Outer-envelope timing (one HEAD/RETURN pair per chunk or tick) is safe —
+overhead is negligible relative to the measured work.
+
+Inner-loop timing (tens of thousands of calls per chunk) is not safe.
+`System.nanoTime()` costs ~20–50ns on Windows. At 65K calls/chunk × 4
+nanoTime calls = 5–13ms of pure overhead per chunk. The measurement
+dominates the signal.
+
+**Rule:** any hook that fires more than ~1000 times per chunk needs either:
+- Sampling (1-in-N calls, same pattern as AquiferMonitor)
+- Count-only (no per-call timing, just increment an AtomicLong)
+- Outer-envelope timing on the method that calls the hot loop
+
+SurfacePhaseMixin was disabled after this was discovered — tryApply and
+blockRead hooks fired 16K–65K times per chunk, adding ~7ms of overhead
+and inflating buildSurface from ~5ms baseline to ~12ms measured.
+The port verdict (tryApply at 25%, not a Rust candidate) still holds
+since even halving the measured cost doesn't change the conclusion.
