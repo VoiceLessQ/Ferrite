@@ -20,8 +20,10 @@ import net.minecraft.server.world.ServerWorld;
  * at 20 TPS. Negligible compared to the inner-loop traps we hit earlier.
  *
  * ChunkManager.tick is declared on the parent class and inherited by
- * ServerChunkManager — the @At INVOKE target uses the parent's type
- * signature (class_2802).
+ * ServerChunkManager. The INVOKE bytecode uses the static type of the
+ * receiver — getChunkSource() returns ServerChunkManager, so the target
+ * descriptor uses that class even though the method is inherited from
+ * the parent.
  */
 @Mixin(ServerWorld.class)
 public abstract class ServerTickPhaseMixin {
@@ -57,7 +59,7 @@ public abstract class ServerTickPhaseMixin {
 		method = "tick(Ljava/util/function/BooleanSupplier;)V",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/world/chunk/ChunkManager;tick(Ljava/util/function/BooleanSupplier;Z)V"
+			target = "Lnet/minecraft/server/world/ServerChunkManager;tick(Ljava/util/function/BooleanSupplier;Z)V"
 		)
 	)
 	private void ferrite$onChunkTickBegin(CallbackInfo ci) {
@@ -68,7 +70,7 @@ public abstract class ServerTickPhaseMixin {
 		method = "tick(Ljava/util/function/BooleanSupplier;)V",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/world/chunk/ChunkManager;tick(Ljava/util/function/BooleanSupplier;Z)V",
+			target = "Lnet/minecraft/server/world/ServerChunkManager;tick(Ljava/util/function/BooleanSupplier;Z)V",
 			shift = At.Shift.AFTER
 		)
 	)
