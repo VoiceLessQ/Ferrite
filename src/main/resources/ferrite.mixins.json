@@ -21,7 +21,8 @@
 		"NavigatorTickMixin",
 		"EntityMoveMixin",
 		"TravelMixin",
-		"GravityMixin"
+		"GravityMixin",
+		"AdjustCollisionsMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
