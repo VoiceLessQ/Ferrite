@@ -31,7 +31,7 @@ import net.minecraft.server.world.ServerWorld;
  */
 public final class CrammingDispatcher {
 
-	public static volatile boolean ENABLED = false;
+	public static volatile boolean ENABLED = true;
 
 	// --- Per-server-tick state ---------------------------------------------
 	private static long lastProcessedTick = Long.MIN_VALUE;
