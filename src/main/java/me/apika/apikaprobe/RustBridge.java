@@ -87,4 +87,15 @@ public class RustBridge {
       java.nio.ByteBuffer requests,
       java.nio.ByteBuffer results,
       int entityCount);
+
+  /**
+   * Runs the wire-power BFS on a serialized network. Returns the number
+   * of populated RedstoneResult entries in `results` (i.e. how many
+   * wire positions changed power and need a Java-side setBlockState).
+   * See [RedstoneHandoff] for buffer layout.
+   */
+  public static native int computeRedstoneBfs(
+      java.nio.ByteBuffer requests,
+      java.nio.ByteBuffer results,
+      int nodeCount);
 }

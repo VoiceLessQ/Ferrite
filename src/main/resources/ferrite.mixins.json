@@ -27,7 +27,14 @@
 		"MovementRedirectMixin",
 		"PhysicsPreTickMixin",
 		"CrammingCancelMixin",
-		"ServerTickPhaseMixin"
+		"ServerTickPhaseMixin",
+		"RedstoneWireMixin",
+		"RedstoneGateMixin",
+		"DefaultRedstoneControllerMixin",
+		"ExperimentalRedstoneControllerMixin",
+		"RedstoneOracleMixin",
+		"RedstoneControllerInvoker",
+		"RedstoneRustMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

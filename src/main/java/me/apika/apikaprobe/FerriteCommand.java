@@ -1,0 +1,76 @@
+package me.apika.apikaprobe;
+
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.CommandDispatcher;
+
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+
+import net.minecraft.server.command.CommandManager;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.text.Text;
+
+/**
+ * /ferrite command — runtime toggles for Ferrite's optional Rust paths.
+ *
+ * Current surface:
+ *   /ferrite redstone rust on     — route wire cascades through Rust BFS
+ *   /ferrite redstone rust off    — back to vanilla cascade
+ *   /ferrite redstone rust status — report current flag + native availability
+ *
+ * All subcommands require op-level 2. Logs to both the command feedback
+ * channel (visible in chat) and the [ferrite] logger (visible in
+ * latest.log alongside the phase monitor lines) so comparative runs
+ * are easy to correlate after the fact.
+ */
+public final class FerriteCommand {
+
+	private FerriteCommand() {}
+
+	public static void register() {
+		CommandRegistrationCallback.EVENT.register(
+				(dispatcher, registryAccess, environment) -> registerRoot(dispatcher));
+	}
+
+	private static void registerRoot(CommandDispatcher<ServerCommandSource> dispatcher) {
+		dispatcher.register(CommandManager.literal("ferrite")
+				.requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
+				.then(CommandManager.literal("redstone")
+						.then(CommandManager.literal("rust")
+								.then(CommandManager.literal("on").executes(FerriteCommand::enableRust))
+								.then(CommandManager.literal("off").executes(FerriteCommand::disableRust))
+								.then(CommandManager.literal("status").executes(FerriteCommand::statusRust)))));
+	}
+
+	private static int enableRust(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		if (!RustBridge.NATIVE_AVAILABLE) {
+			sendFeedback(ctx, "Rust native unavailable — flag set but no route will take effect.", false);
+		}
+		RedstoneHandoff.USE_RUST = true;
+		sendFeedback(ctx, "[ferrite] Rust redstone BFS enabled", true);
+		ExampleMod.LOGGER.info("[ferrite] Rust redstone BFS enabled (via /ferrite)");
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int disableRust(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		RedstoneHandoff.USE_RUST = false;
+		sendFeedback(ctx, "[ferrite] Rust redstone BFS disabled (vanilla path)", true);
+		ExampleMod.LOGGER.info("[ferrite] Rust redstone BFS disabled (via /ferrite)");
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int statusRust(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		String msg = String.format(
+				"[ferrite] redstone rust USE_RUST=%s native=%s  (watch latest.log for [redstone] phase numbers every 5s)",
+				RedstoneHandoff.USE_RUST,
+				RustBridge.NATIVE_AVAILABLE ? "available" : "MISSING");
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static void sendFeedback(
+			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx,
+			String message, boolean broadcast) {
+		ctx.getSource().sendFeedback(() -> Text.literal(message), broadcast);
+	}
+}

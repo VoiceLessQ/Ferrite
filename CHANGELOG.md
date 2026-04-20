@@ -6,6 +6,185 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/) with the
 `-alpha` suffix indicating pre-release research builds.
 
+## [Unreleased]
+
+### Redstone investigation (measured, no port)
+
+Added RedstonePhaseMonitor + two mixins instrumenting both redstone hot
+paths:
+  RedstoneWireMixin — HEAD/RETURN on RedstoneWireBlock.update (private),
+    the single dispatcher to Default/Experimental controllers.
+    ThreadLocal depth guard so recursive cascades count wall time only
+    at the outermost entry.
+  RedstoneGateMixin — HEAD/RETURN on AbstractRedstoneGateBlock.scheduledTick,
+    catches repeaters and comparators.
+
+Benchmark: identical redstone lag machine, integrated client, same world,
+default vs experimental redstone controller.
+
+  metric                    default         experimental       change
+  cascades per tick         ~2,250,000      ~350,000           ~6× fewer
+  server-ticks per 5s       2               10-24              ~5-12× more
+  effective TPS             ~0.4            ~2-5               ~5-10× faster
+  per-cascade avg           1μs             1μs                unchanged
+  per-gate avg              0.25ms          0.20ms             ~20% faster
+  per-tick wire time        ~2.25s          ~0.35s             ~85% less
+
+Verdict: experimental redstone's WireOrientation-based propagation prunes
+the update tree — individual wire math isn't faster, we just do far
+fewer redundant re-evaluations. This is a Mojang-shipped optimization
+gated behind the Redstone Experiments world-creation toggle; Ferrite
+shouldn't reimplement what's already available.
+
+Recommendation for users with redstone-heavy worlds: enable Redstone
+Experiments at world creation (Create New World → More → Experiments
+→ Redstone Experiments). Measured ~85% reduction in per-tick wire cost
+on a worst-case lag machine that normally holds TPS at 0.4.
+
+Rust port deferred. With experimental already cutting the cost 6×, a
+port would be chasing the remaining 350ms/tick on a niche workload —
+potentially recoverable but a smaller, harder win than cramming
+(65% at 1000+ mobs). Re-evaluate only if users report worlds that
+struggle at steady 20 TPS *with experimental enabled*.
+
+Instrumentation ships on: RedstonePhaseMonitor + both mixins active
+by default, log line `[redstone] wire: avg=Xms max=Yms cascades=N
+gates: avg=Xms max=Yms ticks=M  n=Z server-ticks` every 5s of wall
+time. Diagnostic value regardless of port status.
+
+### Redstone Rust BFS port (investigated, shipped disabled)
+
+After measuring, attempted a Rust port anyway — to continue building
+out Ferrite's Rust capability even if the immediate win is small.
+
+Architecture:
+  - Java oracle (RedstoneOracle) shadow-computes expected power using
+    vanilla's own calculateWirePowerAt — validated bit-for-bit against
+    vanilla on settled networks (1,171 node-checks, 0 mismatches).
+  - Rust BFS (rust/mod/src/redstone.rs) translates the same algorithm,
+    iterative relaxation bounded at 16 passes. Exported via JNI as
+    RustBridge.computeRedstoneBfs.
+  - Java dispatcher (RedstoneRustDispatcher) BFS-walks the wire network
+    from the cascade trigger, resolves neighbor indices, calls Rust,
+    applies deltas via setBlockState + updateNeighbors.
+  - @Redirect on the `this.redstoneController.update(...)` INVOKE in
+    RedstoneWireBlock.update — cleanly replaces vanilla's per-cascade
+    controller call when USE_RUST is active. (@Inject cancellable did
+    not work here — cancel flag didn't prevent the INVOKE from
+    executing; @Redirect does.)
+  - Runtime A/B command `/ferrite redstone rust on|off|status` for
+    live comparison without restart.
+
+Correctness: node-mismatches=0 across 152K Rust-path node-checks on
+both static and dynamic networks. Rust output is bit-for-bit identical
+to vanilla on settled state.
+
+Performance (lag machine, USE_RUST=on confirmed via default=0):
+
+  metric                       vanilla        Rust path
+  cascades per server-tick     ~310,000       ~57,000      (5× fewer)
+  avg ms per cascade           0.001          0.061        (60× slower)
+  total wire ms per tick       ~310           ~3,477       (~10× WORSE)
+  effective TPS                1.6            0.4
+
+Verdict: correct, but net-slower because JNI round-trip overhead
+dominates when each dispatch is cheap. Rust reduces cascade COUNT
+(one BFS settles what vanilla does in 120+ cascades) but each
+dispatch is a full network serialize + JNI call + apply, ~1ms of
+overhead. On the lag machine that's 57K dispatches/tick × 1ms =
+3.5s/tick vs vanilla's 310K cheap cascades × 1μs = 310ms/tick.
+
+Pattern across three Rust port attempts:
+  - cramming:  1000 entities → 1 JNI call → 65% reduction ✓
+  - pre-chunk: per-update JNI calls, vanilla already fast → shelved
+  - redstone:  per-cascade JNI calls, vanilla per-call cheap → shelved
+
+JNI wins when work is batched and the batched units don't observe each
+other mid-batch. JNI loses when calls are frequent and individually
+cheap — or when the work can't be batched without breaking semantics.
+
+### Rust port deferred — JNI boundary is the wrong abstraction for wire work
+
+Three approaches considered:
+
+1. **Per-cascade dispatch** (implemented, tested): correct
+   (node-mismatches=0), but 57K JNI calls/tick × ~1ms setup = 10×
+   slower than vanilla. JNI round-trip cost exceeds wire-math savings.
+   Disabled.
+
+2. **Batch-per-tick** (initially proposed): superficially matches
+   cramming's "1 JNI call/tick" shape, but **semantically broken for
+   redstone**. Wire cascades in Java Edition are synchronous and
+   observable mid-tick — observers fire mid-cascade, comparators read
+   intermediate container states, 0-tick pulses depend on sub-tick
+   ordering, BUD-adjacent tricks rely on specific neighbor-update
+   ordering. Deferring wire work past its triggering stack frame
+   desyncs contraption behavior that maps and farms depend on. Not
+   a viable path. (Verified against minecraft.wiki/w/Tick — vanilla
+   has no end-of-tick redstone drain; wire propagation is synchronous
+   cascade inside the triggering stack. Only the gate-tick queue is
+   priority-ordered and drains once per tick.)
+
+3. **Within-cascade batching** (not implemented): amortize JNI setup
+   cost across all wire ops in one cascade rather than one call per
+   cascade. Would require a different buffer/dispatch architecture.
+   Viable but significant redesign work. Only worth attempting if
+   experimental redstone still leaves unacceptable lag (it currently
+   gives 6× free).
+
+**Alternate Current** (open-source mod) takes option 3's approach in
+pure Java — better wire algorithm, same synchronous model, no JNI.
+Worth reading their implementation before attempting a Rust port of
+the same idea.
+
+Ships disabled (`RedstoneHandoff.USE_RUST = false`). Infrastructure
+retained — oracle, dispatcher, mixin, ByteBuffer layout, native
+export — so option 3 could reuse the Rust BFS and oracle below a
+redesigned interception point. Enable at runtime with
+`/ferrite redstone rust on` for diagnostic comparison.
+
+### Three-line summary for users
+
+  - Redstone-heavy world? → Enable Redstone Experiments (6× win, free)
+  - Ferrite's own Rust port is correct but shipped off (JNI overhead
+    exceeds the save on per-call cheap work)
+  - The "batch all redstone per tick" path is NOT the fix — it would
+    break observer/comparator/0-tick semantics. If revisiting, read
+    Alternate Current and pursue option 3 (within-cascade batching)
+
+---
+
+### Pre-chunk loading (investigated, shipped disabled)
+
+Implemented movement-predictive chunk ticket submission — samples player
+velocity each tick, extrapolates vd+8 chunks ahead, submits vanilla
+ChunkTicketType tickets on Rayon background path.
+
+Measured on dedicated server (vd=10, elytra speed):
+  submitted: 10-36/5s
+  avg-lead:  3-6t (150-300ms)
+  max-lead:  57-60t (cold cache / frontier terrain only)
+
+Verdict: vanilla's chunk scheduler reaches FULL status in ~3-6 ticks
+regardless of how early we ask. Pushing margin from +8 to +16 chunks
+produced identical results. Modern hardware generates chunks fast enough
+that predictive pre-submission has no meaningful headroom.
+
+Contrast: cramming port achieved 65% reduction because the cost was
+algorithmic (O(N²) → spatial hash). Pre-chunk cost is I/O-bound and
+already parallelized by vanilla. No Rust angle either — the bottleneck
+is vanilla's noise pipeline, which hits the same density-function
+blocker as the earlier worldgen port attempt.
+
+Code ships enabled (ENABLED=true) for ongoing measurement across user
+configurations — the dedicated-server result above may not hold on
+high-view-distance servers (vd≥16), overloaded hosts, or sustained
+frontier exploration where vanilla's scheduler falls behind. Disable
+by setting `PreChunkDispatcher.ENABLED = false` if the [prechunk] log
+shows avg-lead persistently ≤ 6t with non-trivial CPU cost.
+
+---
+
 ## [0.1.2-alpha] — 2026-04-19
 
 Cross-platform native support. No gameplay changes beyond what 0.1.1-alpha
