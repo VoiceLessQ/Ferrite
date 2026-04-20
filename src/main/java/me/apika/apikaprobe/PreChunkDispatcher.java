@@ -43,7 +43,7 @@ import net.minecraft.util.math.ChunkPos;
  */
 public final class PreChunkDispatcher {
 
-	public static volatile boolean ENABLED = false;
+	public static volatile boolean ENABLED = true;
 
 	private static final int MAX_PER_TICK = 4;
 	private static final int DEDUPE_TICKS = 20;

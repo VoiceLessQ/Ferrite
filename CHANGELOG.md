@@ -30,9 +30,12 @@ already parallelized by vanilla. No Rust angle either — the bottleneck
 is vanilla's noise pipeline, which hits the same density-function
 blocker as the earlier worldgen port attempt.
 
-Code ships disabled (ENABLED=false). Re-enable only if user logs show
-dedicated servers with vd≥16 and sustained frontier exploration where
-avg-lead consistently exceeds 30t.
+Code ships enabled (ENABLED=true) for ongoing measurement across user
+configurations — the dedicated-server result above may not hold on
+high-view-distance servers (vd≥16), overloaded hosts, or sustained
+frontier exploration where vanilla's scheduler falls behind. Disable
+by setting `PreChunkDispatcher.ENABLED = false` if the [prechunk] log
+shows avg-lead persistently ≤ 6t with non-trivial CPU cost.
 
 ---
 
