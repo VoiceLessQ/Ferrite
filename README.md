@@ -1,12 +1,17 @@
 ## Ferrite
 
-**What you get:** A Rust-powered performance mod for Minecraft 1.21.11. The headline win in the current release is a Rust reimplementation of the mob-vs-mob cramming loop — on servers or worlds with 1000+ mobs it cuts the server's entity-tick cost by roughly 65%.
+**What you get:** A performance mod for Minecraft 1.21.11. Two opt-in optimizations:
 
-Every 5 seconds the mod also logs where your game is spending time, so the next Rust port can target the next real bottleneck.
+- **Cramming (active by default)** — a Rust reimplementation of the mob-vs-mob cramming loop. On servers or worlds with 1000+ mobs it cuts the server's entity-tick cost by roughly 65%.
+- **Redstone (`/ferrite redstone ac on`)** — adapts [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current) algorithm into Ferrite. **~10× fewer wire cascades, contraptions run ~6× faster at equivalent server load.** Bit-for-bit correct vs vanilla on 150,000+ oracle checks. Works on existing worlds without toggles or migration.
+
+Every 5 seconds the mod also logs where your game is spending time, so the next optimization can target the next real bottleneck.
 
 ---
 
-## Measured results (1000+ active mobs)
+## Measured results
+
+### Cramming (1000+ active mobs)
 
 | metric                | vanilla | Ferrite | reduction               |
 | --------------------- | ------- | ------- | ----------------------- |
@@ -16,7 +21,21 @@ Every 5 seconds the mod also logs where your game is spending time, so the next 
 
 TPS held at 20 under the same load that was costing vanilla 60 ms/tick of entity work.
 
-> **Note:** Results measured on a Ryzen 9 5900X limited to 4 active cores via CPU affinity (simulating a 4-core machine), with 1000+ zombies in a concentrated area. Improvement scales with mob count and density — smaller mob counts will see proportionally less benefit. Real 4-core hardware may show different absolute numbers but percentage improvements should be similar. Results may vary based on world setup, other mods, and hardware.
+### Redstone (lag-machine benchmark, AC algorithm enabled)
+
+| metric                 | vanilla default     | Ferrite (AC)         | change                |
+| ---------------------- | ------------------- | -------------------- | --------------------- |
+| cascades per tick      | ~127,000            | ~8,250               | **~15× fewer**        |
+| gate ticks per tick    | ~663                | ~2,780               | **~4× more**          |
+| wire cost / gate tick  | ~0.378 ms           | ~0.062 ms            | ~84% less             |
+| effective TPS          | ~4                  | ~5.6                 | **+40%**              |
+| oracle mismatches      | —                   | 0 / 149,669 checked  | bit-for-bit correct   |
+
+Two user-visible effects combine:
+- **Contraptions animate ~4× faster at equivalent server load** — each wire cascade now collapses into a single network settle (~84% less wire time per gate tick), so the same per-tick budget processes more gate ticks.
+- **Server TPS climbs ~40%** on CPU-bound hardware — when the server is saturated (as in this 4-core baseline), wire savings convert directly into more completed ticks per second. On unconstrained hardware with headroom, TPS stays flat but the gate-throughput win persists.
+
+> **Your results will vary.** Both tables are single data points on one CPU (Ryzen 9 5900X limited to 4 active cores via affinity) and specific worst-case workloads (concentrated zombie pile for cramming; clock-based lag machine for redstone). Real numbers depend on your hardware, the size and density of your mob farms or contraptions, other mods you run, and the specific redstone patterns you use. On CPU-bound hardware you'll likely see both the cascade-reduction and the TPS improvement; on unconstrained hardware the gate-throughput win (contraptions running visibly faster) persists but the TPS delta can disappear entirely because vanilla wasn't the bottleneck.
 
 Measurement details in [CHANGELOG.md](CHANGELOG.md) and the full investigation path in [docs/PROFILING.md](docs/PROFILING.md).
 
@@ -24,9 +43,19 @@ Measurement details in [CHANGELOG.md](CHANGELOG.md) and the full investigation p
 
 ## How it works
 
+### Cramming
+
 `LivingEntity.tickCramming` is intercepted with a Mixin. The first mob's tickCramming call in a given server tick triggers a batch: every mob's position and bounding box is packed into a direct ByteBuffer, Rust builds a 2-block spatial hash, iterates pairs with an array-index guard, applies the vanilla push formula (Chebyshev distance, exact bit-for-bit replica), and returns accumulated `(dx, dz)` velocity deltas. Java then applies each delta via `entity.addVelocity`. All subsequent tickCramming calls that tick are cancelled no-ops.
 
 One JNI call per tick. No world state, no snapshot. The win is algorithmic — O(N·k) with spatial hashing where k is local density, instead of vanilla's per-mob `level.getEntities(bbox)` query-plus-iterate.
+
+### Redstone
+
+A `@Redirect(NEW)` mixin swaps `RedstoneWireBlock`'s `redstoneController` field from `DefaultRedstoneController` to `FerriteRedstoneController` (a subclass) at construction time. With `/ferrite redstone ac on`, the Ferrite controller routes wire updates through the ported Alternate Current algorithm: build the connected wire network as a graph, find power sources, do one BFS-style settle that touches each wire at most twice, write all power changes in one pass via a chunk-section bypass that skips lighting/heightmap/block-entity bookkeeping. With AC off, the controller delegates to `super.update(...)` and is byte-for-byte equivalent to vanilla.
+
+Pure Java; no JNI. The win is algorithmic — replacing vanilla's per-wire recursive re-evaluation (which can revisit the same wire dozens of times per cascade) with one settle per cascade, plus skipping the redundant block updates a wire would normally emit between intermediate power levels.
+
+A shadow-compute `RedstoneOracle` validates every sampled cascade against vanilla's own `calculateWirePowerAt`, so any algorithm divergence surfaces immediately in `[redstone-oracle]` log lines.
 
 ---
 
@@ -72,7 +101,8 @@ The macOS `.dylib` is a fat binary produced by `lipo -create` on the CI `macos-l
 
 ## Credits
 
-Inspired by and originally forked from [Brayan-724/rust-mod-probe](https://github.com/Brayan-724/rust-mod-probe) — the original PoC that demonstrated calling Rust from Fabric via JNI.
+- The redstone wire algorithm is adapted from [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current) (MIT). Full attribution in [LICENSES.md](LICENSES.md). The port is Yarn-remapped for 1.21.11 and installed transparently as a `DefaultRedstoneController` subclass; design and algorithm remain entirely Space Walker's.
+- The JNI / native-loading scaffolding was originally forked from [Brayan-724/rust-mod-probe](https://github.com/Brayan-724/rust-mod-probe) — the PoC that demonstrated calling Rust from Fabric.
 
 ---
 

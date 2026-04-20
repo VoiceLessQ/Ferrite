@@ -7,6 +7,12 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+_(no changes pending)_
+
+---
+
+## [0.3.0-alpha] — 2026-04-20
+
 ### Added
 
 - **Alternate Current wire algorithm** — adapted from
@@ -29,22 +35,37 @@ marks pre-release research builds.
 
 ### Performance
 
-Measured on the reference redstone lag machine, default controller
-(no experimental toggle), 5s windows:
+Measured on the reference redstone lag machine (default controller,
+no experimental toggle), Ryzen 9 5900X limited to 4 active cores via
+CPU affinity — the same constrained-hardware baseline used for all
+prior Ferrite benchmarks. Single A/B run, 5s windows:
 
-| Configuration                 | Cascades / tick | Effective TPS |
-| ----------------------------- | --------------: | ------------: |
-| Vanilla default               |        ~255,000 |          ~0.4 |
-| Mojang experimental redstone  |         ~35,000 |         ~2–5  |
-| **Ferrite AC port**           |      **~7,760** |       **6+**  |
+| Metric                | Vanilla default      | AC (Ferrite)          | Change                    |
+| --------------------- | -------------------: | --------------------: | ------------------------- |
+| Cascades / tick       | ~127,000             | ~8,250                | ~15× fewer                |
+| Gate throughput / tick| ~663                 | ~2,780                | ~4× more                  |
+| Wire cost / gate tick | ~0.378 ms            | ~0.062 ms             | ~84% less                 |
+| Effective TPS         | ~4                   | ~5.6                  | **+40%**                  |
+| Oracle mismatches     | —                    | 0 / 149,669 checked   | bit-for-bit correct       |
+| Vanilla controller    | active               | `default=0`           | fully bypassed            |
 
-33× cascade reduction vs vanilla default. Beats experimental
-redstone (~4.5× fewer cascades) without requiring the experimental
-world-creation toggle.
+Two independent effects combine in the user-visible result:
 
-Correctness: 327,000+ sampled oracle node checks during the AC run,
-zero mismatches. Phase monitor confirms `default=0` — vanilla's
-controller is fully bypassed when AC is enabled.
+1. **Gate throughput per server tick rises ~4×** — each wire cascade
+   now collapses into a single network settle (~84% less wire time per
+   gate tick), so the same per-tick budget processes more gate ticks.
+   Contraptions animate faster at equivalent server load.
+
+2. **Server TPS rises ~40% on CPU-bound hardware** — when the server
+   is actually saturated (as it is on a 4-core baseline running a
+   redstone lag machine), wire-cost savings convert directly into more
+   completed ticks per second. A run on unconstrained hardware showed
+   the TPS delta vanishing (~5 → ~5) because there was headroom; the
+   gate-throughput win persisted.
+
+`default=0` in every AC window confirms vanilla's `DefaultRedstoneController`
+is completely bypassed; the @Redirect installation mixin is doing its
+job.
 
 ### Investigated
 
