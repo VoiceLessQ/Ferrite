@@ -8,6 +8,61 @@ Versions follow [Semantic Versioning](https://semver.org/) with the
 
 ## [Unreleased]
 
+### Alternate Current wire algorithm port (measured win, shipping)
+
+Ported [Alternate Current](https://github.com/SpaceWalkerRS/alternate-current)'s
+wire-power algorithm into Ferrite's `me.apika.apikaprobe.redstone`
+package (MIT, © 2022 Space Walker — full attribution in
+[LICENSES.md](LICENSES.md)). Installed as a
+`DefaultRedstoneController` subclass via a `@Redirect(NEW)` mixin on
+`RedstoneWireBlock`'s controller field init, so an existing world with
+vanilla redstone dust gets the new algorithm transparently — no block
+migration, no toggle in world creation.
+
+Measured on the identical lag machine used for every prior redstone
+investigation (default redstone controller, no experimental toggle):
+
+  configuration                          cascades/tick     TPS     notes
+  Vanilla default (baseline)             ~255,000          ~0.4    as measured previously
+  Experimental redstone (Mojang)         ~35,000           ~2-5    previously documented
+  AC port (this release)                 ~7,760            ~6+     new baseline to beat
+
+  ~33× cascade reduction vs vanilla default
+  ~4.5× cascade reduction vs Mojang experimental
+  Peaks hit 18 TPS when cascades were light
+
+Correctness validation: `[redstone-oracle]` reports **node-mismatches=0
+across 327,000+ sampled node checks** during the AC-enabled lag-machine
+run. AC's output is bit-for-bit identical to vanilla's
+`calculateWirePowerAt` on every sampled wire in the network, which is
+the stringent check — same as the previous "static settled lever + 14
+wires" fixture, but run on a live, constantly-cascading network.
+
+Full phase-monitor confirmation: `[redstone] default=0 exp=0` in every
+AC window proves vanilla's `DefaultRedstoneController` was completely
+bypassed — the installation mixin + per-world `WireHandler` dispatch is
+doing its job.
+
+Enable at runtime via `/ferrite redstone ac on` (op-level 2). Default
+`FerriteWireConfig.ENABLED=false` — users opt in explicitly until the
+port has user-reports from varied setups.
+
+Session 3 (Rust layer on top of AC) **deferred indefinitely**. AC
+collapses the cascade count enough that per-cascade Rust dispatch
+overhead exceeds whatever per-node compute saving Rust could provide.
+The infrastructure for a within-cascade batched Rust path still ships
+(`rust/mod/src/redstone.rs`, `RedstoneRustDispatcher`, oracle) in case
+a future workload justifies revisiting, but there's no current case for
+it.
+
+Files: [FerriteWireConfig.java](src/main/java/me/apika/apikaprobe/redstone/FerriteWireConfig.java),
+[WireHandler.java](src/main/java/me/apika/apikaprobe/redstone/WireHandler.java),
+[FerriteRedstoneController.java](src/main/java/me/apika/apikaprobe/redstone/FerriteRedstoneController.java),
+[FerriteControllerInstallMixin.java](src/main/java/me/apika/apikaprobe/mixin/FerriteControllerInstallMixin.java),
+plus session 1's graph-representation types.
+
+---
+
 ### Redstone investigation (measured, no port)
 
 Added RedstonePhaseMonitor + two mixins instrumenting both redstone hot
