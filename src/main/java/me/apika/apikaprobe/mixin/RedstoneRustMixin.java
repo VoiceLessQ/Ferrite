@@ -52,7 +52,19 @@ public abstract class RedstoneRustMixin {
 			CallbackInfo ci) {
 		if (!RedstoneHandoff.USE_RUST) return;
 		if (world.isClient()) return;
-		if (RedstoneRustDispatcher.isActive()) return;
+		if (RedstoneRustDispatcher.isActive()) {
+			// Re-entry during Rust's own delta-apply pass. Rust has
+			// already written the correct power at every wire in the
+			// network; vanilla's re-evaluation here would trigger a
+			// full redundant cascade (DefaultRedstoneController.update →
+			// calculateWirePowerAt → recursive neighbor updates) on top
+			// of work we've already done, blowing away any savings.
+			// Non-wire consumers (lamps, repeaters, pistons) still get
+			// notified through the updateNeighbors block-listener path;
+			// only the wire's own vanilla re-evaluation is skipped.
+			ci.cancel();
+			return;
+		}
 
 		boolean handled = RedstoneRustDispatcher.runBfsAndApply((ServerWorld) world, pos);
 		if (handled) {
