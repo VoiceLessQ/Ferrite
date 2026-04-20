@@ -34,7 +34,8 @@
 		"ExperimentalRedstoneControllerMixin",
 		"RedstoneOracleMixin",
 		"RedstoneControllerInvoker",
-		"RedstoneRustMixin"
+		"RedstoneRustMixin",
+		"FerriteControllerInstallMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
