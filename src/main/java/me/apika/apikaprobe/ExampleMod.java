@@ -39,6 +39,7 @@ public class ExampleMod implements ModInitializer {
 		// before the dispatcher's handler increments it further.
 		PreChunkMonitor.register();
 		PreChunkDispatcher.register();
+		RedstonePhaseMonitor.register();
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			LOGGER.warn("Native engine unavailable — falling back to pure Java.");
