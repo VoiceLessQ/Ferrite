@@ -34,6 +34,11 @@ public class ExampleMod implements ModInitializer {
 		// MonsterPhaseMonitor.getMovementSelfNs() before that monitor resets.
 		MovementInternalsMonitor.register();
 		MonsterPhaseMonitor.register();
+		// PreChunkMonitor must register BEFORE PreChunkDispatcher so its
+		// END_SERVER_TICK report handler fires first and reads the window
+		// before the dispatcher's handler increments it further.
+		PreChunkMonitor.register();
+		PreChunkDispatcher.register();
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			LOGGER.warn("Native engine unavailable — falling back to pure Java.");
