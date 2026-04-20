@@ -33,7 +33,8 @@
 		"DefaultRedstoneControllerMixin",
 		"ExperimentalRedstoneControllerMixin",
 		"RedstoneOracleMixin",
-		"RedstoneControllerInvoker"
+		"RedstoneControllerInvoker",
+		"RedstoneRustMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
