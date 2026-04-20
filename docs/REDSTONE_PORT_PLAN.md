@@ -96,6 +96,10 @@ path measurably faster than pure-AC-Java on lag machine.
    (e.g. `World`, `BlockState`, `Block`); those are the integration
    seams.
 
+**License decision (recorded 2026-04-20):** MIT — direct adaptation
+approved. Preserve Space Walker's copyright header in each ported
+file. Add `LICENSES.md` at repo root crediting upstream.
+
 ---
 
 ## Benchmark targets (lag machine, measured this session)
