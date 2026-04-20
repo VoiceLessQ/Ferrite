@@ -1,6 +1,6 @@
 ## Ferrite
 
-**What you get:** A Rust-powered performance mod for Minecraft 1.21.11. The headline win in the current release is a Rust reimplementation of the mob-vs-mob cramming loop — on servers or worlds with 1000+ mobs it cuts the server's entity-tick cost by roughly 65%.
+**What you get:** A Rust-powered performance mod for Minecraft 1.21.11. The headline win in the current release is a Rust reimplementation of the mob-vs-mob cramming loop — in any world with 1000+ mobs (singleplayer or multiplayer) it cuts the server's entity-tick cost by roughly 65%.
 
 Every 5 seconds the mod also logs where your game is spending time, so the next Rust port can target the next real bottleneck.
 
@@ -39,7 +39,7 @@ One JNI call per tick. No world state, no snapshot. The win is algorithmic — O
 
 ## How to help
 
-If you run mob farms, crowded servers, or entity-heavy worlds:
+If you run mob farms, crowded multiplayer servers, or singleplayer worlds with lots of mobs or animals:
 
 1. Install Ferrite + Fabric API
 2. Play normally for 10+ minutes
@@ -55,18 +55,22 @@ Low-end hardware (4-core CPU, integrated graphics) is especially useful — the 
 - Minecraft 1.21.11
 - Fabric Loader 0.18.4+
 - Fabric API
+- Works in **singleplayer and multiplayer**
+- **Server-side compatible** — can be installed on a server without requiring players to have the mod
 
-### Platform verification
+---
 
-| platform          | status                                                  |
-|-------------------|---------------------------------------------------------|
-| Windows x86_64    | ✅ Developed and tested throughout                      |
-| Linux x86_64      | ✅ Verified — WSL Ubuntu 24.04, OpenJDK 21, server loads `/tmp/rust_mod_*.so`, `initEngine` returns Rayon pool size, reaches "Done" with no errors |
+## Platform verification
+
+| platform | status |
+|---|---|
+| Windows x86_64 | ✅ Developed and tested throughout |
+| Linux x86_64 | ✅ Verified — WSL Ubuntu 24.04, OpenJDK 21, server loads `/tmp/rust_mod_*.so`, initEngine returns Rayon pool size, reaches "Done" with no errors |
 | macOS (universal) | ⚠️ Binary confirmed structurally correct (`lipo -info` shows both x86_64 + arm64 slices); runtime load not yet verified on real Apple hardware |
 
 The macOS `.dylib` is a fat binary produced by `lipo -create` on the CI `macos-latest` runner. Happy to mark it verified once a Mac user confirms `System.load` succeeds — a log snippet showing `Loaded rust_mod from /tmp/rust_mod_*.dylib` is enough.
 
-> The native library is bundled for Windows, Linux, and macOS. If it fails to load on your platform, Ferrite falls back to vanilla behavior automatically — no crashes, no broken worlds. ARM Linux isn't bundled yet.
+The native library is bundled for Windows, Linux, and macOS. If it fails to load on your platform, Ferrite falls back to vanilla behavior automatically — no crashes, no broken worlds. ARM Linux isn't bundled yet.
 
 ---
 
