@@ -40,6 +40,7 @@ public class ExampleMod implements ModInitializer {
 		PreChunkMonitor.register();
 		PreChunkDispatcher.register();
 		RedstonePhaseMonitor.register();
+		RedstoneOracle.register();
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			LOGGER.warn("Native engine unavailable — falling back to pure Java.");

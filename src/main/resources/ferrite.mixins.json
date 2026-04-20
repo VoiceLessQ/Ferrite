@@ -31,7 +31,8 @@
 		"RedstoneWireMixin",
 		"RedstoneGateMixin",
 		"DefaultRedstoneControllerMixin",
-		"ExperimentalRedstoneControllerMixin"
+		"ExperimentalRedstoneControllerMixin",
+		"RedstoneOracleMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
