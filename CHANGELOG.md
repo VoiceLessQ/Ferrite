@@ -6,6 +6,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/) with the
 `-alpha` suffix indicating pre-release research builds.
 
+## [Unreleased]
+
+### Pre-chunk loading (investigated, shipped disabled)
+
+Implemented movement-predictive chunk ticket submission — samples player
+velocity each tick, extrapolates vd+8 chunks ahead, submits vanilla
+ChunkTicketType tickets on Rayon background path.
+
+Measured on dedicated server (vd=10, elytra speed):
+  submitted: 10-36/5s
+  avg-lead:  3-6t (150-300ms)
+  max-lead:  57-60t (cold cache / frontier terrain only)
+
+Verdict: vanilla's chunk scheduler reaches FULL status in ~3-6 ticks
+regardless of how early we ask. Pushing margin from +8 to +16 chunks
+produced identical results. Modern hardware generates chunks fast enough
+that predictive pre-submission has no meaningful headroom.
+
+Contrast: cramming port achieved 65% reduction because the cost was
+algorithmic (O(N²) → spatial hash). Pre-chunk cost is I/O-bound and
+already parallelized by vanilla. No Rust angle either — the bottleneck
+is vanilla's noise pipeline, which hits the same density-function
+blocker as the earlier worldgen port attempt.
+
+Code ships disabled (ENABLED=false). Re-enable only if user logs show
+dedicated servers with vd≥16 and sustained frontier exploration where
+avg-lead consistently exceeds 30t.
+
+---
+
 ## [0.1.2-alpha] — 2026-04-19
 
 Cross-platform native support. No gameplay changes beyond what 0.1.1-alpha
