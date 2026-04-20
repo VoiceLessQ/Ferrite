@@ -41,6 +41,7 @@ public class ExampleMod implements ModInitializer {
 		PreChunkDispatcher.register();
 		RedstonePhaseMonitor.register();
 		RedstoneOracle.register();
+		FerriteCommand.register();
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			LOGGER.warn("Native engine unavailable — falling back to pure Java.");
