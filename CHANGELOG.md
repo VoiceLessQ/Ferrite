@@ -99,30 +99,58 @@ Pattern across three Rust port attempts:
   - pre-chunk: per-update JNI calls, vanilla already fast → shelved
   - redstone:  per-cascade JNI calls, vanilla per-call cheap → shelved
 
-JNI wins when work is batched. JNI loses when calls are frequent and
-individually cheap.
+JNI wins when work is batched and the batched units don't observe each
+other mid-batch. JNI loses when calls are frequent and individually
+cheap — or when the work can't be batched without breaking semantics.
 
-Batch-per-tick redesign (not attempted): queue all gate-triggered
-cascades through the server tick, drain into one Rust call at
-end-of-tick — same shape as the cramming port. Would recover the
-theoretical win but is a full architecture pass. Marginal benefit
-over experimental-redstone (which is free from Mojang) is hard to
-justify unless user reports surface worlds that still struggle at
-20 TPS with experimental enabled.
+### Rust port deferred — JNI boundary is the wrong abstraction for wire work
+
+Three approaches considered:
+
+1. **Per-cascade dispatch** (implemented, tested): correct
+   (node-mismatches=0), but 57K JNI calls/tick × ~1ms setup = 10×
+   slower than vanilla. JNI round-trip cost exceeds wire-math savings.
+   Disabled.
+
+2. **Batch-per-tick** (initially proposed): superficially matches
+   cramming's "1 JNI call/tick" shape, but **semantically broken for
+   redstone**. Wire cascades in Java Edition are synchronous and
+   observable mid-tick — observers fire mid-cascade, comparators read
+   intermediate container states, 0-tick pulses depend on sub-tick
+   ordering, BUD-adjacent tricks rely on specific neighbor-update
+   ordering. Deferring wire work past its triggering stack frame
+   desyncs contraption behavior that maps and farms depend on. Not
+   a viable path. (Verified against minecraft.wiki/w/Tick — vanilla
+   has no end-of-tick redstone drain; wire propagation is synchronous
+   cascade inside the triggering stack. Only the gate-tick queue is
+   priority-ordered and drains once per tick.)
+
+3. **Within-cascade batching** (not implemented): amortize JNI setup
+   cost across all wire ops in one cascade rather than one call per
+   cascade. Would require a different buffer/dispatch architecture.
+   Viable but significant redesign work. Only worth attempting if
+   experimental redstone still leaves unacceptable lag (it currently
+   gives 6× free).
+
+**Alternate Current** (open-source mod) takes option 3's approach in
+pure Java — better wire algorithm, same synchronous model, no JNI.
+Worth reading their implementation before attempting a Rust port of
+the same idea.
 
 Ships disabled (`RedstoneHandoff.USE_RUST = false`). Infrastructure
 retained — oracle, dispatcher, mixin, ByteBuffer layout, native
-export — so the batch-per-tick redesign can reuse everything below
-the interception point. Enable at runtime with `/ferrite redstone
-rust on` for diagnostic comparison.
+export — so option 3 could reuse the Rust BFS and oracle below a
+redesigned interception point. Enable at runtime with
+`/ferrite redstone rust on` for diagnostic comparison.
 
 ### Three-line summary for users
 
   - Redstone-heavy world? → Enable Redstone Experiments (6× win, free)
   - Ferrite's own Rust port is correct but shipped off (JNI overhead
     exceeds the save on per-call cheap work)
-  - Revisit path for Ferrite redstone port: batch-per-tick
-    architecture, mirroring cramming's one-JNI-call-per-tick pattern
+  - The "batch all redstone per tick" path is NOT the fix — it would
+    break observer/comparator/0-tick semantics. If revisiting, read
+    Alternate Current and pursue option 3 (within-cascade batching)
 
 ---
 
