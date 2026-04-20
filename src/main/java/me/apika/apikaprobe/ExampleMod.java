@@ -41,6 +41,7 @@ public class ExampleMod implements ModInitializer {
 		PreChunkDispatcher.register();
 		RedstonePhaseMonitor.register();
 		RedstoneOracle.register();
+		RedstoneRustDispatcher.register();
 		FerriteCommand.register();
 
 		if (!RustBridge.NATIVE_AVAILABLE) {

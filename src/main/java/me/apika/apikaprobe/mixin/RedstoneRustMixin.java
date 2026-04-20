@@ -2,8 +2,7 @@ package me.apika.apikaprobe.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.Redirect;
 
 import me.apika.apikaprobe.RedstoneHandoff;
 import me.apika.apikaprobe.RedstoneRustDispatcher;
@@ -12,63 +11,64 @@ import net.minecraft.block.BlockState;
 import net.minecraft.block.RedstoneWireBlock;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.RedstoneController;
 import net.minecraft.world.World;
 import net.minecraft.world.block.WireOrientation;
 
 /**
- * A/B switch: when [RedstoneHandoff.USE_RUST] is true, intercepts
- * RedstoneWireBlock.update at HEAD and routes the cascade through
- * [RedstoneRustDispatcher] (Rust BFS + batch apply) instead of
- * vanilla's per-call cascade.
+ * A/B switch: redirects the {@code this.redstoneController.update(...)}
+ * call inside RedstoneWireBlock's private dispatcher (line 275 in yarn
+ * 1.21.11) to [RedstoneRustDispatcher].
  *
- * Interception conditions (all must hold):
- *   - USE_RUST flag set (default false)
- *   - server-side call (!world.isClient())
- *   - native library available (RustBridge.NATIVE_AVAILABLE)
- *   - not already inside a dispatcher pass (re-entry guard via
- *     RedstoneRustDispatcher.isActive)
+ * Why @Redirect instead of @Inject(HEAD, cancellable=true):
+ * The previous @Inject approach let vanilla's controller update fire
+ * in every case — the cancel flag wasn't preventing the INVOKE at line
+ * 275 from executing. @Redirect wholly replaces that specific INVOKE
+ * instruction, so when USE_RUST is active we simply skip the vanilla
+ * controller call and run Rust's BFS instead. Zero reliance on
+ * cancel-flag propagation.
  *
- * Any failure or bailout (e.g. network exceeds MAX_NODES) returns
- * control to vanilla silently — the wire update runs its normal path.
+ * Falls back to vanilla in three cases:
+ *   1. USE_RUST = false (default) — switch is off
+ *   2. client side — server-side only
+ *   3. Rust dispatcher is already ACTIVE — re-entry during our own
+ *      setBlockState/updateNeighbors apply pass; Rust has already
+ *      written the correct power, vanilla's re-evaluation would be
+ *      redundant. (We still call vanilla here so non-wire consumers
+ *      see consistent notifier semantics — but see note below.)
+ *   4. runBfsAndApply returned false (network overflow, native
+ *      unavailable) — bail cleanly to vanilla.
  *
- * Mixin ordering: this mixin sits alongside [RedstoneWireMixin] (phase
- * timing) and [RedstoneOracleMixin] (correctness shadow-check) on the
- * same target method. All three @Inject at HEAD in declaration order
- * in ferrite.mixins.json; RETURN handlers fire regardless of whether
- * an earlier HEAD handler cancelled. (If that assumption fails in
- * practice and the phase monitor's depth counter drifts, we'd need to
- * switch this mixin to @Redirect instead.)
+ * Note on re-entry: during apply, the ACTIVE branch calls vanilla.
+ * That's safe because by the time ACTIVE is set, every wire in the
+ * network is already at its correct power — vanilla's controller
+ * recomputes the same answer, sees no state change, skips its own
+ * setBlockState, and terminates its recursion immediately. The cost
+ * is ~O(N) vanilla-update calls during our apply pass, each cheap;
+ * vanilla's own explosive cascade doesn't fire because nothing is
+ * changing.
  */
 @Mixin(RedstoneWireBlock.class)
 public abstract class RedstoneRustMixin {
 
-	@Inject(
+	@Redirect(
 		method = "update(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;Lnet/minecraft/world/block/WireOrientation;Z)V",
-		at = @At("HEAD"),
-		cancellable = true
+		at = @At(
+			value = "INVOKE",
+			target = "Lnet/minecraft/world/RedstoneController;update(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;Lnet/minecraft/world/block/WireOrientation;Z)V"
+		)
 	)
-	private void apikaprobe$maybeRouteToRust(
-			World world, BlockPos pos, BlockState state, WireOrientation orientation, boolean blockAdded,
-			CallbackInfo ci) {
-		if (!RedstoneHandoff.USE_RUST) return;
-		if (world.isClient()) return;
-		if (RedstoneRustDispatcher.isActive()) {
-			// Re-entry during Rust's own delta-apply pass. Rust has
-			// already written the correct power at every wire in the
-			// network; vanilla's re-evaluation here would trigger a
-			// full redundant cascade (DefaultRedstoneController.update →
-			// calculateWirePowerAt → recursive neighbor updates) on top
-			// of work we've already done, blowing away any savings.
-			// Non-wire consumers (lamps, repeaters, pistons) still get
-			// notified through the updateNeighbors block-listener path;
-			// only the wire's own vanilla re-evaluation is skipped.
-			ci.cancel();
+	private void apikaprobe$redirectControllerUpdate(
+			RedstoneController controller,
+			World world, BlockPos pos, BlockState state, WireOrientation orientation, boolean blockAdded) {
+		if (!RedstoneHandoff.USE_RUST || world.isClient() || RedstoneRustDispatcher.isActive()) {
+			controller.update(world, pos, state, orientation, blockAdded);
 			return;
 		}
-
-		boolean handled = RedstoneRustDispatcher.runBfsAndApply((ServerWorld) world, pos);
-		if (handled) {
-			ci.cancel();
+		if (!RedstoneRustDispatcher.runBfsAndApply((ServerWorld) world, pos)) {
+			// Rust bailed (overflow / native missing) — fall back so the
+			// wire still gets updated.
+			controller.update(world, pos, state, orientation, blockAdded);
 		}
 	}
 }

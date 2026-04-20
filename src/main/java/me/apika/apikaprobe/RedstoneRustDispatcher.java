@@ -3,6 +3,9 @@ package me.apika.apikaprobe;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicLong;
+
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -52,6 +55,33 @@ public final class RedstoneRustDispatcher {
 	// Lazy controller handle — same pattern as RedstoneOracle.
 	private static volatile RedstoneController dispatchController;
 
+	// Dispatch counters — exposed via the 5s [redstone-rust] report so the
+	// next log read confirms whether the Rust path is actually firing.
+	// dispatched: outermost calls that entered runBfsAndApply (went to Rust)
+	// bailed:     cases that returned false (overflow / native missing)
+	// applied:    sum of deltas applied by Rust across the window
+	private static final AtomicLong DISPATCHED = new AtomicLong();
+	private static final AtomicLong BAILED = new AtomicLong();
+	private static final AtomicLong APPLIED_DELTAS = new AtomicLong();
+	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
+	private static volatile long lastReportNs = System.nanoTime();
+
+	public static void register() {
+		ServerTickEvents.END_SERVER_TICK.register(server -> maybeReport());
+	}
+
+	private static void maybeReport() {
+		long now = System.nanoTime();
+		if (now - lastReportNs < REPORT_INTERVAL_NS) return;
+		long d = DISPATCHED.getAndSet(0L);
+		long b = BAILED.getAndSet(0L);
+		long a = APPLIED_DELTAS.getAndSet(0L);
+		lastReportNs = now;
+		if (d == 0L && b == 0L) return;
+		LOGGER.info("[redstone-rust] dispatched={} bailed={} deltas-applied={}  (USE_RUST={})",
+				d, b, a, RedstoneHandoff.USE_RUST);
+	}
+
 	private static final ThreadLocal<boolean[]> ACTIVE =
 			ThreadLocal.withInitial(() -> new boolean[1]);
 
@@ -96,7 +126,10 @@ public final class RedstoneRustDispatcher {
 	 * caller should let vanilla run).
 	 */
 	public static boolean runBfsAndApply(ServerWorld world, BlockPos startPos) {
-		if (!RustBridge.NATIVE_AVAILABLE) return false;
+		if (!RustBridge.NATIVE_AVAILABLE) {
+			BAILED.incrementAndGet();
+			return false;
+		}
 
 		ScratchBuffers scratch = SCRATCH.get();
 		scratch.reset();
@@ -104,10 +137,13 @@ public final class RedstoneRustDispatcher {
 
 		int nodeCount = discover(world, startPos, scratch);
 		if (nodeCount < 0) {
-			// Overflow — fall back to vanilla.
+			BAILED.incrementAndGet();
 			return false;
 		}
-		if (nodeCount == 0) return false;
+		if (nodeCount == 0) {
+			BAILED.incrementAndGet();
+			return false;
+		}
 
 		serializeToBuffer(world, scratch, nodeCount, inv);
 
@@ -115,6 +151,8 @@ public final class RedstoneRustDispatcher {
 				RedstoneHandoff.REQUEST_BUF, RedstoneHandoff.RESULT_BUF, nodeCount);
 
 		applyDeltas(world, deltaCount);
+		DISPATCHED.incrementAndGet();
+		APPLIED_DELTAS.addAndGet(deltaCount);
 		return true;
 	}
 
