@@ -52,6 +52,78 @@ by default, log line `[redstone] wire: avg=Xms max=Yms cascades=N
 gates: avg=Xms max=Yms ticks=M  n=Z server-ticks` every 5s of wall
 time. Diagnostic value regardless of port status.
 
+### Redstone Rust BFS port (investigated, shipped disabled)
+
+After measuring, attempted a Rust port anyway — to continue building
+out Ferrite's Rust capability even if the immediate win is small.
+
+Architecture:
+  - Java oracle (RedstoneOracle) shadow-computes expected power using
+    vanilla's own calculateWirePowerAt — validated bit-for-bit against
+    vanilla on settled networks (1,171 node-checks, 0 mismatches).
+  - Rust BFS (rust/mod/src/redstone.rs) translates the same algorithm,
+    iterative relaxation bounded at 16 passes. Exported via JNI as
+    RustBridge.computeRedstoneBfs.
+  - Java dispatcher (RedstoneRustDispatcher) BFS-walks the wire network
+    from the cascade trigger, resolves neighbor indices, calls Rust,
+    applies deltas via setBlockState + updateNeighbors.
+  - @Redirect on the `this.redstoneController.update(...)` INVOKE in
+    RedstoneWireBlock.update — cleanly replaces vanilla's per-cascade
+    controller call when USE_RUST is active. (@Inject cancellable did
+    not work here — cancel flag didn't prevent the INVOKE from
+    executing; @Redirect does.)
+  - Runtime A/B command `/ferrite redstone rust on|off|status` for
+    live comparison without restart.
+
+Correctness: node-mismatches=0 across 152K Rust-path node-checks on
+both static and dynamic networks. Rust output is bit-for-bit identical
+to vanilla on settled state.
+
+Performance (lag machine, USE_RUST=on confirmed via default=0):
+
+  metric                       vanilla        Rust path
+  cascades per server-tick     ~310,000       ~57,000      (5× fewer)
+  avg ms per cascade           0.001          0.061        (60× slower)
+  total wire ms per tick       ~310           ~3,477       (~10× WORSE)
+  effective TPS                1.6            0.4
+
+Verdict: correct, but net-slower because JNI round-trip overhead
+dominates when each dispatch is cheap. Rust reduces cascade COUNT
+(one BFS settles what vanilla does in 120+ cascades) but each
+dispatch is a full network serialize + JNI call + apply, ~1ms of
+overhead. On the lag machine that's 57K dispatches/tick × 1ms =
+3.5s/tick vs vanilla's 310K cheap cascades × 1μs = 310ms/tick.
+
+Pattern across three Rust port attempts:
+  - cramming:  1000 entities → 1 JNI call → 65% reduction ✓
+  - pre-chunk: per-update JNI calls, vanilla already fast → shelved
+  - redstone:  per-cascade JNI calls, vanilla per-call cheap → shelved
+
+JNI wins when work is batched. JNI loses when calls are frequent and
+individually cheap.
+
+Batch-per-tick redesign (not attempted): queue all gate-triggered
+cascades through the server tick, drain into one Rust call at
+end-of-tick — same shape as the cramming port. Would recover the
+theoretical win but is a full architecture pass. Marginal benefit
+over experimental-redstone (which is free from Mojang) is hard to
+justify unless user reports surface worlds that still struggle at
+20 TPS with experimental enabled.
+
+Ships disabled (`RedstoneHandoff.USE_RUST = false`). Infrastructure
+retained — oracle, dispatcher, mixin, ByteBuffer layout, native
+export — so the batch-per-tick redesign can reuse everything below
+the interception point. Enable at runtime with `/ferrite redstone
+rust on` for diagnostic comparison.
+
+### Three-line summary for users
+
+  - Redstone-heavy world? → Enable Redstone Experiments (6× win, free)
+  - Ferrite's own Rust port is correct but shipped off (JNI overhead
+    exceeds the save on per-call cheap work)
+  - Revisit path for Ferrite redstone port: batch-per-tick
+    architecture, mirroring cramming's one-JNI-call-per-tick pattern
+
 ---
 
 ### Pre-chunk loading (investigated, shipped disabled)
