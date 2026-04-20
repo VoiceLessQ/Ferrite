@@ -38,6 +38,7 @@ public abstract class RedstoneGateMixin {
 			BlockState state, ServerWorld world, BlockPos pos, Random random,
 			CallbackInfo ci) {
 		RedstonePhaseMonitor.onGateBegin();
+		RedstonePhaseMonitor.GATE_ACTIVE.get()[0] = true;
 	}
 
 	@Inject(
@@ -47,6 +48,7 @@ public abstract class RedstoneGateMixin {
 	private void apikaprobe$onGateScheduledTickEnd(
 			BlockState state, ServerWorld world, BlockPos pos, Random random,
 			CallbackInfo ci) {
+		RedstonePhaseMonitor.GATE_ACTIVE.get()[0] = false;
 		RedstonePhaseMonitor.onGateEnd();
 	}
 }

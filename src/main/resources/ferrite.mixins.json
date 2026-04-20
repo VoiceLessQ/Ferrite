@@ -29,7 +29,9 @@
 		"CrammingCancelMixin",
 		"ServerTickPhaseMixin",
 		"RedstoneWireMixin",
-		"RedstoneGateMixin"
+		"RedstoneGateMixin",
+		"DefaultRedstoneControllerMixin",
+		"ExperimentalRedstoneControllerMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

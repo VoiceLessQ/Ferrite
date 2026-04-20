@@ -47,6 +47,21 @@ public final class RedstonePhaseMonitor {
 	private static final AtomicLong WIRE_TOTAL_NS = new AtomicLong();
 	private static final AtomicLong WIRE_MAX_NS = new AtomicLong();
 
+	// Gate-driven vs direct wire split. Flag is set by RedstoneGateMixin
+	// around scheduledTick; onWireBegin reads it at the outermost (0→1)
+	// cascade entry to classify the cascade origin.
+	public static final ThreadLocal<boolean[]> GATE_ACTIVE = ThreadLocal.withInitial(() -> new boolean[1]);
+	private static final AtomicLong WIRE_GATE_DRIVEN = new AtomicLong();
+	private static final AtomicLong WIRE_DIRECT = new AtomicLong();
+
+	// Controller split — which RedstoneController impl handled the update.
+	// Lets us verify at a glance whether the world is running default or
+	// experimental redstone; crucial because the two have very different
+	// cost profiles and a Rust port should benchmark against the default
+	// (slow) path, not experimental (already Mojang-optimized).
+	private static final AtomicLong DEFAULT_CONTROLLER_CALLS = new AtomicLong();
+	private static final AtomicLong EXPERIMENTAL_CONTROLLER_CALLS = new AtomicLong();
+
 	// Gate scheduledTick state — no recursion, simple start-time ThreadLocal.
 	private static final ThreadLocal<long[]> GATE_START_NS = ThreadLocal.withInitial(() -> new long[1]);
 
@@ -73,6 +88,11 @@ public final class RedstonePhaseMonitor {
 		int[] depth = WIRE_DEPTH.get();
 		if (depth[0]++ == 0) {
 			WIRE_START_NS.get()[0] = System.nanoTime();
+			if (GATE_ACTIVE.get()[0]) {
+				WIRE_GATE_DRIVEN.incrementAndGet();
+			} else {
+				WIRE_DIRECT.incrementAndGet();
+			}
 		}
 	}
 
@@ -85,6 +105,16 @@ public final class RedstonePhaseMonitor {
 			updateMax(WIRE_MAX_NS, duration);
 		}
 		if (depth[0] < 0) depth[0] = 0; // guard against asymmetric HEAD/RETURN (e.g. early return)
+	}
+
+	// --- Controller identity hooks ------------------------------------------
+
+	public static void onDefaultController() {
+		DEFAULT_CONTROLLER_CALLS.incrementAndGet();
+	}
+
+	public static void onExperimentalController() {
+		EXPERIMENTAL_CONTROLLER_CALLS.incrementAndGet();
 	}
 
 	// --- Gate hooks ---------------------------------------------------------
@@ -116,6 +146,10 @@ public final class RedstonePhaseMonitor {
 		long wCount = WIRE_CASCADES.getAndSet(0L);
 		long wTotal = WIRE_TOTAL_NS.getAndSet(0L);
 		long wMax = WIRE_MAX_NS.getAndSet(0L);
+		long wGate = WIRE_GATE_DRIVEN.getAndSet(0L);
+		long wDirect = WIRE_DIRECT.getAndSet(0L);
+		long cDefault = DEFAULT_CONTROLLER_CALLS.getAndSet(0L);
+		long cExp = EXPERIMENTAL_CONTROLLER_CALLS.getAndSet(0L);
 		long gCount = GATE_TICKS.getAndSet(0L);
 		long gTotal = GATE_TOTAL_NS.getAndSet(0L);
 		long gMax = GATE_MAX_NS.getAndSet(0L);
@@ -124,8 +158,8 @@ public final class RedstonePhaseMonitor {
 
 		if (wCount == 0L && gCount == 0L) return;
 
-		LOGGER.info("[redstone] wire: avg={}ms max={}ms cascades={}  gates: avg={}ms max={}ms ticks={}  n={} server-ticks",
-				formatAvg(wCount, wTotal), formatMs(wMax), wCount,
+		LOGGER.info("[redstone] wire: avg={}ms max={}ms cascades={} (gate-driven={} direct={}, default={} exp={})  gates: avg={}ms max={}ms ticks={}  n={} server-ticks",
+				formatAvg(wCount, wTotal), formatMs(wMax), wCount, wGate, wDirect, cDefault, cExp,
 				formatAvg(gCount, gTotal), formatMs(gMax), gCount,
 				ticks);
 	}
