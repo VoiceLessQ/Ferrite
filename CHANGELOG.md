@@ -8,6 +8,52 @@ Versions follow [Semantic Versioning](https://semver.org/) with the
 
 ## [Unreleased]
 
+### Redstone investigation (measured, no port)
+
+Added RedstonePhaseMonitor + two mixins instrumenting both redstone hot
+paths:
+  RedstoneWireMixin — HEAD/RETURN on RedstoneWireBlock.update (private),
+    the single dispatcher to Default/Experimental controllers.
+    ThreadLocal depth guard so recursive cascades count wall time only
+    at the outermost entry.
+  RedstoneGateMixin — HEAD/RETURN on AbstractRedstoneGateBlock.scheduledTick,
+    catches repeaters and comparators.
+
+Benchmark: identical redstone lag machine, integrated client, same world,
+default vs experimental redstone controller.
+
+  metric                    default         experimental       change
+  cascades per tick         ~2,250,000      ~350,000           ~6× fewer
+  server-ticks per 5s       2               10-24              ~5-12× more
+  effective TPS             ~0.4            ~2-5               ~5-10× faster
+  per-cascade avg           1μs             1μs                unchanged
+  per-gate avg              0.25ms          0.20ms             ~20% faster
+  per-tick wire time        ~2.25s          ~0.35s             ~85% less
+
+Verdict: experimental redstone's WireOrientation-based propagation prunes
+the update tree — individual wire math isn't faster, we just do far
+fewer redundant re-evaluations. This is a Mojang-shipped optimization
+gated behind the Redstone Experiments world-creation toggle; Ferrite
+shouldn't reimplement what's already available.
+
+Recommendation for users with redstone-heavy worlds: enable Redstone
+Experiments at world creation (Create New World → More → Experiments
+→ Redstone Experiments). Measured ~85% reduction in per-tick wire cost
+on a worst-case lag machine that normally holds TPS at 0.4.
+
+Rust port deferred. With experimental already cutting the cost 6×, a
+port would be chasing the remaining 350ms/tick on a niche workload —
+potentially recoverable but a smaller, harder win than cramming
+(65% at 1000+ mobs). Re-evaluate only if users report worlds that
+struggle at steady 20 TPS *with experimental enabled*.
+
+Instrumentation ships on: RedstonePhaseMonitor + both mixins active
+by default, log line `[redstone] wire: avg=Xms max=Yms cascades=N
+gates: avg=Xms max=Yms ticks=M  n=Z server-ticks` every 5s of wall
+time. Diagnostic value regardless of port status.
+
+---
+
 ### Pre-chunk loading (investigated, shipped disabled)
 
 Implemented movement-predictive chunk ticket submission — samples player
