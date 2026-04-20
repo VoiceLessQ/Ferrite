@@ -1,426 +1,187 @@
 # Changelog
 
-All notable changes to Ferrite are documented here.
-
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-Versions follow [Semantic Versioning](https://semver.org/) with the
-`-alpha` suffix indicating pre-release research builds.
+All notable changes to Ferrite are documented here. Format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions
+follow [Semantic Versioning](https://semver.org/); the `-alpha` suffix
+marks pre-release research builds.
 
 ## [Unreleased]
 
-### Alternate Current wire algorithm port (measured win, shipping)
+### Added
 
-Ported [Alternate Current](https://github.com/SpaceWalkerRS/alternate-current)'s
-wire-power algorithm into Ferrite's `me.apika.apikaprobe.redstone`
-package (MIT, © 2022 Space Walker — full attribution in
-[LICENSES.md](LICENSES.md)). Installed as a
-`DefaultRedstoneController` subclass via a `@Redirect(NEW)` mixin on
-`RedstoneWireBlock`'s controller field init, so an existing world with
-vanilla redstone dust gets the new algorithm transparently — no block
-migration, no toggle in world creation.
+- **Alternate Current wire algorithm** — adapted from
+  [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current)
+  (MIT, attributed in [LICENSES.md](LICENSES.md)). Installed
+  transparently as a `DefaultRedstoneController` subclass via a
+  `@Redirect(NEW)` mixin on `RedstoneWireBlock`'s controller field;
+  existing worlds with vanilla redstone dust pick up the new algorithm
+  with no migration or world-creation toggle.
+- `/ferrite redstone ac on | off | status` — runtime toggle for the AC
+  path. Default OFF. Op-level 2.
+- `[redstone-oracle]` shadow-compute correctness checker — validates
+  every sampled wire against vanilla's `calculateWirePowerAt` and logs
+  per-window node mismatches. Active whenever AC or the Rust BFS is on.
+- `[redstone]` phase monitor — wire cascade counts (split by
+  gate-driven vs direct, default vs experimental controller), gate
+  scheduled-tick durations, server-ticks per 5s window.
+- `[redstone-rust]` dispatcher liveness counter — confirms whether the
+  Rust BFS path is actually firing when enabled.
 
-Measured on the identical lag machine used for every prior redstone
-investigation (default redstone controller, no experimental toggle):
+### Performance
 
-  configuration                          cascades/tick     TPS     notes
-  Vanilla default (baseline)             ~255,000          ~0.4    as measured previously
-  Experimental redstone (Mojang)         ~35,000           ~2-5    previously documented
-  AC port (this release)                 ~7,760            ~6+     new baseline to beat
+Measured on the reference redstone lag machine, default controller
+(no experimental toggle), 5s windows:
 
-  ~33× cascade reduction vs vanilla default
-  ~4.5× cascade reduction vs Mojang experimental
-  Peaks hit 18 TPS when cascades were light
+| Configuration                 | Cascades / tick | Effective TPS |
+| ----------------------------- | --------------: | ------------: |
+| Vanilla default               |        ~255,000 |          ~0.4 |
+| Mojang experimental redstone  |         ~35,000 |         ~2–5  |
+| **Ferrite AC port**           |      **~7,760** |       **6+**  |
 
-Correctness validation: `[redstone-oracle]` reports **node-mismatches=0
-across 327,000+ sampled node checks** during the AC-enabled lag-machine
-run. AC's output is bit-for-bit identical to vanilla's
-`calculateWirePowerAt` on every sampled wire in the network, which is
-the stringent check — same as the previous "static settled lever + 14
-wires" fixture, but run on a live, constantly-cascading network.
+33× cascade reduction vs vanilla default. Beats experimental
+redstone (~4.5× fewer cascades) without requiring the experimental
+world-creation toggle.
 
-Full phase-monitor confirmation: `[redstone] default=0 exp=0` in every
-AC window proves vanilla's `DefaultRedstoneController` was completely
-bypassed — the installation mixin + per-world `WireHandler` dispatch is
-doing its job.
+Correctness: 327,000+ sampled oracle node checks during the AC run,
+zero mismatches. Phase monitor confirms `default=0` — vanilla's
+controller is fully bypassed when AC is enabled.
 
-Enable at runtime via `/ferrite redstone ac on` (op-level 2). Default
-`FerriteWireConfig.ENABLED=false` — users opt in explicitly until the
-port has user-reports from varied setups.
+### Investigated
 
-Session 3 (Rust layer on top of AC) **deferred indefinitely**. AC
-collapses the cascade count enough that per-cascade Rust dispatch
-overhead exceeds whatever per-node compute saving Rust could provide.
-The infrastructure for a within-cascade batched Rust path still ships
-(`rust/mod/src/redstone.rs`, `RedstoneRustDispatcher`, oracle) in case
-a future workload justifies revisiting, but there's no current case for
-it.
-
-Files: [FerriteWireConfig.java](src/main/java/me/apika/apikaprobe/redstone/FerriteWireConfig.java),
-[WireHandler.java](src/main/java/me/apika/apikaprobe/redstone/WireHandler.java),
-[FerriteRedstoneController.java](src/main/java/me/apika/apikaprobe/redstone/FerriteRedstoneController.java),
-[FerriteControllerInstallMixin.java](src/main/java/me/apika/apikaprobe/mixin/FerriteControllerInstallMixin.java),
-plus session 1's graph-representation types.
-
----
-
-### Redstone investigation (measured, no port)
-
-Added RedstonePhaseMonitor + two mixins instrumenting both redstone hot
-paths:
-  RedstoneWireMixin — HEAD/RETURN on RedstoneWireBlock.update (private),
-    the single dispatcher to Default/Experimental controllers.
-    ThreadLocal depth guard so recursive cascades count wall time only
-    at the outermost entry.
-  RedstoneGateMixin — HEAD/RETURN on AbstractRedstoneGateBlock.scheduledTick,
-    catches repeaters and comparators.
-
-Benchmark: identical redstone lag machine, integrated client, same world,
-default vs experimental redstone controller.
-
-  metric                    default         experimental       change
-  cascades per tick         ~2,250,000      ~350,000           ~6× fewer
-  server-ticks per 5s       2               10-24              ~5-12× more
-  effective TPS             ~0.4            ~2-5               ~5-10× faster
-  per-cascade avg           1μs             1μs                unchanged
-  per-gate avg              0.25ms          0.20ms             ~20% faster
-  per-tick wire time        ~2.25s          ~0.35s             ~85% less
-
-Verdict: experimental redstone's WireOrientation-based propagation prunes
-the update tree — individual wire math isn't faster, we just do far
-fewer redundant re-evaluations. This is a Mojang-shipped optimization
-gated behind the Redstone Experiments world-creation toggle; Ferrite
-shouldn't reimplement what's already available.
-
-Recommendation for users with redstone-heavy worlds: enable Redstone
-Experiments at world creation (Create New World → More → Experiments
-→ Redstone Experiments). Measured ~85% reduction in per-tick wire cost
-on a worst-case lag machine that normally holds TPS at 0.4.
-
-Rust port deferred. With experimental already cutting the cost 6×, a
-port would be chasing the remaining 350ms/tick on a niche workload —
-potentially recoverable but a smaller, harder win than cramming
-(65% at 1000+ mobs). Re-evaluate only if users report worlds that
-struggle at steady 20 TPS *with experimental enabled*.
-
-Instrumentation ships on: RedstonePhaseMonitor + both mixins active
-by default, log line `[redstone] wire: avg=Xms max=Yms cascades=N
-gates: avg=Xms max=Yms ticks=M  n=Z server-ticks` every 5s of wall
-time. Diagnostic value regardless of port status.
-
-### Redstone Rust BFS port (investigated, shipped disabled)
-
-After measuring, attempted a Rust port anyway — to continue building
-out Ferrite's Rust capability even if the immediate win is small.
-
-Architecture:
-  - Java oracle (RedstoneOracle) shadow-computes expected power using
-    vanilla's own calculateWirePowerAt — validated bit-for-bit against
-    vanilla on settled networks (1,171 node-checks, 0 mismatches).
-  - Rust BFS (rust/mod/src/redstone.rs) translates the same algorithm,
-    iterative relaxation bounded at 16 passes. Exported via JNI as
-    RustBridge.computeRedstoneBfs.
-  - Java dispatcher (RedstoneRustDispatcher) BFS-walks the wire network
-    from the cascade trigger, resolves neighbor indices, calls Rust,
-    applies deltas via setBlockState + updateNeighbors.
-  - @Redirect on the `this.redstoneController.update(...)` INVOKE in
-    RedstoneWireBlock.update — cleanly replaces vanilla's per-cascade
-    controller call when USE_RUST is active. (@Inject cancellable did
-    not work here — cancel flag didn't prevent the INVOKE from
-    executing; @Redirect does.)
-  - Runtime A/B command `/ferrite redstone rust on|off|status` for
-    live comparison without restart.
-
-Correctness: node-mismatches=0 across 152K Rust-path node-checks on
-both static and dynamic networks. Rust output is bit-for-bit identical
-to vanilla on settled state.
-
-Performance (lag machine, USE_RUST=on confirmed via default=0):
-
-  metric                       vanilla        Rust path
-  cascades per server-tick     ~310,000       ~57,000      (5× fewer)
-  avg ms per cascade           0.001          0.061        (60× slower)
-  total wire ms per tick       ~310           ~3,477       (~10× WORSE)
-  effective TPS                1.6            0.4
-
-Verdict: correct, but net-slower because JNI round-trip overhead
-dominates when each dispatch is cheap. Rust reduces cascade COUNT
-(one BFS settles what vanilla does in 120+ cascades) but each
-dispatch is a full network serialize + JNI call + apply, ~1ms of
-overhead. On the lag machine that's 57K dispatches/tick × 1ms =
-3.5s/tick vs vanilla's 310K cheap cascades × 1μs = 310ms/tick.
-
-Pattern across three Rust port attempts:
-  - cramming:  1000 entities → 1 JNI call → 65% reduction ✓
-  - pre-chunk: per-update JNI calls, vanilla already fast → shelved
-  - redstone:  per-cascade JNI calls, vanilla per-call cheap → shelved
-
-JNI wins when work is batched and the batched units don't observe each
-other mid-batch. JNI loses when calls are frequent and individually
-cheap — or when the work can't be batched without breaking semantics.
-
-### Rust port deferred — JNI boundary is the wrong abstraction for wire work
-
-Three approaches considered:
-
-1. **Per-cascade dispatch** (implemented, tested): correct
-   (node-mismatches=0), but 57K JNI calls/tick × ~1ms setup = 10×
-   slower than vanilla. JNI round-trip cost exceeds wire-math savings.
-   Disabled.
-
-2. **Batch-per-tick** (initially proposed): superficially matches
-   cramming's "1 JNI call/tick" shape, but **semantically broken for
-   redstone**. Wire cascades in Java Edition are synchronous and
-   observable mid-tick — observers fire mid-cascade, comparators read
-   intermediate container states, 0-tick pulses depend on sub-tick
-   ordering, BUD-adjacent tricks rely on specific neighbor-update
-   ordering. Deferring wire work past its triggering stack frame
-   desyncs contraption behavior that maps and farms depend on. Not
-   a viable path. (Verified against minecraft.wiki/w/Tick — vanilla
-   has no end-of-tick redstone drain; wire propagation is synchronous
-   cascade inside the triggering stack. Only the gate-tick queue is
-   priority-ordered and drains once per tick.)
-
-3. **Within-cascade batching** (not implemented): amortize JNI setup
-   cost across all wire ops in one cascade rather than one call per
-   cascade. Would require a different buffer/dispatch architecture.
-   Viable but significant redesign work. Only worth attempting if
-   experimental redstone still leaves unacceptable lag (it currently
-   gives 6× free).
-
-**Alternate Current** (open-source mod) takes option 3's approach in
-pure Java — better wire algorithm, same synchronous model, no JNI.
-Worth reading their implementation before attempting a Rust port of
-the same idea.
-
-Ships disabled (`RedstoneHandoff.USE_RUST = false`). Infrastructure
-retained — oracle, dispatcher, mixin, ByteBuffer layout, native
-export — so option 3 could reuse the Rust BFS and oracle below a
-redesigned interception point. Enable at runtime with
-`/ferrite redstone rust on` for diagnostic comparison.
-
-### Three-line summary for users
-
-  - Redstone-heavy world? → Enable Redstone Experiments (6× win, free)
-  - Ferrite's own Rust port is correct but shipped off (JNI overhead
-    exceeds the save on per-call cheap work)
-  - The "batch all redstone per tick" path is NOT the fix — it would
-    break observer/comparator/0-tick semantics. If revisiting, read
-    Alternate Current and pursue option 3 (within-cascade batching)
-
----
-
-### Pre-chunk loading (investigated, shipped disabled)
-
-Implemented movement-predictive chunk ticket submission — samples player
-velocity each tick, extrapolates vd+8 chunks ahead, submits vanilla
-ChunkTicketType tickets on Rayon background path.
-
-Measured on dedicated server (vd=10, elytra speed):
-  submitted: 10-36/5s
-  avg-lead:  3-6t (150-300ms)
-  max-lead:  57-60t (cold cache / frontier terrain only)
-
-Verdict: vanilla's chunk scheduler reaches FULL status in ~3-6 ticks
-regardless of how early we ask. Pushing margin from +8 to +16 chunks
-produced identical results. Modern hardware generates chunks fast enough
-that predictive pre-submission has no meaningful headroom.
-
-Contrast: cramming port achieved 65% reduction because the cost was
-algorithmic (O(N²) → spatial hash). Pre-chunk cost is I/O-bound and
-already parallelized by vanilla. No Rust angle either — the bottleneck
-is vanilla's noise pipeline, which hits the same density-function
-blocker as the earlier worldgen port attempt.
-
-Code ships enabled (ENABLED=true) for ongoing measurement across user
-configurations — the dedicated-server result above may not hold on
-high-view-distance servers (vd≥16), overloaded hosts, or sustained
-frontier exploration where vanilla's scheduler falls behind. Disable
-by setting `PreChunkDispatcher.ENABLED = false` if the [prechunk] log
-shows avg-lead persistently ≤ 6t with non-trivial CPU cost.
+- **Per-cascade Rust BFS for redstone** — correct output
+  (327K checks, 0 mismatches) but ~10× slower than vanilla at per-call
+  granularity; JNI round-trip overhead exceeds the per-cascade compute
+  saving. Shipped disabled. Infrastructure retained
+  ([rust/mod/src/redstone.rs](rust/mod/src/redstone.rs),
+  `RedstoneRustDispatcher`) in case a within-cascade batched approach
+  becomes worth attempting. See
+  [docs/REDSTONE_PORT_PLAN.md](docs/REDSTONE_PORT_PLAN.md) for the
+  full analysis.
+- **Predictive chunk pre-loading** — movement-vector ticket
+  submission. 150–300 ms of headroom on dedicated servers, but
+  vanilla's own scheduler already reaches `FULL` status in 3–6 ticks
+  regardless of how early tickets arrive, so no meaningful TPS impact
+  was measurable. Ships enabled for ongoing measurement across user
+  configurations; disable via `PreChunkDispatcher.ENABLED = false`.
 
 ---
 
 ## [0.1.2-alpha] — 2026-04-19
 
-Cross-platform native support. No gameplay changes beyond what 0.1.1-alpha
-already shipped — Linux and macOS users now get the same cramming
-speedup as Windows users.
+Cross-platform native support. No gameplay changes; Linux and macOS
+users get the cramming speedup Windows users already had.
 
 ### Added
 
-- **Linux support** — `librust_mod.so` built for `x86_64-unknown-linux-gnu`,
-  bundled at `/assets/ferrite/natives/linux/` in the jar.
-- **macOS support** — universal `librust_mod.dylib` combining
-  `aarch64-apple-darwin` (Apple Silicon) and `x86_64-apple-darwin` (Intel)
-  via `lipo -create`. Bundled at `/assets/ferrite/natives/macos/`.
-- **Host-aware gradle build** — `buildRustLib` detects the current OS
-  via `OperatingSystem.current()` and picks the right (target, lib-name,
-  subdir) triple. Passes `--target` explicitly so output paths are
-  deterministic.
-- **Four-job CI pipeline** — three parallel native builds
-  (windows/linux/macos) + an assembly job that downloads all three
-  artifacts and assembles one jar. See `.github/workflows/build.yml`.
+- Linux native: `librust_mod.so` at `/assets/ferrite/natives/linux/`.
+- macOS universal native (aarch64 + x86_64 via `lipo -create`) at
+  `/assets/ferrite/natives/macos/`.
+- Host-aware Gradle `buildRustLib` — picks the correct target triple
+  per host OS.
+- Four-job CI pipeline: three parallel per-platform native builds and
+  one assembly job.
 
 ### Changed
 
-- **`RustBridge.java`** — per-OS resource path selection at runtime:
-  `/assets/ferrite/natives/{windows,linux,macos}/rust_mod.{dll,so,dylib}`.
-  Unsupported OS still falls back cleanly (no crash, clear log).
-- **`.cargo/config.toml`** — dropped the `[build] target` default (was
-  forcing `x86_64-pc-windows-gnu` on every host); kept the gnu-specific
-  linker spec which only applies when actually targeting gnu.
-- **`SETUP_MINGW.md`** — renamed header, covers all three platforms;
-  MinGW-specific instructions preserved below.
-
-### Verified
-
-- WSL Ubuntu 24.04: `.so` extracted, `System.load` succeeded, `initEngine`
-  returned a Rayon pool size, server reached "Done" in 2.7 s with Fabric
-  API + Ferrite loaded.
-- CI: four jobs green, artifacts for all three platforms produced.
+- `RustBridge.loadNativeLibrary` selects the per-OS resource path at
+  runtime. Unsupported platforms log clearly and fall back to pure Java.
+- `.cargo/config.toml` — removed the Windows-only `[build] target`
+  default; retained the GNU linker spec for the GNU target.
+- `SETUP_MINGW.md` now covers all three supported platforms.
 
 ### Known limitations
 
-- **Linux x86_64 only** — no ARM (aarch64) Linux build yet.
-- **Cramming damage still deferred** (carried over from 0.1.1).
+- Linux x86_64 only; no aarch64 Linux build yet.
+- Cramming damage (max-entity-cramming rule) still deferred from 0.1.1.
 
 ---
 
 ## [0.2.0-alpha] — 2026-04-19
 
-First release with a real gameplay-affecting optimization. Previous
-`0.1.0-alpha` was instrumentation only.
+First gameplay-affecting release.
 
 ### Added
 
-- **Cramming Rust port (the win).** `LivingEntity.tickCramming` on mobs
-  is now handled by a Rust spatial-hash push accumulator.
-  - `cramming.rs` — 2-block 2D spatial hash, pair iteration with
-    array-index guard, exact vanilla push formula (Chebyshev distance,
-    `f >= 0.01`, `1/sqrt(f)` magnitude clamped to 1, × 0.05 scale)
-  - `cramming_jni.rs` — zero-copy direct-ByteBuffer handoff, bounds-
-    checked, fallback-safe on parse failure
-  - `CrammingHandoff` — pre-allocated request/result buffers (80 + 64 KB)
-  - `CrammingDispatcher` — per-tick batch via `world.getTime()` guard:
-    first `tickCramming` call of a tick triggers the batch, all
-    subsequent cancels are no-ops
-  - `CrammingCancelMixin` — `@Inject(HEAD, cancellable=true)` on
-    `tickCramming()V`; only mobs go through the Rust path
-  - **Measured result at 1000+ mobs:** cramming cost 14 ms → 0.03 ms
-    (450× reduction). Total entity tick: ~60 ms → ~21 ms (~3×). TPS held
-    at 20, zero crashes, zero fallbacks observed.
-- **Movement-phase instrumentation.** Seven-bucket breakdown of
-  `LivingEntity.tickMovement` internals:
-  - `cramming`, `blockCollision`, `navigator`, `move`, `adjustColl`,
-    `travel`, `gravity` + computed `other`
-  - Cross-monitor live read pattern (reads `movement_self` from
-    `MonsterPhaseMonitor` at report time to compute `other` bucket
-    without reset-race)
-  - New `[movement-internals]` log line, 5-second window
-- **`[cramming-dispatch]` diagnostic log** — per-5s window: batches
-  executed, total mobs processed, pushed count.
-- **Physics (Entity.adjustMovementForCollisions) port — shelved but
-  documented.** Full end-to-end JNI pipeline, AABB sweep engine, and
-  chunk-section bucketing snapshot model were built and verified
-  correct (18K successful dispatches, 0 fallback, end-to-end math
-  matches vanilla). Benchmark showed snapshot materialization cost
-  dominates sweep savings at realistic mob counts: ~0.8 ms/bucket ×
-  100 buckets = 80 ms/tick overhead vs ~8 ms/tick of sweep wins.
-  Framework kept disabled (`PhysicsDispatcher.ENABLED=false`) for
-  future invalidation-cache redesign. Full architectural findings in
-  the commit log under `c991ac8`, `5dbf40c`, `18ce009`.
-- **Full end-to-end `@Redirect` + `@Invoker` Mixin pattern.** New
-  `EntityAdjustInvoker` accessor interface provides a bypass-the-redirect
-  path for vanilla fallback — reusable for future per-method Rust ports.
+- **Cramming Rust port.** `LivingEntity.tickCramming` is batched once
+  per server tick and evaluated in a Rust spatial-hash push
+  accumulator. Vanilla's push formula is preserved exactly (Chebyshev
+  distance, 0.05 scale).
+  - Measured at 1000+ mobs: `tickCramming` cost 14 ms → 0.03 ms;
+    total entity tick 60 ms → 21 ms; TPS holds at 20.
+- `[movement-internals]` log — seven-bucket breakdown of
+  `LivingEntity.tickMovement` (`cramming`, `blockCollision`,
+  `navigator`, `move`, `adjustColl`, `travel`, `gravity`, computed
+  `other`).
+- `[cramming-dispatch]` log — per-window batch count, total mobs
+  processed, pushed count.
+- `EntityAdjustInvoker` — `@Invoker` accessor interface providing a
+  bypass-the-redirect path for vanilla fallback. Reusable pattern for
+  future per-method Rust ports.
 
 ### Changed
 
-- `CrammingMixin` (timing instrumentation) now gates itself off when
+- `CrammingMixin`'s timing hooks disable themselves when
   `CrammingDispatcher.ENABLED` is true, preventing ThreadLocal timer
-  imbalance when the cancel-mixin skips the method body.
-- `ferrite.mixins.json` — registered 8 new mixins across the physics +
-  cramming ports.
+  imbalance with the cancel-mixin.
+
+### Investigated
+
+- **Entity collision-adjust Rust port** — full JNI pipeline, AABB
+  sweep engine, and chunk-section snapshot model implemented and
+  correctness-verified (18K dispatches, zero fallback). Benchmark
+  showed snapshot cost dominates sweep savings at realistic mob
+  counts (~80 ms/tick overhead vs ~8 ms/tick win). Shipped disabled
+  (`PhysicsDispatcher.ENABLED = false`); retained for a future
+  invalidation-cache redesign.
 
 ### Known limitations
 
-- **Cramming damage deferred.** 1.21.11's `GameRules.getInt` was
-  refactored out; the `maxEntityCramming` game-rule damage is not
-  applied while the Rust path is active. Push is applied normally.
-- **Physics port shelved**, as noted above. The instrumentation buckets
-  it produced are still shipped.
+- `maxEntityCramming` game-rule damage not applied while the Rust
+  cramming path is active (1.21.11 API churn).
+
+---
 
 ## [0.1.0-alpha] — 2026-04-18
 
-First public alpha. Research mod framing — instrumentation only, no
-gameplay changes. Windows 64-bit only.
+First public alpha. Instrumentation-only research mod. Windows 64-bit.
 
 ### Added
 
-- **Client-side performance monitors.** All log under the `[ferrite]` prefix on a 5-second window:
-  - `[chunkgen]` — chunk generation phase costs (noise-dispatch, noise-sync, surface), per-chunk averages and maxes
-  - `[client-lag]` — FPS avg/min/max, entity count, loaded chunk count, with qualitative tag (OK/WARN/LAG)
-  - `[entity-render]` — sampled (1-in-100) per-entity render time, plus extrapolated per-frame cost on current hardware and estimated cost on low-end GPU (Intel HD 620 reference)
-  - `[mspt]` — real server tick duration via START/END tick events
-  - `[rust-engine]` — Rust worker pool initialization (Rayon, hardware-aware sizing)
-- **Rust native library** bundled in the jar at `assets/ferrite/natives/rust_mod.dll`.
-  - Extracted to a temp file at runtime on Windows, loaded via `System.load`
-  - Graceful fallback on non-Windows — mod loads cleanly but native features stay disabled with a clear log message
-- **Automatic build integration.** `./gradlew build` invokes `cargo build --release` for the Rust side and bundles the resulting DLL into the jar automatically. Requires `cargo` on PATH.
-- **Mixin-based instrumentation.** `@Inject` hooks on:
-  - `NoiseChunkGenerator.populateNoise` (async dispatch + private sync overload)
-  - `NoiseChunkGenerator.buildSurface`
-  - `ChunkNoiseSampler.sampleStartDensity` / `sampleEndDensity`
-  - `AquiferSampler$Impl.apply` (sampled 1-in-100)
-  - `EntityRenderManager.render` (sampled 1-in-100)
-- Accessor mixins for `ChunkNoiseSampler.interpolators` and `DensityInterpolator` buffer fields — used by the interpolator diagnostic.
-- One-shot diagnostic Mixin that dumps interpolator structure on first chunk gen after launch.
-- Full documentation:
-  - [README.md](README.md) — what the mod is, how to install, how to build
-  - [docs/CURSEFORGE_DESCRIPTION.md](docs/CURSEFORGE_DESCRIPTION.md) — CurseForge project page text
-  - [docs/PROFILING.md](docs/PROFILING.md) — full profiling investigation, architectural findings, why the current approach is instrumentation-only
-  - [SETUP_MINGW.md](SETUP_MINGW.md) — Rust toolchain setup notes
+- Performance monitors, each logged under the `[ferrite]` prefix on a
+  5-second window: `[chunkgen]`, `[client-lag]`, `[entity-render]`,
+  `[mspt]`, `[rust-engine]`.
+- Rust native library bundled at
+  `assets/ferrite/natives/rust_mod.dll`; extracted and loaded at
+  runtime. Non-Windows platforms load cleanly with native features
+  disabled.
+- Automatic Rust build integration — `./gradlew build` invokes
+  `cargo build --release` and bundles the resulting DLL.
+- Mixin instrumentation on `NoiseChunkGenerator`, `ChunkNoiseSampler`,
+  `AquiferSampler$Impl`, and `EntityRenderManager`.
 
-### Build infrastructure
+### Build
 
-- Toolchain pinned via [rust-toolchain.toml](rust-toolchain.toml) to `nightly-2025-08-29` + `x86_64-pc-windows-gnu` target.
-- GNU linker path pinned in [.cargo/config.toml](.cargo/config.toml) to `C:/msys64/mingw64/bin/gcc.exe` so `cargo build` works without PATH juggling.
-- `build.gradle` simulates low-end hardware for dev runs via `-Xmx3G -Xms512M` JVM args, making baseline measurements comparable across sessions.
-- `.gitignore` excludes the DLL staging directory (`src/main/resources/assets/ferrite/natives/`) since it's a build artifact.
-
-### Research findings documented
-
-- Rust bulk compute is ~7× faster than vanilla noise-sync for equivalent work (2.5 ms vs 17 ms per chunk).
-- Per-call JNI overhead (200–500 ns) exceeds the cost of hot functions called 98K times per chunk, making per-call porting non-viable.
-- Vanilla's density-function interpolators hold rotating `[2][49]` corner buffers, not a consolidated corner grid — reading them requires reconstructing a state machine.
-- A full Rust replacement for vanilla worldgen would require porting the density-function composition tree (C2ME-scale work, 2–4 weeks, high version fragility).
+- Toolchain pinned via `rust-toolchain.toml`
+  (`nightly-2025-08-29`, `x86_64-pc-windows-gnu`).
+- GNU linker pinned in `.cargo/config.toml`.
+- Dev-run heap capped at 3 GB to simulate low-end hardware for
+  comparable baselines across sessions.
 
 ### Known limitations
 
-- **Windows 64-bit only.** Mac/Linux builds require cross-compilation to `.so` / `.dylib` and are deferred to a future release.
-- **No gameplay changes.** This release is instrumentation only by design.
-- **No config toggle for log verbosity.** The mod writes ~12 log lines per minute during active play. A toggle is on the roadmap.
-- **Cargo required to build from source.** `./gradlew build -x copyRustDll` can produce a jar without the DLL for contributors without a Rust toolchain, but the resulting jar runs without native features.
+- Windows 64-bit only.
+- No gameplay changes; instrumentation only.
+- No log-verbosity toggle.
 
 ### License
 
-- MIT — see [LICENSE](LICENSE). Previously CC0-1.0 in the pre-release research branch.
+- MIT. Changed from CC0-1.0 used in the pre-release research branch.
 
 ---
 
 ## Pre-release history
 
-The mod grew out of the `rust-mod-probe` research project. Key pre-release
-commits documenting the investigation path are preserved on the `ferrite`
-and `main` branches. Notable milestones:
-
-- JNI framework + first end-to-end Rust call from a Fabric mod
-- Custom Rust-powered chunk generator in a separate dimension (Phase B)
-- Hydraulic erosion post-pass on vanilla chunks (Phase A) — abandoned due to
-  unavoidable chunk-boundary seams on integer-grid terrain
-- Feature injector pattern (monoliths) — proved but not included in v0.1.0
-- Phase-by-phase profiling of vanilla chunk generation
-- Bulk-handoff architecture validation
-- Density function interpolator structure investigation
-
-See [docs/PROFILING.md](docs/PROFILING.md) for the full investigation
-write-up.
+Ferrite grew out of the `rust-mod-probe` research project. Notable
+pre-release milestones are preserved in the `ferrite` / `main` branch
+history. The full architectural investigation is documented in
+[docs/PROFILING.md](docs/PROFILING.md).
