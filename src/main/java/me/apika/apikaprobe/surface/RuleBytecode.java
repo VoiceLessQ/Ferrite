@@ -33,6 +33,10 @@ public final class RuleBytecode {
 	public static final byte OP_CONDITION     = 0x0D;
 	public static final byte OP_BLOCK         = 0x0E;
 
+	// Vanilla-only exotic rules — recognised by dispatch (clean stats)
+	// but currently emitted as OP_FALLBACK pending a port path.
+	public static final byte OP_TERRACOTTA_BANDS = 0x10;
+
 	// Sentinel — emitted when an unknown node is encountered. The
 	// containing CompiledRuleTree.hasFallback flag is set in the same
 	// step, and the dispatcher must route the chunk back to vanilla.

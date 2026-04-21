@@ -67,6 +67,7 @@ public final class SurfaceRuleCompiler {
 		"BlockMaterialRule", "SimpleBlockStateRule",
 		"SequenceMaterialRule", "SequenceBlockStateRule",
 		"ConditionMaterialRule", "ConditionalBlockStateRule",
+		"TerracottaBandsMaterialRule",
 		"AboveYMaterialCondition", "NoiseThresholdMaterialCondition",
 		"VerticalGradientMaterialCondition", "StoneDepthMaterialCondition",
 		"WaterMaterialCondition", "HoleMaterialCondition",
@@ -74,6 +75,24 @@ public final class SurfaceRuleCompiler {
 		"TemperatureMaterialCondition", "SteepMaterialCondition",
 		"NotMaterialCondition"
 	);
+
+	/**
+	 * Gate for both the compile- and stats-path recursion. Skips lambda
+	 * implementations and other synthetic/anonymous classes that the
+	 * field walk reaches when descending into a node's predicates.
+	 *
+	 * Bug it fixes: BiomeMaterialCondition holds its biome predicate as
+	 * a field; without this gate the walker descended into the lambda
+	 * class, classified it as _UNKNOWN, and double-counted (39 lambdas
+	 * for 39 biome conditions). The gate is shared between compile and
+	 * stats so the two views agree on which children count.
+	 */
+	private static boolean isRuleNodeCandidate(Object v) {
+		Class<?> c = v.getClass();
+		if (c.isSynthetic() || c.isAnonymousClass() || c.isLocalClass()) return false;
+		String pkg = c.getPackageName();
+		return pkg.contains("surface");
+	}
 
 	private static void walkForStats(Object node, java.util.Map<String, Integer> counts) {
 		String name = node.getClass().getSimpleName();
@@ -102,8 +121,7 @@ public final class SurfaceRuleCompiler {
 			for (Object item : list) recurseStatsIfRuleNode(item, counts);
 			return;
 		}
-		String pkg = v.getClass().getPackageName();
-		if (pkg.contains("surface")) {
+		if (isRuleNodeCandidate(v)) {
 			walkForStats(v, counts);
 		}
 	}
@@ -165,6 +183,13 @@ public final class SurfaceRuleCompiler {
 		switch (name) {
 			case "BlockMaterialRule",
 				 "SimpleBlockStateRule" -> emit(RuleBytecode.OP_BLOCK);
+			case "TerracottaBandsMaterialRule" -> {
+				// Recognised vanilla node, but operand layout (random
+				// splitter seed + band palette) isn't ported yet. Emit
+				// fallback so the chunk routes back to vanilla.
+				emit(RuleBytecode.OP_FALLBACK);
+				hasFallback = true;
+			}
 			case "SequenceMaterialRule",
 				 "SequenceBlockStateRule" -> {
 				emit(RuleBytecode.OP_SEQUENCE);
@@ -249,12 +274,7 @@ public final class SurfaceRuleCompiler {
 			for (Object item : list) recurseIfRuleNode(item);
 			return;
 		}
-		String pkg = v.getClass().getPackageName();
-		// Recurse into vanilla MaterialRules nodes and into our own
-		// synthetic test nodes (apikaprobe.surface). The "surface"
-		// substring is broad enough to match both without recursing
-		// into BlockState / String / primitive fields.
-		if (pkg.contains("surface")) {
+		if (isRuleNodeCandidate(v)) {
 			visitRule(v);
 		}
 	}
