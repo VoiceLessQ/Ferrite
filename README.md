@@ -1,6 +1,6 @@
 ## Ferrite
 
-**What you get:** A performance mod for Minecraft 1.21.11. Two opt-in optimizations:
+**What you get:** A performance mod for Minecraft 1.21.11. It's a Fabric (Java) mod that calls into native Rust via JNI for the hot paths — Java handles Minecraft integration and mixins, Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary. Two opt-in optimizations:
 
 - **Cramming (active by default)** — a Rust reimplementation of the mob-vs-mob cramming loop. In any world with 1000+ mobs — singleplayer or multiplayer — it cuts the server's entity-tick cost by roughly 65%.
 - **Redstone (`/ferrite redstone ac on`)** — adapts [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current) algorithm into Ferrite. **~10× fewer wire cascades, contraptions run ~6× faster at equivalent server load.** Bit-for-bit correct vs vanilla on 150,000+ oracle checks. Works on existing worlds without toggles or migration.
