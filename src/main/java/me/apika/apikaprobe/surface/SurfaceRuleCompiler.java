@@ -33,7 +33,9 @@ public final class SurfaceRuleCompiler {
 
 	private final ByteArrayOutputStream out = new ByteArrayOutputStream(1024);
 	private final PerWorldBlockStateTable.Builder tableBuilder = PerWorldBlockStateTable.builder();
+	private final BiomeSetPool.Builder biomePoolBuilder = BiomeSetPool.builder();
 	private final java.util.List<Integer> blockIdOffsets = new java.util.ArrayList<>();
+	private final java.util.List<Integer> biomeIdOffsets = new java.util.ArrayList<>();
 	private boolean hasFallback = false;
 	private int opcodeCount = 0;
 
@@ -46,6 +48,7 @@ public final class SurfaceRuleCompiler {
 		SurfaceRuleCompiler c = new SurfaceRuleCompiler();
 		c.visitRule(rootRule);
 		PerWorldBlockStateTable table = c.tableBuilder.freeze();
+		BiomeSetPool biomePool = c.biomePoolBuilder.freeze();
 		byte[] bytecode = c.out.toByteArray();
 		// Patch every recorded blockstate-ID slot from insertion-order
 		// to final (sorted) ID so the bytecode is deterministic across
@@ -55,7 +58,15 @@ public final class SurfaceRuleCompiler {
 			int finalId = table.finalIdFor(insertionId);
 			writeIntLE(bytecode, off, finalId);
 		}
-		return new CompiledRuleTree(bytecode, c.hasFallback, c.opcodeCount, table.idToState());
+		// Same patch pass for biome set pool IDs (u16-wide).
+		for (int off : c.biomeIdOffsets) {
+			int insertionId = readU16LE(bytecode, off);
+			int finalId = biomePool.finalIdFor(insertionId);
+			writeU16LE(bytecode, off, finalId);
+		}
+		return new CompiledRuleTree(
+				bytecode, c.hasFallback, c.opcodeCount,
+				table.idToState(), biomePool.idToSet());
 	}
 
 	private static int readIntLE(byte[] b, int off) {
@@ -70,6 +81,15 @@ public final class SurfaceRuleCompiler {
 		b[off + 1] = (byte)((v >>> 8)  & 0xFF);
 		b[off + 2] = (byte)((v >>> 16) & 0xFF);
 		b[off + 3] = (byte)((v >>> 24) & 0xFF);
+	}
+
+	private static int readU16LE(byte[] b, int off) {
+		return (b[off] & 0xFF) | ((b[off + 1] & 0xFF) << 8);
+	}
+
+	private static void writeU16LE(byte[] b, int off, int v) {
+		b[off]     = (byte)(v       & 0xFF);
+		b[off + 1] = (byte)((v >>> 8) & 0xFF);
 	}
 
 	/**
@@ -168,6 +188,11 @@ public final class SurfaceRuleCompiler {
 		out.write(b ? 1 : 0);
 	}
 
+	private void emitU16(int v) {
+		out.write(v        & 0xFF);
+		out.write((v >>> 8) & 0xFF);
+	}
+
 	/**
 	 * Read an int field by name from a node, with a default if missing.
 	 * Used for operand extraction across vanilla and synthetic test nodes.
@@ -227,6 +252,50 @@ public final class SurfaceRuleCompiler {
 					String pkg = v.getClass().getPackageName();
 					if (pkg.contains("surface")) continue;
 					return v;
+				} catch (ReflectiveOperationException ignored) {
+					// skip
+				}
+			}
+			c = c.getSuperclass();
+		}
+		return null;
+	}
+
+	/**
+	 * Extract the biome collection from a {@code BiomeMaterialCondition}.
+	 * Vanilla yarn typically names this {@code biomes} (a
+	 * {@code RegistryEntryList<Biome>} or {@code Set<RegistryKey<Biome>>}).
+	 * The caller hands the result to {@link BiomeSetPool#canonicalKey},
+	 * which handles whatever shape it actually has.
+	 */
+	private static Object readBiomesField(Object node) {
+		for (String n : new String[]{"biomes", "biomeKeys", "biomeSet"}) {
+			java.lang.reflect.Field f = findField(node.getClass(), n);
+			if (f == null) continue;
+			try {
+				f.setAccessible(true);
+				Object v = f.get(node);
+				if (v != null) return v;
+			} catch (ReflectiveOperationException ignored) {
+				// keep trying
+			}
+		}
+		// Fallback: first non-null Iterable / non-collection-but-stream-able field.
+		Class<?> c = node.getClass();
+		while (c != null && c != Object.class) {
+			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+				if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+				try {
+					f.setAccessible(true);
+					Object v = f.get(node);
+					if (v == null) continue;
+					if (v instanceof Iterable<?>) return v;
+					try {
+						v.getClass().getMethod("stream");
+						return v;
+					} catch (NoSuchMethodException ignored) {
+						// not stream-able, skip
+					}
 				} catch (ReflectiveOperationException ignored) {
 					// skip
 				}
@@ -305,7 +374,14 @@ public final class SurfaceRuleCompiler {
 			case "WaterMaterialCondition"           -> emit(RuleBytecode.OP_WATER);
 			case "HoleMaterialCondition"            -> emit(RuleBytecode.OP_HOLE);
 			case "SurfaceMaterialCondition"         -> emit(RuleBytecode.OP_SURFACE);
-			case "BiomeMaterialCondition"           -> emit(RuleBytecode.OP_BIOME);
+			case "BiomeMaterialCondition" -> {
+				emit(RuleBytecode.OP_BIOME);
+				Object biomes = readBiomesField(node);
+				java.util.List<String> key = BiomeSetPool.canonicalKey(biomes);
+				int insertionId = biomePoolBuilder.intern(key);
+				biomeIdOffsets.add(out.size()); // patch site BEFORE writing
+				emitU16(insertionId);
+			}
 			case "TemperatureMaterialCondition"     -> emit(RuleBytecode.OP_TEMPERATURE);
 			case "SteepMaterialCondition"           -> emit(RuleBytecode.OP_STEEP);
 			case "NotMaterialCondition" -> {

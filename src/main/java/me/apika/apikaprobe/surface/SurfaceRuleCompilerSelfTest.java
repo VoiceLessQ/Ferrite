@@ -38,6 +38,9 @@ public final class SurfaceRuleCompilerSelfTest {
 		failed += run("opBlockTableDedup",       SurfaceRuleCompilerSelfTest::opBlockTableDedup);
 		failed += run("opBlockTableSorted",      SurfaceRuleCompilerSelfTest::opBlockTableSorted);
 		failed += run("opBlockIdsDeterministic", SurfaceRuleCompilerSelfTest::opBlockIdsDeterministic);
+		failed += run("opBiomePoolDedup",        SurfaceRuleCompilerSelfTest::opBiomePoolDedup);
+		failed += run("opBiomePoolContentEq",    SurfaceRuleCompilerSelfTest::opBiomePoolContentEq);
+		failed += run("opBiomePoolSorted",       SurfaceRuleCompilerSelfTest::opBiomePoolSorted);
 
 		if (failed == 0) {
 			System.out.println("[surface-rule-self-test] ALL PASS");
@@ -290,6 +293,73 @@ public final class SurfaceRuleCompilerSelfTest {
 		assertEq("c2 second block id (beta)", 1, readBlockIdAt(c2.bytecode(), 7));
 	}
 
+	private static int readU16At(byte[] bytecode, int offset) {
+		return (bytecode[offset] & 0xFF) | ((bytecode[offset + 1] & 0xFF) << 8);
+	}
+
+	private static void opBiomePoolDedup() {
+		// Three biome conditions referencing the same biome list
+		// (different List instances, same content) should collapse to
+		// one pool entry.
+		Object root = new SequenceMaterialRule(java.util.List.of(
+			new ConditionMaterialRule(
+				new BiomeMaterialCondition(java.util.List.of("plains", "forest")),
+				new BlockMaterialRule()),
+			new ConditionMaterialRule(
+				new BiomeMaterialCondition(java.util.List.of("plains", "forest")),
+				new BlockMaterialRule()),
+			new ConditionMaterialRule(
+				new BiomeMaterialCondition(java.util.List.of("plains", "forest")),
+				new BlockMaterialRule())
+		));
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(root);
+		assertFalse("hasFallback", t.hasFallback());
+		assertEq("biome pool dedupes identical sets", 1, t.biomeSetTable().length);
+	}
+
+	private static void opBiomePoolContentEq() {
+		// Same content, different element order — must still collapse.
+		Object root = new SequenceMaterialRule(java.util.List.of(
+			new ConditionMaterialRule(
+				new BiomeMaterialCondition(java.util.List.of("plains", "forest")),
+				new BlockMaterialRule()),
+			new ConditionMaterialRule(
+				new BiomeMaterialCondition(java.util.List.of("forest", "plains")),
+				new BlockMaterialRule())
+		));
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(root);
+		assertFalse("hasFallback", t.hasFallback());
+		assertEq("biome pool collapses on content (sorted canonical key)",
+				1, t.biomeSetTable().length);
+	}
+
+	private static void opBiomePoolSorted() {
+		// Three distinct biome sets — pool must be sorted by canonical key.
+		Object root = new SequenceMaterialRule(java.util.List.of(
+			new ConditionMaterialRule(
+				new BiomeMaterialCondition(java.util.List.of("z_set")),
+				new BlockMaterialRule()),
+			new ConditionMaterialRule(
+				new BiomeMaterialCondition(java.util.List.of("a_set")),
+				new BlockMaterialRule()),
+			new ConditionMaterialRule(
+				new BiomeMaterialCondition(java.util.List.of("m_set")),
+				new BlockMaterialRule())
+		));
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(root);
+		assertFalse("hasFallback", t.hasFallback());
+		assertEq("pool size", 3, t.biomeSetTable().length);
+		assertEq("[0] sorted", "a_set", t.biomeSetTable()[0].get(0));
+		assertEq("[1] sorted", "m_set", t.biomeSetTable()[1].get(0));
+		assertEq("[2] sorted", "z_set", t.biomeSetTable()[2].get(0));
+		// Insertion order: z(0), a(1), m(2). After sort: a→0, m→1, z→2.
+		// Layout: SEQ(1) + 3*(COND(1) + BIOME(1)+u16(2) + BLOCK(1)+u32(4)) = 28 bytes
+		// Each group is 9 bytes; u16 immediates at offsets 3, 12, 21.
+		assertEq("z → final id 2", 2, readU16At(t.bytecode(), 3));
+		assertEq("a → final id 0", 0, readU16At(t.bytecode(), 12));
+		assertEq("m → final id 1", 1, readU16At(t.bytecode(), 21));
+	}
+
 	private static void opAboveYDefaultOperands() {
 		Object node = new AboveYMaterialCondition(); // 0, false
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
@@ -388,7 +458,12 @@ public final class SurfaceRuleCompilerSelfTest {
 	static final class WaterMaterialCondition {}
 	static final class HoleMaterialCondition {}
 	static final class SurfaceMaterialCondition {}
-	static final class BiomeMaterialCondition {}
+	@SuppressWarnings("unused")
+	static final class BiomeMaterialCondition {
+		final java.util.List<String> biomes;
+		BiomeMaterialCondition() { this(java.util.List.of()); }
+		BiomeMaterialCondition(java.util.List<String> biomes) { this.biomes = biomes; }
+	}
 	static final class TemperatureMaterialCondition {}
 	static final class SteepMaterialCondition {}
 
