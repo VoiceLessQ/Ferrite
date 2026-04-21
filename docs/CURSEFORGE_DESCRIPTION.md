@@ -61,7 +61,7 @@ A shadow-compute `RedstoneOracle` validates every sampled cascade against vanill
 
 ## What's still in progress
 
-* **Chunk generation** — Rust bulk compute proved 7× faster than vanilla noise-sync in equivalent work, but piping vanilla's internal density-function data into the pipeline cleanly is the current blocker. Framework ships in the jar; output is gated.
+* **Chunk generation** — Rust bulk-compute kernel measured ~7× faster than vanilla's noise-sync in equivalent work. The speedup is real but blocked from shipping at the density-function layer: vanilla evaluates DFs interleaved with interpolation inside `NoiseChunkGenerator` (marked `final`), so there's no clean intermediate cell-corner grid to hand to Rust without reimplementing the full DF tree. Pivoting to surface rule batch evaluation, which runs after density resolves with a clean boundary and still captures a realistic end-to-end chunkgen win.
 * **`adjustMovementForCollisions` port** — attempted, shelved. The AABB sweep math runs correctly in Rust, but snapshot materialization cost exceeded the sweep savings at realistic mob counts. Retained as disabled infrastructure for a future invalidation-cache redesign.
 
 ---
