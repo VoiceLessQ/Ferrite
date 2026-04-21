@@ -145,9 +145,10 @@ public final class FerriteCommand {
 		}
 		CompiledRuleTree tree = SurfaceRuleCompiler.compile(extracted.surfaceRule());
 		String msg = String.format(
-			"[surface] compiled: opcodes=%d bytes=%d hasFallback=%s generator=%s",
+			"[surface] compiled: opcodes=%d bytes=%d blockstates=%d hasFallback=%s generator=%s",
 			tree.opcodeCount(),
 			tree.bytecode().length,
+			tree.blockstateTable().length,
 			tree.hasFallback(),
 			extracted.generatorClass());
 		sendFeedback(ctx, msg, false);
