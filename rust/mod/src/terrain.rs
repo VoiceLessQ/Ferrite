@@ -40,19 +40,21 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_computeChunkTerrain<'
     _chunk_x: jint,
     _chunk_z: jint,
 ) {
-    let corner_ptr = env
-        .get_direct_buffer_address(&corner_densities)
-        .expect("corner buffer must be direct");
-    let corner_len_bytes = env
-        .get_direct_buffer_capacity(&corner_densities)
-        .expect("corner buffer capacity unavailable");
+    // Buffer resolution must never panic across the JNI boundary; any
+    // failure here silently returns so Java writes nothing this call.
+    let Some(corner_ptr) = env.get_direct_buffer_address(&corner_densities).ok() else {
+        return;
+    };
+    let Some(corner_len_bytes) = env.get_direct_buffer_capacity(&corner_densities).ok() else {
+        return;
+    };
 
-    let out_ptr = env
-        .get_direct_buffer_address(&out_block_ids)
-        .expect("output buffer must be direct");
-    let out_len_bytes = env
-        .get_direct_buffer_capacity(&out_block_ids)
-        .expect("output buffer capacity unavailable");
+    let Some(out_ptr) = env.get_direct_buffer_address(&out_block_ids).ok() else {
+        return;
+    };
+    let Some(out_len_bytes) = env.get_direct_buffer_capacity(&out_block_ids).ok() else {
+        return;
+    };
 
     let cell_width = cell_width as usize;
     let cell_height = cell_height as usize;

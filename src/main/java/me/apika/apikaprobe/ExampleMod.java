@@ -45,7 +45,18 @@ public class ExampleMod implements ModInitializer {
 		FerriteCommand.register();
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
-			LOGGER.warn("Native engine unavailable — falling back to pure Java.");
+			// Explicitly disable every Rust-backed dispatcher so vanilla
+			// behavior is restored immediately, instead of relying on each
+			// dispatch site's per-call NATIVE_AVAILABLE guard. This makes
+			// the fallback state legible in a single place and prevents a
+			// regression if a future change removes one of those guards.
+			//
+			// FerriteWireConfig (pure-Java Alternate Current redstone) is
+			// intentionally not touched — it has no native dependency.
+			CrammingDispatcher.ENABLED = false;
+			PhysicsDispatcher.ENABLED = false;
+			RedstoneHandoff.USE_RUST = false;
+			LOGGER.warn("Native engine unavailable — Rust-backed paths disabled, vanilla behavior restored.");
 			return;
 		}
 

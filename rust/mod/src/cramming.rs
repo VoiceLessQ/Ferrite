@@ -96,7 +96,13 @@ fn cell_key(x: f64, z: f64) -> (i32, i32) {
 /// density k is bounded by the cell size × cramming limit.
 pub fn compute_cramming(inputs: &[CrammingInput], results: &mut [CrammingResult]) {
     let n = inputs.len();
-    assert_eq!(n, results.len(), "inputs and results must have matching length");
+    // Mismatched slice lengths are a caller bug, but panicking here would
+    // cross the JNI boundary for the in-production path. Return silently
+    // and let debug builds catch the mismatch at dev time.
+    debug_assert_eq!(n, results.len(), "inputs and results must have matching length");
+    if n != results.len() {
+        return;
+    }
 
     // --- Seed results --------------------------------------------------------
     for i in 0..n {

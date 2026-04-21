@@ -45,31 +45,19 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_computeEntityPhysics<
     }
 
     // --- Resolve buffer addresses ------------------------------------------
+    //
+    // Resolve the results buffer first: it's the only one we write to, and
+    // we need a valid pointer to stamp FALLBACK on any subsequent failure.
+    // JNI calls must never panic across the boundary, so every address /
+    // capacity fetch uses .ok() + early return.
 
-    let snap_ptr = env
-        .get_direct_buffer_address(&snapshot_buf)
-        .expect("snapshot buffer must be direct");
-    let snap_cap = env
-        .get_direct_buffer_capacity(&snapshot_buf)
-        .expect("snapshot capacity unavailable");
+    let Some(res_ptr) = env.get_direct_buffer_address(&results_buf).ok() else {
+        return;
+    };
+    let Some(res_cap) = env.get_direct_buffer_capacity(&results_buf).ok() else {
+        return;
+    };
 
-    let req_ptr = env
-        .get_direct_buffer_address(&requests_buf)
-        .expect("requests buffer must be direct");
-    let req_cap = env
-        .get_direct_buffer_capacity(&requests_buf)
-        .expect("requests capacity unavailable");
-
-    let res_ptr = env
-        .get_direct_buffer_address(&results_buf)
-        .expect("results buffer must be direct");
-    let res_cap = env
-        .get_direct_buffer_capacity(&results_buf)
-        .expect("results capacity unavailable");
-
-    // Bounds: the result buffer must be large enough to hold `count` entries
-    // before we do anything else — it's the only one we write to, and we
-    // rely on being able to stamp FALLBACK across it on any failure below.
     let result_bytes = count * std::mem::size_of::<EntityResult>();
     if res_cap < result_bytes {
         return; // can't safely write; Java will observe stale data, but it
@@ -82,6 +70,24 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_computeEntityPhysics<
 
     // From here on, any early return must flag every result as FALLBACK so
     // Java never reads uninitialized/stale adjusted motion as valid.
+    let Some(snap_ptr) = env.get_direct_buffer_address(&snapshot_buf).ok() else {
+        mark_all_fallback(results);
+        return;
+    };
+    let Some(snap_cap) = env.get_direct_buffer_capacity(&snapshot_buf).ok() else {
+        mark_all_fallback(results);
+        return;
+    };
+
+    let Some(req_ptr) = env.get_direct_buffer_address(&requests_buf).ok() else {
+        mark_all_fallback(results);
+        return;
+    };
+    let Some(req_cap) = env.get_direct_buffer_capacity(&requests_buf).ok() else {
+        mark_all_fallback(results);
+        return;
+    };
+
     let request_bytes = count * std::mem::size_of::<EntityRequest>();
     if req_cap < request_bytes || snap_cap < SNAPSHOT_HEADER_BYTES {
         mark_all_fallback(results);
@@ -90,13 +96,13 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_computeEntityPhysics<
 
     // --- Parse snapshot ----------------------------------------------------
 
-    let snapshot = unsafe {
-        match parse_snapshot(snap_ptr, snap_cap) {
-            Some(s) => s,
-            None => {
-                mark_all_fallback(results);
-                return;
-            }
+    let snap_bytes: &[u8] =
+        unsafe { slice::from_raw_parts(snap_ptr as *const u8, snap_cap) };
+    let snapshot = match unsafe { parse_snapshot(snap_bytes) } {
+        Some(s) => s,
+        None => {
+            mark_all_fallback(results);
+            return;
         }
     };
 
@@ -130,17 +136,25 @@ fn mark_all_fallback(results: &mut [EntityResult]) {
     }
 }
 
-/// Parses the snapshot header + slices from a raw buffer pointer. Returns
-/// None if the buffer is too small to contain the sections implied by its
-/// header. Caller must ensure the lifetime of the returned slices doesn't
-/// outlive the JNI call.
+/// Parses the snapshot header + slices from a byte slice. Returns None if
+/// the buffer is too small to contain the sections implied by its header.
 ///
-/// Safety: ptr must be a valid, aligned pointer to at least `cap` bytes of
-/// readable memory. The returned WorldSnapshot borrows from this memory.
-unsafe fn parse_snapshot(ptr: *mut u8, cap: usize) -> Option<WorldSnapshot<'static>> {
+/// The returned `WorldSnapshot<'a>` borrows from `buf`, so its lifetime is
+/// properly bounded — a refactor that tries to outlive `buf` (e.g. store
+/// the snapshot in a static or return it from the JNI function) will be
+/// caught by the borrow checker instead of becoming UB at runtime.
+///
+/// Safety: `buf` must alias correctly with the PhysicsHandoff.java layout
+/// — specifically, the i32/u16/u32/f32 sub-regions implied by the header
+/// must be valid reads of properly aligned, initialized values of those
+/// types. Java's direct ByteBuffer allocator paired with the Java-side
+/// serializer satisfies this.
+unsafe fn parse_snapshot<'a>(buf: &'a [u8]) -> Option<WorldSnapshot<'a>> {
+    let cap = buf.len();
     if cap < SNAPSHOT_HEADER_BYTES {
         return None;
     }
+    let ptr = buf.as_ptr();
     let header = slice::from_raw_parts(ptr as *const i32, 9);
     let origin_x = header[0];
     let origin_y = header[1];
@@ -170,11 +184,13 @@ unsafe fn parse_snapshot(ptr: *mut u8, cap: usize) -> Option<WorldSnapshot<'stat
         return None;
     }
 
-    let cells = slice::from_raw_parts(ptr.add(cells_off) as *const u16, cell_count);
-    let palette_offsets =
+    let cells: &'a [u16] =
+        slice::from_raw_parts(ptr.add(cells_off) as *const u16, cell_count);
+    let palette_offsets: &'a [u32] =
         slice::from_raw_parts(ptr.add(pofs_off) as *const u32, palette_count);
-    let palette_counts = slice::from_raw_parts(ptr.add(pcnt_off), palette_count);
-    let aabb_table =
+    let palette_counts: &'a [u8] =
+        slice::from_raw_parts(ptr.add(pcnt_off), palette_count);
+    let aabb_table: &'a [f32] =
         slice::from_raw_parts(ptr.add(aabb_off) as *const f32, aabb_table_len * 6);
 
     Some(WorldSnapshot {
