@@ -38,6 +38,8 @@ public final class SurfaceRuleCompiler {
 	private final java.util.List<Integer> blockIdOffsets = new java.util.ArrayList<>();
 	private final java.util.List<Integer> biomeIdOffsets = new java.util.ArrayList<>();
 	private final java.util.List<Integer> noiseIdOffsets = new java.util.ArrayList<>();
+	/** [offset_in_bytecode, target_position] pairs for forward jumps. */
+	private final java.util.List<int[]> controlFlowPatches = new java.util.ArrayList<>();
 	private boolean hasFallback = false;
 	private int opcodeCount = 0;
 
@@ -49,6 +51,7 @@ public final class SurfaceRuleCompiler {
 		}
 		SurfaceRuleCompiler c = new SurfaceRuleCompiler();
 		c.visitRule(rootRule);
+		c.emit(RuleBytecode.OP_RETURN_DONE); // single trailing terminator
 		PerWorldBlockStateTable table = c.tableBuilder.freeze();
 		BiomeSetPool biomePool = c.biomePoolBuilder.freeze();
 		NoiseChannelPool noisePool = c.noisePoolBuilder.freeze();
@@ -72,6 +75,10 @@ public final class SurfaceRuleCompiler {
 			int insertionId = readU16LE(bytecode, off);
 			int finalId = noisePool.finalIdFor(insertionId);
 			writeU16LE(bytecode, off, finalId);
+		}
+		// Control-flow forward jumps: write resolved target into placeholder slot.
+		for (int[] patch : c.controlFlowPatches) {
+			writeIntLE(bytecode, patch[0], patch[1]);
 		}
 		return new CompiledRuleTree(
 				bytecode, c.hasFallback, c.opcodeCount,
@@ -401,15 +408,9 @@ public final class SurfaceRuleCompiler {
 				hasFallback = true;
 			}
 			case "SequenceMaterialRule",
-				 "SequenceBlockStateRule" -> {
-				emit(RuleBytecode.OP_SEQUENCE);
-				visitChildren(node);
-			}
+				 "SequenceBlockStateRule" -> emitSequence(node);
 			case "ConditionMaterialRule",
-				 "ConditionalBlockStateRule" -> {
-				emit(RuleBytecode.OP_CONDITION);
-				visitChildren(node);
-			}
+				 "ConditionalBlockStateRule" -> emitCondition(node);
 			default -> {
 				// Could be a Condition node delivered as the root of a
 				// sub-tree, or an unknown rule type. Try the condition
@@ -420,6 +421,114 @@ public final class SurfaceRuleCompiler {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Condition shape:
+	 *   [cond opcodes]
+	 *   IF_ELSE @then @else
+	 *   @then: [child opcodes]
+	 *   @else: (immediately after — implicit fall-through with empty acc)
+	 *
+	 * The else-target equals "position right after the then-branch" because
+	 * ConditionMaterialRule has no explicit else clause. If cond is false,
+	 * IF_ELSE jumps past the then-branch with the value accumulator unset.
+	 * If cond is true, IF_ELSE jumps to the then-branch which executes and
+	 * naturally falls through to the same position.
+	 */
+	private void emitCondition(Object node) {
+		java.util.List<Object> kids = collectSurfaceTypedFields(node);
+		if (kids.size() < 2) {
+			emit(RuleBytecode.OP_FALLBACK);
+			hasFallback = true;
+			return;
+		}
+		Object cond = kids.get(0);
+		Object child = kids.get(1);
+		visitRule(cond);
+		emit(RuleBytecode.OP_IF_ELSE);
+		int thenSlot = out.size(); emitInt(0); // placeholder
+		int elseSlot = out.size(); emitInt(0); // placeholder
+		int thenTarget = out.size();
+		visitRule(child);
+		int elseTarget = out.size(); // immediately past then-branch
+		controlFlowPatches.add(new int[]{thenSlot, thenTarget});
+		controlFlowPatches.add(new int[]{elseSlot, elseTarget});
+	}
+
+	/**
+	 * Sequence shape:
+	 *   [c1 opcodes] SEQUENCE_NEXT @end
+	 *   [c2 opcodes] SEQUENCE_NEXT @end
+	 *   ...
+	 *   [cN opcodes] SEQUENCE_NEXT @end
+	 *   @end: (immediately after the last SEQUENCE_NEXT)
+	 *
+	 * Each SEQUENCE_NEXT means: "if value accumulator is non-empty, jump to
+	 * @end (skipping remaining alternatives); else fall through to next
+	 * child." All SEQUENCE_NEXT in a given sequence target the same @end
+	 * position, which is "immediately after the last SEQUENCE_NEXT in this
+	 * sequence" — i.e. where the enclosing scope continues.
+	 */
+	private void emitSequence(Object node) {
+		java.util.List<?> children = readSequenceChildren(node);
+		if (children == null) {
+			emit(RuleBytecode.OP_FALLBACK);
+			hasFallback = true;
+			return;
+		}
+		int numChildren = children.size();
+		int[] endSlots = new int[numChildren];
+		for (int i = 0; i < numChildren; i++) {
+			Object child = children.get(i);
+			visitRule(child);
+			emit(RuleBytecode.OP_SEQUENCE_NEXT);
+			endSlots[i] = out.size();
+			emitInt(0); // placeholder for end_offset
+		}
+		int endTarget = out.size();
+		for (int slot : endSlots) {
+			controlFlowPatches.add(new int[]{slot, endTarget});
+		}
+	}
+
+	private static java.util.List<Object> collectSurfaceTypedFields(Object node) {
+		java.util.List<Object> result = new java.util.ArrayList<>();
+		Class<?> c = node.getClass();
+		while (c != null && c != Object.class) {
+			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+				if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+				try {
+					f.setAccessible(true);
+					Object v = f.get(node);
+					if (v == null) continue;
+					String pkg = v.getClass().getPackageName();
+					if (pkg.contains("surface")) result.add(v);
+				} catch (ReflectiveOperationException ignored) {
+					// skip
+				}
+			}
+			c = c.getSuperclass();
+		}
+		return result;
+	}
+
+	private static java.util.List<?> readSequenceChildren(Object node) {
+		Class<?> c = node.getClass();
+		while (c != null && c != Object.class) {
+			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+				if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+				try {
+					f.setAccessible(true);
+					Object v = f.get(node);
+					if (v instanceof java.util.List<?> list) return list;
+				} catch (ReflectiveOperationException ignored) {
+					// skip
+				}
+			}
+			c = c.getSuperclass();
+		}
+		return null;
 	}
 
 	private boolean tryVisitCondition(Object node) {

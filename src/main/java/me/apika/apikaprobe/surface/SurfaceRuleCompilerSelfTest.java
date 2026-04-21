@@ -48,6 +48,8 @@ public final class SurfaceRuleCompilerSelfTest {
 		failed += run("opWaterLayout",           SurfaceRuleCompilerSelfTest::opWaterLayout);
 		failed += run("opVertGradientFallback",  SurfaceRuleCompilerSelfTest::opVertGradientFallback);
 		failed += run("opNotChild",              SurfaceRuleCompilerSelfTest::opNotChild);
+		failed += run("opIfElseJumpTargets",     SurfaceRuleCompilerSelfTest::opIfElseJumpTargets);
+		failed += run("opSequenceEndOffsets",    SurfaceRuleCompilerSelfTest::opSequenceEndOffsets);
 
 		if (failed == 0) {
 			System.out.println("[surface-rule-self-test] ALL PASS");
@@ -98,9 +100,12 @@ public final class SurfaceRuleCompilerSelfTest {
 	private static void singleBlockRule() {
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(new BlockMaterialRule());
 		assertFalse("hasFallback", t.hasFallback());
-		assertEq("opcodeCount", 1, t.opcodeCount());
-		assertEq("bytecode length (op + u32 id)", 5, t.bytecode().length);
+		// opcodeCount = OP_BLOCK + trailing OP_RETURN_DONE = 2
+		assertEq("opcodeCount", 2, t.opcodeCount());
+		// bytecode = OP_BLOCK(1) + u32(4) + OP_RETURN_DONE(1) = 6
+		assertEq("bytecode length", 6, t.bytecode().length);
 		assertEq("first byte", RuleBytecode.OP_BLOCK, t.bytecode()[0]);
+		assertEq("trailing terminator", RuleBytecode.OP_RETURN_DONE, t.bytecode()[5]);
 		assertEq("table size (1 unique state)", 1, t.blockstateTable().length);
 	}
 
@@ -110,8 +115,8 @@ public final class SurfaceRuleCompilerSelfTest {
 		Object outer = new ConditionMaterialRule(cond, inner);
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(outer);
 		assertFalse("hasFallback", t.hasFallback());
-		// 1 condition wrapper + 1 condition node + 1 block leaf
-		assertEq("opcodeCount", 3, t.opcodeCount());
+		// BIOME + IF_ELSE + BLOCK + RETURN_DONE = 4 opcodes
+		assertEq("opcodeCount", 4, t.opcodeCount());
 	}
 
 	private static void everyKnownConditionType() {
@@ -194,22 +199,29 @@ public final class SurfaceRuleCompilerSelfTest {
 		return r;
 	}
 
+	private static byte[] withTerminator(byte... body) {
+		byte[] out = new byte[body.length + 1];
+		System.arraycopy(body, 0, out, 0, body.length);
+		out[body.length] = RuleBytecode.OP_RETURN_DONE;
+		return out;
+	}
+
 	private static void opHoleZeroOperands() {
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(new HoleMaterialCondition());
 		assertFalse("hasFallback", t.hasFallback());
-		assertBytecode("hole bytes", t.bytecode(), RuleBytecode.OP_HOLE);
+		assertBytecode("hole bytes", t.bytecode(), withTerminator(RuleBytecode.OP_HOLE));
 	}
 
 	private static void opSteepZeroOperands() {
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(new SteepMaterialCondition());
 		assertFalse("hasFallback", t.hasFallback());
-		assertBytecode("steep bytes", t.bytecode(), RuleBytecode.OP_STEEP);
+		assertBytecode("steep bytes", t.bytecode(), withTerminator(RuleBytecode.OP_STEEP));
 	}
 
 	private static void opSurfaceZeroOperands() {
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(new SurfaceMaterialCondition());
 		assertFalse("hasFallback", t.hasFallback());
-		assertBytecode("surface bytes", t.bytecode(), RuleBytecode.OP_SURFACE);
+		assertBytecode("surface bytes", t.bytecode(), withTerminator(RuleBytecode.OP_SURFACE));
 	}
 
 	private static void opTemperatureZeroOperands() {
@@ -217,17 +229,17 @@ public final class SurfaceRuleCompilerSelfTest {
 		// no expect_cold immediate exists to extract. Spec divergence noted.
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(new TemperatureMaterialCondition());
 		assertFalse("hasFallback", t.hasFallback());
-		assertBytecode("temperature bytes", t.bytecode(), RuleBytecode.OP_TEMPERATURE);
+		assertBytecode("temperature bytes", t.bytecode(), withTerminator(RuleBytecode.OP_TEMPERATURE));
 	}
 
 	private static void opAboveYWithOperands() {
 		Object node = new AboveYMaterialCondition(7, true);
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
 		assertFalse("hasFallback", t.hasFallback());
-		byte[] expected = concat(new byte[]{RuleBytecode.OP_ABOVE_Y}, le32(7));
-		expected = concat(expected, new byte[]{1});
-		assertBytecode("above_y(7,true) bytes", t.bytecode(), expected);
-		assertEq("above_y total length", 6, t.bytecode().length);
+		byte[] body = concat(new byte[]{RuleBytecode.OP_ABOVE_Y}, le32(7));
+		body = concat(body, new byte[]{1});
+		assertBytecode("above_y(7,true) bytes", t.bytecode(), withTerminator(body));
+		assertEq("above_y total length (incl terminator)", 7, t.bytecode().length);
 	}
 
 	private static int readBlockIdAt(byte[] bytecode, int offset) {
@@ -267,13 +279,13 @@ public final class SurfaceRuleCompilerSelfTest {
 		assertEq("[2] sorted=z_last", "z_last", table[2].toString());
 
 		// Bytecode IDs must reference final (sorted) positions, not insertion order.
-		// Layout: OP_SEQUENCE (1) + 3*(OP_BLOCK(1)+id(4)) = 16 bytes
-		assertEq("bytecode length", 16, t.bytecode().length);
-		// Slot for first BlockMaterialRule (a, insertion 0) is at offset 2.
-		// After sort, "a" → final id 2 (z_last). Verify.
-		assertEq("a → final id 2", 2, readBlockIdAt(t.bytecode(), 2));
-		assertEq("b → final id 0", 0, readBlockIdAt(t.bytecode(), 7));
-		assertEq("c → final id 1", 1, readBlockIdAt(t.bytecode(), 12));
+		// Layout per child group: OP_BLOCK(1) + u32(4) + OP_SEQUENCE_NEXT(1) + u32(4) = 10 bytes
+		// 3 groups + OP_RETURN_DONE(1) = 31 bytes
+		assertEq("bytecode length", 31, t.bytecode().length);
+		// Block id u32 immediates at offsets 1, 11, 21
+		assertEq("a → final id 2", 2, readBlockIdAt(t.bytecode(), 1));
+		assertEq("b → final id 0", 0, readBlockIdAt(t.bytecode(), 11));
+		assertEq("c → final id 1", 1, readBlockIdAt(t.bytecode(), 21));
 	}
 
 	private static void opBlockIdsDeterministic() {
@@ -293,13 +305,14 @@ public final class SurfaceRuleCompilerSelfTest {
 		assertEq("c1 table[1]", "beta",  c1.blockstateTable()[1].toString());
 		assertEq("c2 table[0]", "alpha", c2.blockstateTable()[0].toString());
 		assertEq("c2 table[1]", "beta",  c2.blockstateTable()[1].toString());
-		// In both, alpha→0, beta→1 regardless of source insertion order
-		// c1 emits b first (final id 1 for beta) then a (final id 0)
-		assertEq("c1 first block id (beta)", 1, readBlockIdAt(c1.bytecode(), 2));
-		assertEq("c1 second block id (alpha)", 0, readBlockIdAt(c1.bytecode(), 7));
+		// In both, alpha→0, beta→1 regardless of source insertion order.
+		// Layout per child group: OP_BLOCK(1) + u32(4) + OP_SEQUENCE_NEXT(1) + u32(4) = 10 bytes
+		// First block id at offset 1, second at offset 11.
+		assertEq("c1 first block id (beta)", 1, readBlockIdAt(c1.bytecode(), 1));
+		assertEq("c1 second block id (alpha)", 0, readBlockIdAt(c1.bytecode(), 11));
 		// c2 reverse
-		assertEq("c2 first block id (alpha)", 0, readBlockIdAt(c2.bytecode(), 2));
-		assertEq("c2 second block id (beta)", 1, readBlockIdAt(c2.bytecode(), 7));
+		assertEq("c2 first block id (alpha)", 0, readBlockIdAt(c2.bytecode(), 1));
+		assertEq("c2 second block id (beta)", 1, readBlockIdAt(c2.bytecode(), 11));
 	}
 
 	private static int readU16At(byte[] bytecode, int offset) {
@@ -362,11 +375,13 @@ public final class SurfaceRuleCompilerSelfTest {
 		assertEq("[1] sorted", "m_set", t.biomeSetTable()[1].get(0));
 		assertEq("[2] sorted", "z_set", t.biomeSetTable()[2].get(0));
 		// Insertion order: z(0), a(1), m(2). After sort: a→0, m→1, z→2.
-		// Layout: SEQ(1) + 3*(COND(1) + BIOME(1)+u16(2) + BLOCK(1)+u32(4)) = 28 bytes
-		// Each group is 9 bytes; u16 immediates at offsets 3, 12, 21.
-		assertEq("z → final id 2", 2, readU16At(t.bytecode(), 3));
-		assertEq("a → final id 0", 0, readU16At(t.bytecode(), 12));
-		assertEq("m → final id 1", 1, readU16At(t.bytecode(), 21));
+		// New layout per Condition: BIOME(1) + u16(2) + IF_ELSE(1) + then_off(4) +
+		//   else_off(4) + BLOCK(1) + u32(4) = 17 bytes
+		// Each Condition is one Sequence child, separated by SEQUENCE_NEXT(1) + u32(4) = 5 bytes
+		// Per Sequence-child group: 17 + 5 = 22 bytes. Biome u16 at offsets 1, 23, 45.
+		assertEq("z → final id 2", 2, readU16At(t.bytecode(), 1));
+		assertEq("a → final id 0", 0, readU16At(t.bytecode(), 23));
+		assertEq("m → final id 1", 1, readU16At(t.bytecode(), 45));
 	}
 
 	private static double readDoubleAt(byte[] bytecode, int offset) {
@@ -384,7 +399,8 @@ public final class SurfaceRuleCompilerSelfTest {
 		assertFalse("hasFallback", t.hasFallback());
 		assertEq("noise pool size", 1, t.noiseChannelTable().length);
 		assertEq("noise channel name", "test:channel_a", t.noiseChannelTable()[0]);
-		assertEq("bytecode length", 19, t.bytecode().length);
+		// 19 op-bytes + 1 trailing OP_RETURN_DONE = 20
+		assertEq("bytecode length", 20, t.bytecode().length);
 		assertEq("opcode", RuleBytecode.OP_NOISE_THRESH, t.bytecode()[0]);
 		assertEq("channel id (only entry)", 0, readU16At(t.bytecode(), 1));
 		if (readDoubleAt(t.bytecode(), 3) != -0.5) {
@@ -393,6 +409,7 @@ public final class SurfaceRuleCompilerSelfTest {
 		if (readDoubleAt(t.bytecode(), 11) != 0.75) {
 			throw new AssertionError("max threshold mismatch: " + readDoubleAt(t.bytecode(), 11));
 		}
+		assertEq("trailing terminator", RuleBytecode.OP_RETURN_DONE, t.bytecode()[19]);
 	}
 
 	private static void opNoisePoolDedup() {
@@ -418,12 +435,12 @@ public final class SurfaceRuleCompilerSelfTest {
 		assertEq("[0]", "a_chan", t.noiseChannelTable()[0]);
 		assertEq("[1]", "m_chan", t.noiseChannelTable()[1]);
 		assertEq("[2]", "z_chan", t.noiseChannelTable()[2]);
-		// Layout: SEQ(1) + 3 * NoiseThresh(19) = 58 bytes
-		// Channel u16 immediates at offsets 2, 21, 40
+		// New layout per child group: NoiseThresh(19) + SEQUENCE_NEXT(5) = 24 bytes
+		// 3 groups + RETURN_DONE = 73 bytes total. Channel u16 at offsets 1, 25, 49.
 		// Insertion: z(0), a(1), m(2). Sorted: a→0, m→1, z→2.
-		assertEq("z → final 2", 2, readU16At(t.bytecode(), 2));
-		assertEq("a → final 0", 0, readU16At(t.bytecode(), 21));
-		assertEq("m → final 1", 1, readU16At(t.bytecode(), 40));
+		assertEq("z → final 2", 2, readU16At(t.bytecode(), 1));
+		assertEq("a → final 0", 0, readU16At(t.bytecode(), 25));
+		assertEq("m → final 1", 1, readU16At(t.bytecode(), 49));
 	}
 
 	private static void opStoneDepthLayout() {
@@ -431,13 +448,14 @@ public final class SurfaceRuleCompilerSelfTest {
 		Object node = new StoneDepthMaterialCondition(3, true, 7, FakeSurfaceType.CEILING);
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
 		assertFalse("hasFallback", t.hasFallback());
-		assertEq("bytecode length", 11, t.bytecode().length);
+		// 11 op-bytes + 1 trailing OP_RETURN_DONE = 12
+		assertEq("bytecode length", 12, t.bytecode().length);
 		assertEq("opcode", RuleBytecode.OP_STONE_DEPTH, t.bytecode()[0]);
-		// offset i32 at 1
 		assertEq("offset i32 le[0]", 3, t.bytecode()[1] & 0xFF);
 		assertEq("addSurfaceDepth u8", 1, t.bytecode()[5] & 0xFF);
 		assertEq("secondaryDepthRange i32 le[0]", 7, t.bytecode()[6] & 0xFF);
 		assertEq("surfaceType ordinal (CEILING=1)", 1, t.bytecode()[10] & 0xFF);
+		assertEq("trailing terminator", RuleBytecode.OP_RETURN_DONE, t.bytecode()[11]);
 	}
 
 	private static void opWaterLayout() {
@@ -445,11 +463,13 @@ public final class SurfaceRuleCompilerSelfTest {
 		Object node = new WaterMaterialCondition(2, 5, true);
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
 		assertFalse("hasFallback", t.hasFallback());
-		assertEq("bytecode length", 10, t.bytecode().length);
+		// 10 op-bytes + 1 trailing OP_RETURN_DONE = 11
+		assertEq("bytecode length", 11, t.bytecode().length);
 		assertEq("opcode", RuleBytecode.OP_WATER, t.bytecode()[0]);
 		assertEq("offset i32 le[0]", 2, t.bytecode()[1] & 0xFF);
 		assertEq("mult i32 le[0]", 5, t.bytecode()[5] & 0xFF);
 		assertEq("addStoneDepthBelow u8", 1, t.bytecode()[9] & 0xFF);
+		assertEq("trailing terminator", RuleBytecode.OP_RETURN_DONE, t.bytecode()[10]);
 	}
 
 	private static void opVertGradientFallback() {
@@ -460,24 +480,67 @@ public final class SurfaceRuleCompilerSelfTest {
 		assertEq("bytecode is single OP_FALLBACK", RuleBytecode.OP_FALLBACK, t.bytecode()[0]);
 	}
 
+	private static void opIfElseJumpTargets() {
+		// Single ConditionMaterialRule(BiomeMaterialCondition, BlockMaterialRule)
+		// Layout: BIOME(1) + u16(2) + IF_ELSE(1) + then_off(4) + else_off(4) +
+		//         BLOCK(1) + u32(4) + RETURN_DONE(1) = 18 bytes
+		// then_off should point to the start of BLOCK = byte 12
+		// else_off should point to position right after BLOCK's u32 = byte 17
+		Object node = new ConditionMaterialRule(
+			new BiomeMaterialCondition(java.util.List.of("plains")),
+			new BlockMaterialRule());
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
+		assertFalse("hasFallback", t.hasFallback());
+		assertEq("bytecode length", 18, t.bytecode().length);
+		assertEq("[3] OP_IF_ELSE", RuleBytecode.OP_IF_ELSE, t.bytecode()[3]);
+		assertEq("then_offset → start of then-branch (BLOCK)", 12, readBlockIdAt(t.bytecode(), 4));
+		assertEq("else_offset → past then-branch (terminator)", 17, readBlockIdAt(t.bytecode(), 8));
+		assertEq("[12] OP_BLOCK (then-branch)", RuleBytecode.OP_BLOCK, t.bytecode()[12]);
+		assertEq("[17] terminator", RuleBytecode.OP_RETURN_DONE, t.bytecode()[17]);
+	}
+
+	private static void opSequenceEndOffsets() {
+		// Sequence of three OP_HOLE conditions.
+		// Layout per child group: HOLE(1) + SEQUENCE_NEXT(1) + end_off(4) = 6 bytes
+		// 3 groups + RETURN_DONE = 19 bytes total.
+		// All three SEQUENCE_NEXT end_offsets should target position 18
+		// (immediately past the last SEQUENCE_NEXT's offset = right at RETURN_DONE).
+		Object node = new SequenceMaterialRule(java.util.List.of(
+			new HoleMaterialCondition(),
+			new HoleMaterialCondition(),
+			new HoleMaterialCondition()));
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
+		assertFalse("hasFallback", t.hasFallback());
+		assertEq("bytecode length", 19, t.bytecode().length);
+		// SEQUENCE_NEXT opcodes at bytes 1, 7, 13; their end_off u32 at 2, 8, 14.
+		assertEq("[1] OP_SEQUENCE_NEXT", RuleBytecode.OP_SEQUENCE_NEXT, t.bytecode()[1]);
+		assertEq("[7] OP_SEQUENCE_NEXT", RuleBytecode.OP_SEQUENCE_NEXT, t.bytecode()[7]);
+		assertEq("[13] OP_SEQUENCE_NEXT", RuleBytecode.OP_SEQUENCE_NEXT, t.bytecode()[13]);
+		assertEq("end_off #1 → 18", 18, readBlockIdAt(t.bytecode(), 2));
+		assertEq("end_off #2 → 18", 18, readBlockIdAt(t.bytecode(), 8));
+		assertEq("end_off #3 → 18", 18, readBlockIdAt(t.bytecode(), 14));
+		assertEq("[18] terminator", RuleBytecode.OP_RETURN_DONE, t.bytecode()[18]);
+	}
+
 	private static void opNotChild() {
 		// OP_NOT followed by child opcode — the child's full bytecode
 		// stream lives in-line. Hole has zero operands so total = 2 bytes.
 		Object node = new NotMaterialCondition(new HoleMaterialCondition());
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
 		assertFalse("hasFallback", t.hasFallback());
-		assertEq("bytecode length (NOT + HOLE)", 2, t.bytecode().length);
+		assertEq("bytecode length (NOT + HOLE + RETURN_DONE)", 3, t.bytecode().length);
 		assertEq("[0] OP_NOT", RuleBytecode.OP_NOT, t.bytecode()[0]);
 		assertEq("[1] OP_HOLE child", RuleBytecode.OP_HOLE, t.bytecode()[1]);
+		assertEq("[2] terminator", RuleBytecode.OP_RETURN_DONE, t.bytecode()[2]);
 	}
 
 	private static void opAboveYDefaultOperands() {
 		Object node = new AboveYMaterialCondition(); // 0, false
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
 		assertFalse("hasFallback", t.hasFallback());
-		byte[] expected = concat(new byte[]{RuleBytecode.OP_ABOVE_Y}, le32(0));
-		expected = concat(expected, new byte[]{0});
-		assertBytecode("above_y(0,false) bytes", t.bytecode(), expected);
+		byte[] body = concat(new byte[]{RuleBytecode.OP_ABOVE_Y}, le32(0));
+		body = concat(body, new byte[]{0});
+		assertBytecode("above_y(0,false) bytes", t.bytecode(), withTerminator(body));
 	}
 
 	// --- synthetic node classes -------------------------------------------

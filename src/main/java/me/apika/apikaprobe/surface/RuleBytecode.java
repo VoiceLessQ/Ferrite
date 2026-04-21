@@ -29,9 +29,18 @@ public final class RuleBytecode {
 	public static final byte OP_NOT           = 0x0B;
 
 	// Rules — produce blockstate or empty
-	public static final byte OP_SEQUENCE      = 0x0C;
-	public static final byte OP_CONDITION     = 0x0D;
+	public static final byte OP_SEQUENCE      = 0x0C; // legacy marker (no operands), unused after IF_ELSE/SEQUENCE_NEXT landed
+	public static final byte OP_CONDITION     = 0x0D; // legacy marker (no operands), unused after IF_ELSE/SEQUENCE_NEXT landed
 	public static final byte OP_BLOCK         = 0x0E;
+
+	// Control flow (per spec, with patched forward jump offsets).
+	// IF_ELSE: u32 then_offset, u32 else_offset — branch on cond accumulator
+	// SEQUENCE_NEXT: u32 end_offset — if value accumulator set, jump past sequence
+	// RETURN_DONE: trailing terminator — single emission at end of root bytecode
+	public static final byte OP_IF_ELSE       = 0x21;
+	public static final byte OP_SEQUENCE_NEXT = 0x22;
+	public static final byte OP_RETURN_EMPTY  = 0x23; // reserved; not currently emitted
+	public static final byte OP_RETURN_DONE   = 0x24;
 
 	// Vanilla-only exotic rules — recognised by dispatch (clean stats)
 	// but currently emitted as OP_FALLBACK pending a port path.
