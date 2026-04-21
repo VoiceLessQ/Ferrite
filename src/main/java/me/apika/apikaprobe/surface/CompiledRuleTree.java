@@ -14,13 +14,14 @@ public record CompiledRuleTree(
 		boolean hasFallback,
 		int opcodeCount,
 		Object[] blockstateTable,
-		java.util.List<String>[] biomeSetTable) {
+		java.util.List<String>[] biomeSetTable,
+		String[] noiseChannelTable) {
 
 	public static CompiledRuleTree fallbackOnly() {
 		@SuppressWarnings("unchecked")
 		java.util.List<String>[] empty = new java.util.List[0];
 		return new CompiledRuleTree(
 				new byte[]{RuleBytecode.OP_FALLBACK}, true, 1,
-				new Object[0], empty);
+				new Object[0], empty, new String[0]);
 	}
 }

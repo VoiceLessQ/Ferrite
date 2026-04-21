@@ -34,8 +34,10 @@ public final class SurfaceRuleCompiler {
 	private final ByteArrayOutputStream out = new ByteArrayOutputStream(1024);
 	private final PerWorldBlockStateTable.Builder tableBuilder = PerWorldBlockStateTable.builder();
 	private final BiomeSetPool.Builder biomePoolBuilder = BiomeSetPool.builder();
+	private final NoiseChannelPool.Builder noisePoolBuilder = NoiseChannelPool.builder();
 	private final java.util.List<Integer> blockIdOffsets = new java.util.ArrayList<>();
 	private final java.util.List<Integer> biomeIdOffsets = new java.util.ArrayList<>();
+	private final java.util.List<Integer> noiseIdOffsets = new java.util.ArrayList<>();
 	private boolean hasFallback = false;
 	private int opcodeCount = 0;
 
@@ -49,6 +51,7 @@ public final class SurfaceRuleCompiler {
 		c.visitRule(rootRule);
 		PerWorldBlockStateTable table = c.tableBuilder.freeze();
 		BiomeSetPool biomePool = c.biomePoolBuilder.freeze();
+		NoiseChannelPool noisePool = c.noisePoolBuilder.freeze();
 		byte[] bytecode = c.out.toByteArray();
 		// Patch every recorded blockstate-ID slot from insertion-order
 		// to final (sorted) ID so the bytecode is deterministic across
@@ -64,9 +67,15 @@ public final class SurfaceRuleCompiler {
 			int finalId = biomePool.finalIdFor(insertionId);
 			writeU16LE(bytecode, off, finalId);
 		}
+		// And for noise channel pool IDs (u16-wide).
+		for (int off : c.noiseIdOffsets) {
+			int insertionId = readU16LE(bytecode, off);
+			int finalId = noisePool.finalIdFor(insertionId);
+			writeU16LE(bytecode, off, finalId);
+		}
 		return new CompiledRuleTree(
 				bytecode, c.hasFallback, c.opcodeCount,
-				table.idToState(), biomePool.idToSet());
+				table.idToState(), biomePool.idToSet(), noisePool.idToChannel());
 	}
 
 	private static int readIntLE(byte[] b, int off) {
@@ -193,6 +202,13 @@ public final class SurfaceRuleCompiler {
 		out.write((v >>> 8) & 0xFF);
 	}
 
+	private void emitDouble(double d) {
+		long bits = Double.doubleToRawLongBits(d);
+		for (int i = 0; i < 8; i++) {
+			out.write((int)(bits >>> (i * 8)) & 0xFF);
+		}
+	}
+
 	/**
 	 * Read an int field by name from a node, with a default if missing.
 	 * Used for operand extraction across vanilla and synthetic test nodes.
@@ -203,6 +219,37 @@ public final class SurfaceRuleCompiler {
 			if (f == null) return dflt;
 			f.setAccessible(true);
 			return f.getInt(node);
+		} catch (ReflectiveOperationException e) {
+			return dflt;
+		}
+	}
+
+	/**
+	 * Read an enum-valued field and return its ordinal as a byte
+	 * (defaults to 0). Used for StoneDepth's surfaceType
+	 * (VerticalSurfaceType.FLOOR=0, CEILING=1).
+	 */
+	private static boolean readEnumOrdinalField(Object node, String name) {
+		try {
+			java.lang.reflect.Field f = findField(node.getClass(), name);
+			if (f == null) return false;
+			f.setAccessible(true);
+			Object v = f.get(node);
+			if (v instanceof Enum<?> e) {
+				return e.ordinal() != 0;
+			}
+			return false;
+		} catch (ReflectiveOperationException e) {
+			return false;
+		}
+	}
+
+	private static double readDoubleField(Object node, String name, double dflt) {
+		try {
+			java.lang.reflect.Field f = findField(node.getClass(), name);
+			if (f == null) return dflt;
+			f.setAccessible(true);
+			return f.getDouble(node);
 		} catch (ReflectiveOperationException e) {
 			return dflt;
 		}
@@ -257,6 +304,26 @@ public final class SurfaceRuleCompiler {
 				}
 			}
 			c = c.getSuperclass();
+		}
+		return null;
+	}
+
+	/**
+	 * Extract the noise reference (RegistryKey or similar) from a
+	 * {@code NoiseThresholdMaterialCondition}. Vanilla yarn typically
+	 * names this field {@code noise}.
+	 */
+	private static Object readNoiseField(Object node) {
+		for (String n : new String[]{"noise", "noiseKey", "noiseId"}) {
+			java.lang.reflect.Field f = findField(node.getClass(), n);
+			if (f == null) continue;
+			try {
+				f.setAccessible(true);
+				Object v = f.get(node);
+				if (v != null) return v;
+			} catch (ReflectiveOperationException ignored) {
+				// keep trying
+			}
 		}
 		return null;
 	}
@@ -368,10 +435,44 @@ public final class SurfaceRuleCompiler {
 				emitInt(readIntField(node, "surfaceDepthMultiplier", 0));
 				emitU8(readBoolField(node, "addStoneDepthBelow", false));
 			}
-			case "NoiseThresholdMaterialCondition"  -> emit(RuleBytecode.OP_NOISE_THRESH);
-			case "VerticalGradientMaterialCondition"-> emit(RuleBytecode.OP_VERT_GRADIENT);
-			case "StoneDepthMaterialCondition"      -> emit(RuleBytecode.OP_STONE_DEPTH);
-			case "WaterMaterialCondition"           -> emit(RuleBytecode.OP_WATER);
+			case "NoiseThresholdMaterialCondition" -> {
+				emit(RuleBytecode.OP_NOISE_THRESH);
+				Object noiseRef = readNoiseField(node);
+				String channelName = NoiseChannelPool.resolveName(noiseRef);
+				int insertionId = noisePoolBuilder.intern(channelName);
+				noiseIdOffsets.add(out.size()); // patch site BEFORE writing
+				emitU16(insertionId);
+				emitDouble(readDoubleField(node, "minThreshold", 0.0));
+				emitDouble(readDoubleField(node, "maxThreshold", 0.0));
+			}
+			case "VerticalGradientMaterialCondition" -> {
+				// Real seed extraction needs vanilla's randomDeriver (a
+				// per-world RNG splitter that produces a deterministic
+				// double per-Y from the seed Identifier). Without booting
+				// MC the splitter can't be reproduced, so emit fallback
+				// for this condition. Two occurrences in the default
+				// overworld tree — rounding error against the 528-node
+				// total.
+				emit(RuleBytecode.OP_FALLBACK);
+				hasFallback = true;
+			}
+			case "StoneDepthMaterialCondition" -> {
+				// Vanilla: StoneDepth(int offset, boolean addSurfaceDepth,
+				// int secondaryDepthRange, VerticalSurfaceType surfaceType)
+				emit(RuleBytecode.OP_STONE_DEPTH);
+				emitInt(readIntField(node, "offset", 0));
+				emitU8(readBoolField(node, "addSurfaceDepth", false));
+				emitInt(readIntField(node, "secondaryDepthRange", 0));
+				emitU8(readEnumOrdinalField(node, "surfaceType"));
+			}
+			case "WaterMaterialCondition" -> {
+				// Vanilla: Water(int offset, int surfaceDepthMultiplier,
+				// boolean addStoneDepthBelow)
+				emit(RuleBytecode.OP_WATER);
+				emitInt(readIntField(node, "offset", 0));
+				emitInt(readIntField(node, "surfaceDepthMultiplier", 0));
+				emitU8(readBoolField(node, "addStoneDepthBelow", false));
+			}
 			case "HoleMaterialCondition"            -> emit(RuleBytecode.OP_HOLE);
 			case "SurfaceMaterialCondition"         -> emit(RuleBytecode.OP_SURFACE);
 			case "BiomeMaterialCondition" -> {

@@ -41,6 +41,13 @@ public final class SurfaceRuleCompilerSelfTest {
 		failed += run("opBiomePoolDedup",        SurfaceRuleCompilerSelfTest::opBiomePoolDedup);
 		failed += run("opBiomePoolContentEq",    SurfaceRuleCompilerSelfTest::opBiomePoolContentEq);
 		failed += run("opBiomePoolSorted",       SurfaceRuleCompilerSelfTest::opBiomePoolSorted);
+		failed += run("opNoiseThreshLayout",     SurfaceRuleCompilerSelfTest::opNoiseThreshLayout);
+		failed += run("opNoisePoolDedup",        SurfaceRuleCompilerSelfTest::opNoisePoolDedup);
+		failed += run("opNoisePoolSorted",       SurfaceRuleCompilerSelfTest::opNoisePoolSorted);
+		failed += run("opStoneDepthLayout",      SurfaceRuleCompilerSelfTest::opStoneDepthLayout);
+		failed += run("opWaterLayout",           SurfaceRuleCompilerSelfTest::opWaterLayout);
+		failed += run("opVertGradientFallback",  SurfaceRuleCompilerSelfTest::opVertGradientFallback);
+		failed += run("opNotChild",              SurfaceRuleCompilerSelfTest::opNotChild);
 
 		if (failed == 0) {
 			System.out.println("[surface-rule-self-test] ALL PASS");
@@ -108,10 +115,12 @@ public final class SurfaceRuleCompilerSelfTest {
 	}
 
 	private static void everyKnownConditionType() {
+		// VerticalGradient is intentionally OP_FALLBACK (random seed
+		// extraction not implemented) — exclude from the no-fallback
+		// roundup. It still appears in the dispatch table.
 		List<Object> conds = List.of(
 			new AboveYMaterialCondition(),
 			new NoiseThresholdMaterialCondition(),
-			new VerticalGradientMaterialCondition(),
 			new StoneDepthMaterialCondition(),
 			new WaterMaterialCondition(),
 			new HoleMaterialCondition(),
@@ -360,6 +369,108 @@ public final class SurfaceRuleCompilerSelfTest {
 		assertEq("m → final id 1", 1, readU16At(t.bytecode(), 21));
 	}
 
+	private static double readDoubleAt(byte[] bytecode, int offset) {
+		long bits = 0;
+		for (int i = 0; i < 8; i++) {
+			bits |= ((long)(bytecode[offset + i] & 0xFF)) << (i * 8);
+		}
+		return Double.longBitsToDouble(bits);
+	}
+
+	private static void opNoiseThreshLayout() {
+		// Layout: OP(1) + u16 channel id(2) + f64 min(8) + f64 max(8) = 19 bytes
+		Object node = new NoiseThresholdMaterialCondition("test:channel_a", -0.5, 0.75);
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
+		assertFalse("hasFallback", t.hasFallback());
+		assertEq("noise pool size", 1, t.noiseChannelTable().length);
+		assertEq("noise channel name", "test:channel_a", t.noiseChannelTable()[0]);
+		assertEq("bytecode length", 19, t.bytecode().length);
+		assertEq("opcode", RuleBytecode.OP_NOISE_THRESH, t.bytecode()[0]);
+		assertEq("channel id (only entry)", 0, readU16At(t.bytecode(), 1));
+		if (readDoubleAt(t.bytecode(), 3) != -0.5) {
+			throw new AssertionError("min threshold mismatch: " + readDoubleAt(t.bytecode(), 3));
+		}
+		if (readDoubleAt(t.bytecode(), 11) != 0.75) {
+			throw new AssertionError("max threshold mismatch: " + readDoubleAt(t.bytecode(), 11));
+		}
+	}
+
+	private static void opNoisePoolDedup() {
+		Object root = new SequenceMaterialRule(java.util.List.of(
+			new NoiseThresholdMaterialCondition("shared", 0.0, 1.0),
+			new NoiseThresholdMaterialCondition("shared", 0.5, 1.5),
+			new NoiseThresholdMaterialCondition("shared", -1.0, 0.0)
+		));
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(root);
+		assertFalse("hasFallback", t.hasFallback());
+		assertEq("noise pool dedupes shared channel name", 1, t.noiseChannelTable().length);
+	}
+
+	private static void opNoisePoolSorted() {
+		Object root = new SequenceMaterialRule(java.util.List.of(
+			new NoiseThresholdMaterialCondition("z_chan", 0, 1),
+			new NoiseThresholdMaterialCondition("a_chan", 0, 1),
+			new NoiseThresholdMaterialCondition("m_chan", 0, 1)
+		));
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(root);
+		assertFalse("hasFallback", t.hasFallback());
+		assertEq("pool size", 3, t.noiseChannelTable().length);
+		assertEq("[0]", "a_chan", t.noiseChannelTable()[0]);
+		assertEq("[1]", "m_chan", t.noiseChannelTable()[1]);
+		assertEq("[2]", "z_chan", t.noiseChannelTable()[2]);
+		// Layout: SEQ(1) + 3 * NoiseThresh(19) = 58 bytes
+		// Channel u16 immediates at offsets 2, 21, 40
+		// Insertion: z(0), a(1), m(2). Sorted: a→0, m→1, z→2.
+		assertEq("z → final 2", 2, readU16At(t.bytecode(), 2));
+		assertEq("a → final 0", 0, readU16At(t.bytecode(), 21));
+		assertEq("m → final 1", 1, readU16At(t.bytecode(), 40));
+	}
+
+	private static void opStoneDepthLayout() {
+		// Layout: OP(1) + i32 offset(4) + u8 addSurfaceDepth(1) + i32 secondaryDepthRange(4) + u8 surfaceType(1) = 11 bytes
+		Object node = new StoneDepthMaterialCondition(3, true, 7, FakeSurfaceType.CEILING);
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
+		assertFalse("hasFallback", t.hasFallback());
+		assertEq("bytecode length", 11, t.bytecode().length);
+		assertEq("opcode", RuleBytecode.OP_STONE_DEPTH, t.bytecode()[0]);
+		// offset i32 at 1
+		assertEq("offset i32 le[0]", 3, t.bytecode()[1] & 0xFF);
+		assertEq("addSurfaceDepth u8", 1, t.bytecode()[5] & 0xFF);
+		assertEq("secondaryDepthRange i32 le[0]", 7, t.bytecode()[6] & 0xFF);
+		assertEq("surfaceType ordinal (CEILING=1)", 1, t.bytecode()[10] & 0xFF);
+	}
+
+	private static void opWaterLayout() {
+		// Layout: OP(1) + i32 offset(4) + i32 mult(4) + u8 addStoneDepthBelow(1) = 10 bytes
+		Object node = new WaterMaterialCondition(2, 5, true);
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
+		assertFalse("hasFallback", t.hasFallback());
+		assertEq("bytecode length", 10, t.bytecode().length);
+		assertEq("opcode", RuleBytecode.OP_WATER, t.bytecode()[0]);
+		assertEq("offset i32 le[0]", 2, t.bytecode()[1] & 0xFF);
+		assertEq("mult i32 le[0]", 5, t.bytecode()[5] & 0xFF);
+		assertEq("addStoneDepthBelow u8", 1, t.bytecode()[9] & 0xFF);
+	}
+
+	private static void opVertGradientFallback() {
+		// VerticalGradient is intentionally OP_FALLBACK pending real
+		// random-deriver port. Verify the dispatch routes correctly.
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(new VerticalGradientMaterialCondition());
+		assertTrue("hasFallback expected for VertGradient", t.hasFallback());
+		assertEq("bytecode is single OP_FALLBACK", RuleBytecode.OP_FALLBACK, t.bytecode()[0]);
+	}
+
+	private static void opNotChild() {
+		// OP_NOT followed by child opcode — the child's full bytecode
+		// stream lives in-line. Hole has zero operands so total = 2 bytes.
+		Object node = new NotMaterialCondition(new HoleMaterialCondition());
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
+		assertFalse("hasFallback", t.hasFallback());
+		assertEq("bytecode length (NOT + HOLE)", 2, t.bytecode().length);
+		assertEq("[0] OP_NOT", RuleBytecode.OP_NOT, t.bytecode()[0]);
+		assertEq("[1] OP_HOLE child", RuleBytecode.OP_HOLE, t.bytecode()[1]);
+	}
+
 	private static void opAboveYDefaultOperands() {
 		Object node = new AboveYMaterialCondition(); // 0, false
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
@@ -452,10 +563,45 @@ public final class SurfaceRuleCompilerSelfTest {
 			this.addStoneDepthBelow = addStoneDepthBelow;
 		}
 	}
-	static final class NoiseThresholdMaterialCondition {}
+	@SuppressWarnings("unused")
+	static final class NoiseThresholdMaterialCondition {
+		final String noise;
+		final double minThreshold;
+		final double maxThreshold;
+		NoiseThresholdMaterialCondition() { this("default", 0.0, 0.0); }
+		NoiseThresholdMaterialCondition(String noise, double min, double max) {
+			this.noise = noise;
+			this.minThreshold = min;
+			this.maxThreshold = max;
+		}
+	}
 	static final class VerticalGradientMaterialCondition {}
-	static final class StoneDepthMaterialCondition {}
-	static final class WaterMaterialCondition {}
+	enum FakeSurfaceType { FLOOR, CEILING }
+
+	@SuppressWarnings("unused")
+	static final class StoneDepthMaterialCondition {
+		final int offset;
+		final boolean addSurfaceDepth;
+		final int secondaryDepthRange;
+		final FakeSurfaceType surfaceType;
+		StoneDepthMaterialCondition() { this(0, false, 0, FakeSurfaceType.FLOOR); }
+		StoneDepthMaterialCondition(int o, boolean a, int s, FakeSurfaceType t) {
+			this.offset = o; this.addSurfaceDepth = a;
+			this.secondaryDepthRange = s; this.surfaceType = t;
+		}
+	}
+
+	@SuppressWarnings("unused")
+	static final class WaterMaterialCondition {
+		final int offset;
+		final int surfaceDepthMultiplier;
+		final boolean addStoneDepthBelow;
+		WaterMaterialCondition() { this(0, 0, false); }
+		WaterMaterialCondition(int o, int m, boolean a) {
+			this.offset = o; this.surfaceDepthMultiplier = m;
+			this.addStoneDepthBelow = a;
+		}
+	}
 	static final class HoleMaterialCondition {}
 	static final class SurfaceMaterialCondition {}
 	@SuppressWarnings("unused")
