@@ -32,6 +32,8 @@ import java.io.ByteArrayOutputStream;
 public final class SurfaceRuleCompiler {
 
 	private final ByteArrayOutputStream out = new ByteArrayOutputStream(1024);
+	private final PerWorldBlockStateTable.Builder tableBuilder = PerWorldBlockStateTable.builder();
+	private final java.util.List<Integer> blockIdOffsets = new java.util.ArrayList<>();
 	private boolean hasFallback = false;
 	private int opcodeCount = 0;
 
@@ -43,7 +45,31 @@ public final class SurfaceRuleCompiler {
 		}
 		SurfaceRuleCompiler c = new SurfaceRuleCompiler();
 		c.visitRule(rootRule);
-		return new CompiledRuleTree(c.out.toByteArray(), c.hasFallback, c.opcodeCount);
+		PerWorldBlockStateTable table = c.tableBuilder.freeze();
+		byte[] bytecode = c.out.toByteArray();
+		// Patch every recorded blockstate-ID slot from insertion-order
+		// to final (sorted) ID so the bytecode is deterministic across
+		// recompiles of the same tree.
+		for (int off : c.blockIdOffsets) {
+			int insertionId = readIntLE(bytecode, off);
+			int finalId = table.finalIdFor(insertionId);
+			writeIntLE(bytecode, off, finalId);
+		}
+		return new CompiledRuleTree(bytecode, c.hasFallback, c.opcodeCount, table.idToState());
+	}
+
+	private static int readIntLE(byte[] b, int off) {
+		return (b[off] & 0xFF)
+			| ((b[off + 1] & 0xFF) << 8)
+			| ((b[off + 2] & 0xFF) << 16)
+			| ((b[off + 3] & 0xFF) << 24);
+	}
+
+	private static void writeIntLE(byte[] b, int off, int v) {
+		b[off]     = (byte)(v        & 0xFF);
+		b[off + 1] = (byte)((v >>> 8)  & 0xFF);
+		b[off + 2] = (byte)((v >>> 16) & 0xFF);
+		b[off + 3] = (byte)((v >>> 24) & 0xFF);
 	}
 
 	/**
@@ -168,6 +194,48 @@ public final class SurfaceRuleCompiler {
 		}
 	}
 
+	/**
+	 * Extract the BlockState (or Block / state-like object) from a
+	 * leaf rule. Vanilla yarn uses {@code state} on
+	 * {@code SimpleBlockStateRule} and {@code resultState} or
+	 * {@code state} on {@code BlockMaterialRule} depending on version.
+	 * Try the common names; fall back to "any non-null, non-collection,
+	 * non-rule-package field".
+	 */
+	private static Object readStateField(Object node) {
+		for (String n : new String[]{"state", "resultState", "block", "blockState"}) {
+			java.lang.reflect.Field f = findField(node.getClass(), n);
+			if (f == null) continue;
+			try {
+				f.setAccessible(true);
+				Object v = f.get(node);
+				if (v != null) return v;
+			} catch (ReflectiveOperationException e) {
+				// keep trying other names
+			}
+		}
+		// Fallback walk: first non-null field whose package isn't ours.
+		Class<?> c = node.getClass();
+		while (c != null && c != Object.class) {
+			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+				if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+				try {
+					f.setAccessible(true);
+					Object v = f.get(node);
+					if (v == null) continue;
+					if (v instanceof java.util.Collection<?>) continue;
+					String pkg = v.getClass().getPackageName();
+					if (pkg.contains("surface")) continue;
+					return v;
+				} catch (ReflectiveOperationException ignored) {
+					// skip
+				}
+			}
+			c = c.getSuperclass();
+		}
+		return null;
+	}
+
 	private static java.lang.reflect.Field findField(Class<?> c, String name) {
 		while (c != null && c != Object.class) {
 			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
@@ -182,7 +250,13 @@ public final class SurfaceRuleCompiler {
 		String name = node.getClass().getSimpleName();
 		switch (name) {
 			case "BlockMaterialRule",
-				 "SimpleBlockStateRule" -> emit(RuleBytecode.OP_BLOCK);
+				 "SimpleBlockStateRule" -> {
+				emit(RuleBytecode.OP_BLOCK);
+				Object state = readStateField(node);
+				int insertionId = tableBuilder.intern(state);
+				blockIdOffsets.add(out.size()); // record patch site BEFORE writing
+				emitInt(insertionId);
+			}
 			case "TerracottaBandsMaterialRule" -> {
 				// Recognised vanilla node, but operand layout (random
 				// splitter seed + band palette) isn't ported yet. Emit

@@ -35,6 +35,9 @@ public final class SurfaceRuleCompilerSelfTest {
 		failed += run("opTemperatureZeroOperands", SurfaceRuleCompilerSelfTest::opTemperatureZeroOperands);
 		failed += run("opAboveYWithOperands",    SurfaceRuleCompilerSelfTest::opAboveYWithOperands);
 		failed += run("opAboveYDefaultOperands", SurfaceRuleCompilerSelfTest::opAboveYDefaultOperands);
+		failed += run("opBlockTableDedup",       SurfaceRuleCompilerSelfTest::opBlockTableDedup);
+		failed += run("opBlockTableSorted",      SurfaceRuleCompilerSelfTest::opBlockTableSorted);
+		failed += run("opBlockIdsDeterministic", SurfaceRuleCompilerSelfTest::opBlockIdsDeterministic);
 
 		if (failed == 0) {
 			System.out.println("[surface-rule-self-test] ALL PASS");
@@ -62,6 +65,12 @@ public final class SurfaceRuleCompilerSelfTest {
 		if (expected != actual) throw new AssertionError(what + " expected=" + expected + " actual=" + actual);
 	}
 
+	private static void assertEq(String what, String expected, String actual) {
+		if (!java.util.Objects.equals(expected, actual)) {
+			throw new AssertionError(what + " expected=" + expected + " actual=" + actual);
+		}
+	}
+
 	private static void assertFalse(String what, boolean v) {
 		if (v) throw new AssertionError(what + " was true");
 	}
@@ -80,7 +89,9 @@ public final class SurfaceRuleCompilerSelfTest {
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(new BlockMaterialRule());
 		assertFalse("hasFallback", t.hasFallback());
 		assertEq("opcodeCount", 1, t.opcodeCount());
+		assertEq("bytecode length (op + u32 id)", 5, t.bytecode().length);
 		assertEq("first byte", RuleBytecode.OP_BLOCK, t.bytecode()[0]);
+		assertEq("table size (1 unique state)", 1, t.blockstateTable().length);
 	}
 
 	private static void singleConditionTree() {
@@ -207,6 +218,78 @@ public final class SurfaceRuleCompilerSelfTest {
 		assertEq("above_y total length", 6, t.bytecode().length);
 	}
 
+	private static int readBlockIdAt(byte[] bytecode, int offset) {
+		return (bytecode[offset] & 0xFF)
+			| ((bytecode[offset + 1] & 0xFF) << 8)
+			| ((bytecode[offset + 2] & 0xFF) << 16)
+			| ((bytecode[offset + 3] & 0xFF) << 24);
+	}
+
+	private static void opBlockTableDedup() {
+		FakeBlockState shared = new FakeBlockState("minecraft:stone");
+		Object root = new SequenceMaterialRule(java.util.List.of(
+			new BlockMaterialRule(shared),
+			new BlockMaterialRule(shared),
+			new BlockMaterialRule(shared)
+		));
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(root);
+		assertFalse("hasFallback", t.hasFallback());
+		assertEq("table dedupes shared state", 1, t.blockstateTable().length);
+	}
+
+	private static void opBlockTableSorted() {
+		FakeBlockState a = new FakeBlockState("z_last");
+		FakeBlockState b = new FakeBlockState("a_first");
+		FakeBlockState c = new FakeBlockState("m_middle");
+		Object root = new SequenceMaterialRule(java.util.List.of(
+			new BlockMaterialRule(a), // insertion 0
+			new BlockMaterialRule(b), // insertion 1
+			new BlockMaterialRule(c)  // insertion 2
+		));
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(root);
+		assertFalse("hasFallback", t.hasFallback());
+		Object[] table = t.blockstateTable();
+		assertEq("table size", 3, table.length);
+		assertEq("[0] sorted=a_first", "a_first", table[0].toString());
+		assertEq("[1] sorted=m_middle", "m_middle", table[1].toString());
+		assertEq("[2] sorted=z_last", "z_last", table[2].toString());
+
+		// Bytecode IDs must reference final (sorted) positions, not insertion order.
+		// Layout: OP_SEQUENCE (1) + 3*(OP_BLOCK(1)+id(4)) = 16 bytes
+		assertEq("bytecode length", 16, t.bytecode().length);
+		// Slot for first BlockMaterialRule (a, insertion 0) is at offset 2.
+		// After sort, "a" → final id 2 (z_last). Verify.
+		assertEq("a → final id 2", 2, readBlockIdAt(t.bytecode(), 2));
+		assertEq("b → final id 0", 0, readBlockIdAt(t.bytecode(), 7));
+		assertEq("c → final id 1", 1, readBlockIdAt(t.bytecode(), 12));
+	}
+
+	private static void opBlockIdsDeterministic() {
+		// Same logical tree compiled twice must produce identical
+		// bytecode + identical IDs, even if a.toString() / b.toString()
+		// would have produced different insertion orders.
+		FakeBlockState a = new FakeBlockState("alpha");
+		FakeBlockState b = new FakeBlockState("beta");
+		Object t1 = new SequenceMaterialRule(java.util.List.of(
+			new BlockMaterialRule(b), new BlockMaterialRule(a)));
+		Object t2 = new SequenceMaterialRule(java.util.List.of(
+			new BlockMaterialRule(a), new BlockMaterialRule(b)));
+		CompiledRuleTree c1 = SurfaceRuleCompiler.compile(t1);
+		CompiledRuleTree c2 = SurfaceRuleCompiler.compile(t2);
+		// Tables should be in the same sorted order
+		assertEq("c1 table[0]", "alpha", c1.blockstateTable()[0].toString());
+		assertEq("c1 table[1]", "beta",  c1.blockstateTable()[1].toString());
+		assertEq("c2 table[0]", "alpha", c2.blockstateTable()[0].toString());
+		assertEq("c2 table[1]", "beta",  c2.blockstateTable()[1].toString());
+		// In both, alpha→0, beta→1 regardless of source insertion order
+		// c1 emits b first (final id 1 for beta) then a (final id 0)
+		assertEq("c1 first block id (beta)", 1, readBlockIdAt(c1.bytecode(), 2));
+		assertEq("c1 second block id (alpha)", 0, readBlockIdAt(c1.bytecode(), 7));
+		// c2 reverse
+		assertEq("c2 first block id (alpha)", 0, readBlockIdAt(c2.bytecode(), 2));
+		assertEq("c2 second block id (beta)", 1, readBlockIdAt(c2.bytecode(), 7));
+	}
+
 	private static void opAboveYDefaultOperands() {
 		Object node = new AboveYMaterialCondition(); // 0, false
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
@@ -237,11 +320,30 @@ public final class SurfaceRuleCompilerSelfTest {
 	// for tests; the compiler's package check has been written to accept
 	// any of the three. (See compiler comment.)
 
-	@SuppressWarnings("unused")
-	static final class BlockMaterialRule {}
+	/**
+	 * Synthetic stand-in for a vanilla BlockState. Lives in a non-surface
+	 * package so the compiler's recursion gate skips it (sortKey reaches
+	 * it via toString fallback since it has no getBlock()).
+	 */
+	static final class FakeBlockState {
+		final String name;
+		FakeBlockState(String name) { this.name = name; }
+		@Override public String toString() { return name; }
+	}
 
 	@SuppressWarnings("unused")
-	static final class SimpleBlockStateRule {}
+	static final class BlockMaterialRule {
+		final FakeBlockState state;
+		BlockMaterialRule() { this(new FakeBlockState("default")); }
+		BlockMaterialRule(FakeBlockState state) { this.state = state; }
+	}
+
+	@SuppressWarnings("unused")
+	static final class SimpleBlockStateRule {
+		final FakeBlockState state;
+		SimpleBlockStateRule() { this(new FakeBlockState("default")); }
+		SimpleBlockStateRule(FakeBlockState state) { this.state = state; }
+	}
 
 	static final class SequenceMaterialRule {
 		final List<Object> children;
