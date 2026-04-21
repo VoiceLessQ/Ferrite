@@ -2,6 +2,8 @@
 
 A Fabric performance mod for Minecraft 1.21.11. **Alpha — Windows 64-bit · Linux 64-bit · macOS (Intel + Apple Silicon).**
 
+Ferrite is a Fabric (Java) mod that calls into native Rust via JNI for the hot paths — Java handles Minecraft integration and mixins, Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary.
+
 ---
 
 ## What it does
