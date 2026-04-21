@@ -226,23 +226,66 @@ public final class SurfaceValidator {
 	}
 
 	private static String readBiomeName(Object ruleContext) {
+		// 1. Find a Supplier-typed field anywhere on the context.
+		Object supplier = findSupplierField(ruleContext);
+		if (supplier == null) return "unknown:no-supplier-field";
+
+		Object biomeEntry;
 		try {
-			Object supplier = readField(ruleContext, "biomeSupplier");
-			if (supplier == null) return "unknown";
-			Object biomeEntry = supplier.getClass().getMethod("get").invoke(supplier);
-			if (biomeEntry == null) return "unknown";
-			// RegistryEntry.getKey() → Optional<RegistryKey>
-			java.lang.reflect.Method getKey = biomeEntry.getClass().getMethod("getKey");
-			Object key = getKey.invoke(biomeEntry);
-			if (key instanceof java.util.Optional<?> opt && opt.isPresent()) {
-				Object regKey = opt.get();
-				Object id = regKey.getClass().getMethod("getValue").invoke(regKey);
-				return id == null ? "unknown" : id.toString();
-			}
-			return biomeEntry.toString();
-		} catch (ReflectiveOperationException | RuntimeException e) {
-			return "unknown";
+			biomeEntry = ((java.util.function.Supplier<?>) supplier).get();
+		} catch (ClassCastException e) {
+			return "unknown:not-supplier:" + supplier.getClass().getSimpleName();
+		} catch (RuntimeException e) {
+			return "unknown:supplier-threw:" + e.getClass().getSimpleName();
 		}
+		if (biomeEntry == null) return "unknown:null-entry";
+
+		// 2. Try RegistryEntry.getKey() — may return Optional<RegistryKey> or RegistryKey
+		try {
+			java.lang.reflect.Method getKey = biomeEntry.getClass().getMethod("getKey");
+			Object keyResult = getKey.invoke(biomeEntry);
+			if (keyResult instanceof java.util.Optional<?> opt) {
+				if (!opt.isPresent()) return "unknown:empty-optional";
+				return registryKeyValueString(opt.get());
+			}
+			if (keyResult != null) {
+				return registryKeyValueString(keyResult);
+			}
+			return "unknown:null-keyresult";
+		} catch (NoSuchMethodException e) {
+			return "unknown:no-getkey:" + biomeEntry.getClass().getSimpleName();
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return "unknown:getkey-threw:" + e.getClass().getSimpleName();
+		}
+	}
+
+	private static String registryKeyValueString(Object regKey) {
+		try {
+			Object id = regKey.getClass().getMethod("getValue").invoke(regKey);
+			return id == null ? "unknown:null-id" : id.toString();
+		} catch (NoSuchMethodException e) {
+			return "unknown:no-getvalue:" + regKey.getClass().getSimpleName();
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return "unknown:getvalue-threw:" + e.getClass().getSimpleName();
+		}
+	}
+
+	private static Object findSupplierField(Object o) {
+		Class<?> c = o.getClass();
+		while (c != null && c != Object.class) {
+			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+				if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+				try {
+					f.setAccessible(true);
+					Object v = f.get(o);
+					if (v instanceof java.util.function.Supplier<?>) return v;
+				} catch (ReflectiveOperationException ignored) {
+					// skip
+				}
+			}
+			c = c.getSuperclass();
+		}
+		return null;
 	}
 
 	private static Object readField(Object o, String name) {
