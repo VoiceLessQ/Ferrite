@@ -41,6 +41,19 @@ public final class SurfaceValidator {
 
 	private static volatile CompiledRuleTree cachedTree = null;
 
+	/** Captured per-thread MaterialRuleContext receiver, set by the
+	 *  initVerticalContext redirect just before tryApply fires. */
+	private static final ThreadLocal<Object> threadCtxRef = new ThreadLocal<>();
+	/** Captured per-thread vertical-state ints (blockY, fluidHeight,
+	 *  stoneDepthBelow, stoneDepthAbove, runDepth, secondaryDepth). */
+	private static final ThreadLocal<int[]> threadVertState = new ThreadLocal<>();
+
+	public static void captureVerticalContext(Object ctx, int blockY, int fluidHeight,
+			int stoneDepthBelow, int stoneDepthAbove, int runDepth, int sixth) {
+		threadCtxRef.set(ctx);
+		threadVertState.set(new int[]{blockY, fluidHeight, stoneDepthBelow, stoneDepthAbove, runDepth, sixth});
+	}
+
 	private static final AtomicLong sampleCounter = new AtomicLong();
 	private static final AtomicLong totalSamples = new AtomicLong();
 	private static final AtomicLong matches = new AtomicLong();
@@ -183,31 +196,33 @@ public final class SurfaceValidator {
 	 * sample is then dropped and counted in {@code contextBuildFails}.
 	 */
 	private static ColumnContext buildContext(Object surfaceBuilder, int x, int y, int z) {
-		try {
-			Object ruleContext = readField(surfaceBuilder, "context");
-			if (ruleContext == null) return null;
+		Object ruleContext = threadCtxRef.get();
+		int[] vert = threadVertState.get();
+		if (ruleContext == null || vert == null) return null;
 
-			String biome = readBiomeName(ruleContext);
-			int runDepth = readIntField(ruleContext, "runDepth");
-			int stoneDepthAbove = readIntField(ruleContext, "stoneDepthAbove");
-			int stoneDepthBelow = readIntField(ruleContext, "stoneDepthBelow");
-			int fluidHeight = readIntField(ruleContext, "fluidHeight");
-			int blockY = readIntField(ruleContext, "blockY");
+		// Captured arg order from initVerticalContext(I I I I I I)V — exact
+		// semantics of each int are TBD; the diff lines will tell us which
+		// position holds which field. For now treat them by intuition:
+		//   vert[0] = blockY, vert[1] = fluidHeight,
+		//   vert[2] = stoneDepthBelow, vert[3] = stoneDepthAbove,
+		//   vert[4] = runDepth, vert[5] = secondaryDepth (unused here)
+		String biome = readBiomeName(ruleContext);
+		int blockY = vert[0];
+		int fluidHeight = vert[1];
+		int stoneDepthBelow = vert[2];
+		int stoneDepthAbove = vert[3];
+		int runDepth = vert[4];
 
-			// Spike placeholders — these will mismatch in their respective
-			// conditions, that's intentional signal.
-			boolean isCold = false;
-			boolean isSteep = false;
-			int surfaceHeight = blockY;
+		// Spike placeholders — will mismatch in their respective conditions.
+		boolean isCold = false;
+		boolean isSteep = false;
+		int surfaceHeight = blockY;
 
-			return new ColumnContext(
-					biome, blockY != 0 ? blockY : y,
-					runDepth, stoneDepthAbove, stoneDepthBelow,
-					fluidHeight, isCold, isSteep, surfaceHeight,
-					new double[16]); // 16 noise channel slots, all zero — NoiseThresh will likely mismatch
-		} catch (RuntimeException e) {
-			return null;
-		}
+		return new ColumnContext(
+				biome, blockY,
+				runDepth, stoneDepthAbove, stoneDepthBelow,
+				fluidHeight, isCold, isSteep, surfaceHeight,
+				new double[16]); // 16 noise channels — all zero, NoiseThresh will mismatch
 	}
 
 	private static String readBiomeName(Object ruleContext) {

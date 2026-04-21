@@ -57,4 +57,33 @@ public abstract class SurfaceValidatorMixin {
 			throw new RuntimeException("tryApply invocation failed", e);
 		}
 	}
+
+	/**
+	 * Capture the MaterialRuleContext receiver + vertical-state args
+	 * just before tryApply fires for this column-Y position. The context
+	 * is a local in buildSurface (not a field on SurfaceBuilder), so
+	 * this redirect is the only stable way to grab it without an access
+	 * widener.
+	 */
+	@Redirect(
+		method = "buildSurface",
+		at = @At(
+			value = "INVOKE",
+			target = "Lnet/minecraft/world/gen/surfacebuilder/MaterialRules$MaterialRuleContext;initVerticalContext(IIIIII)V"
+		)
+	)
+	private void ferrite$captureContext(@Coerce Object ctx,
+			int a, int b, int c, int d, int e, int f) {
+		if (SurfaceValidator.isEnabled()) {
+			SurfaceValidator.captureVerticalContext(ctx, a, b, c, d, e, f);
+		}
+		// Call through to vanilla via reflection.
+		try {
+			java.lang.reflect.Method m = ctx.getClass().getMethod("initVerticalContext",
+					int.class, int.class, int.class, int.class, int.class, int.class);
+			m.invoke(ctx, a, b, c, d, e, f);
+		} catch (ReflectiveOperationException ex) {
+			throw new RuntimeException("initVerticalContext invocation failed", ex);
+		}
+	}
 }
