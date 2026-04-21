@@ -31,18 +31,20 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_computeRedstoneBfs<'l
         return 0;
     }
 
-    let req_ptr = env
-        .get_direct_buffer_address(&requests_buf)
-        .expect("requests buffer must be direct");
-    let req_cap = env
-        .get_direct_buffer_capacity(&requests_buf)
-        .expect("requests capacity unavailable");
-    let res_ptr = env
-        .get_direct_buffer_address(&results_buf)
-        .expect("results buffer must be direct");
-    let res_cap = env
-        .get_direct_buffer_capacity(&results_buf)
-        .expect("results capacity unavailable");
+    // Buffer resolution must never panic across the JNI boundary; any
+    // failure here returns 0 deltas so Java applies nothing this tick.
+    let Some(req_ptr) = env.get_direct_buffer_address(&requests_buf).ok() else {
+        return 0;
+    };
+    let Some(req_cap) = env.get_direct_buffer_capacity(&requests_buf).ok() else {
+        return 0;
+    };
+    let Some(res_ptr) = env.get_direct_buffer_address(&results_buf).ok() else {
+        return 0;
+    };
+    let Some(res_cap) = env.get_direct_buffer_capacity(&results_buf).ok() else {
+        return 0;
+    };
 
     let request_bytes = count * std::mem::size_of::<RedstoneNode>();
     let result_bytes = count * std::mem::size_of::<RedstoneResult>();

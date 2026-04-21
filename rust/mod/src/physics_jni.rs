@@ -45,31 +45,19 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_computeEntityPhysics<
     }
 
     // --- Resolve buffer addresses ------------------------------------------
+    //
+    // Resolve the results buffer first: it's the only one we write to, and
+    // we need a valid pointer to stamp FALLBACK on any subsequent failure.
+    // JNI calls must never panic across the boundary, so every address /
+    // capacity fetch uses .ok() + early return.
 
-    let snap_ptr = env
-        .get_direct_buffer_address(&snapshot_buf)
-        .expect("snapshot buffer must be direct");
-    let snap_cap = env
-        .get_direct_buffer_capacity(&snapshot_buf)
-        .expect("snapshot capacity unavailable");
+    let Some(res_ptr) = env.get_direct_buffer_address(&results_buf).ok() else {
+        return;
+    };
+    let Some(res_cap) = env.get_direct_buffer_capacity(&results_buf).ok() else {
+        return;
+    };
 
-    let req_ptr = env
-        .get_direct_buffer_address(&requests_buf)
-        .expect("requests buffer must be direct");
-    let req_cap = env
-        .get_direct_buffer_capacity(&requests_buf)
-        .expect("requests capacity unavailable");
-
-    let res_ptr = env
-        .get_direct_buffer_address(&results_buf)
-        .expect("results buffer must be direct");
-    let res_cap = env
-        .get_direct_buffer_capacity(&results_buf)
-        .expect("results capacity unavailable");
-
-    // Bounds: the result buffer must be large enough to hold `count` entries
-    // before we do anything else — it's the only one we write to, and we
-    // rely on being able to stamp FALLBACK across it on any failure below.
     let result_bytes = count * std::mem::size_of::<EntityResult>();
     if res_cap < result_bytes {
         return; // can't safely write; Java will observe stale data, but it
@@ -82,6 +70,24 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_computeEntityPhysics<
 
     // From here on, any early return must flag every result as FALLBACK so
     // Java never reads uninitialized/stale adjusted motion as valid.
+    let Some(snap_ptr) = env.get_direct_buffer_address(&snapshot_buf).ok() else {
+        mark_all_fallback(results);
+        return;
+    };
+    let Some(snap_cap) = env.get_direct_buffer_capacity(&snapshot_buf).ok() else {
+        mark_all_fallback(results);
+        return;
+    };
+
+    let Some(req_ptr) = env.get_direct_buffer_address(&requests_buf).ok() else {
+        mark_all_fallback(results);
+        return;
+    };
+    let Some(req_cap) = env.get_direct_buffer_capacity(&requests_buf).ok() else {
+        mark_all_fallback(results);
+        return;
+    };
+
     let request_bytes = count * std::mem::size_of::<EntityRequest>();
     if req_cap < request_bytes || snap_cap < SNAPSHOT_HEADER_BYTES {
         mark_all_fallback(results);
