@@ -6,6 +6,9 @@ import com.mojang.brigadier.CommandDispatcher;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 
 import me.apika.apikaprobe.redstone.FerriteWireConfig;
+import me.apika.apikaprobe.surface.CompiledRuleTree;
+import me.apika.apikaprobe.surface.SurfaceRuleAccess;
+import me.apika.apikaprobe.surface.SurfaceRuleCompiler;
 
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
@@ -54,7 +57,10 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("ac")
 								.then(CommandManager.literal("on").executes(FerriteCommand::enableAc))
 								.then(CommandManager.literal("off").executes(FerriteCommand::disableAc))
-								.then(CommandManager.literal("status").executes(FerriteCommand::statusAc)))));
+								.then(CommandManager.literal("status").executes(FerriteCommand::statusAc))))
+				.then(CommandManager.literal("surface")
+						.then(CommandManager.literal("compile").executes(FerriteCommand::surfaceCompile))
+						.then(CommandManager.literal("stats").executes(FerriteCommand::surfaceStats))));
 	}
 
 	/**
@@ -119,6 +125,62 @@ public final class FerriteCommand {
 				FerriteWireConfig.UPDATE_ORDER.id());
 		sendFeedback(ctx, msg, false);
 		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * /ferrite surface compile — extract the active world's surface
+	 * rule, compile it through {@link SurfaceRuleCompiler}, and report
+	 * opcode count, byte length, and fallback verdict. The fallback
+	 * verdict is the headline number — until every condition node in
+	 * the default tree has operand extraction, this will be true.
+	 */
+	private static int surfaceCompile(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
+		if (!extracted.ok()) {
+			String msg = "[surface] compile failed: " + extracted.error();
+			sendFeedback(ctx, msg, false);
+			ExampleMod.LOGGER.warn(msg);
+			return 0;
+		}
+		CompiledRuleTree tree = SurfaceRuleCompiler.compile(extracted.surfaceRule());
+		String msg = String.format(
+			"[surface] compiled: opcodes=%d bytes=%d hasFallback=%s generator=%s",
+			tree.opcodeCount(),
+			tree.bytecode().length,
+			tree.hasFallback(),
+			extracted.generatorClass());
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * /ferrite surface stats — walks the active world's surface rule
+	 * tree and reports a count per node simple-name. Unknown nodes
+	 * appear as "_UNKNOWN:Foo" entries — those are what the operand
+	 * extractor pass needs to handle next. Answers spec open-item #1.
+	 */
+	private static int surfaceStats(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
+		if (!extracted.ok()) {
+			String msg = "[surface] stats failed: " + extracted.error();
+			sendFeedback(ctx, msg, false);
+			ExampleMod.LOGGER.warn(msg);
+			return 0;
+		}
+		java.util.Map<String, Integer> stats = SurfaceRuleCompiler.collectStats(extracted.surfaceRule());
+		int total = stats.values().stream().mapToInt(Integer::intValue).sum();
+		long unknown = stats.keySet().stream().filter(k -> k.startsWith("_UNKNOWN:")).count();
+		String summary = String.format(
+			"[surface] stats: %d total nodes, %d distinct types, %d unknown types",
+			total, stats.size(), unknown);
+		sendFeedback(ctx, summary, false);
+		ExampleMod.LOGGER.info(summary);
+		// Per-type breakdown — log only (chat would spam)
+		ExampleMod.LOGGER.info("[surface] node type counts:");
+		stats.forEach((name, count) -> ExampleMod.LOGGER.info("[surface]   {} = {}", name, count));
+		sendFeedback(ctx, "[surface] full breakdown in latest.log under [surface]", false);
 		return Command.SINGLE_SUCCESS;
 	}
 

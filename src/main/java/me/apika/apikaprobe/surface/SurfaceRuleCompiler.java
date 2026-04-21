@@ -46,6 +46,68 @@ public final class SurfaceRuleCompiler {
 		return new CompiledRuleTree(c.out.toByteArray(), c.hasFallback, c.opcodeCount);
 	}
 
+	/**
+	 * Walks the rule tree counting node types by simple-name without
+	 * emitting bytecode. Answers spec open-item #1 (which conditions
+	 * appear in the default tree, and how often).
+	 *
+	 * Returns a map of simple-name → count. Sorted alphabetically for
+	 * stable output. An "_UNKNOWN" entry, if present, indicates nodes
+	 * the dispatch table doesn't recognise — the same nodes that would
+	 * trip {@link CompiledRuleTree#hasFallback}.
+	 */
+	public static java.util.Map<String, Integer> collectStats(Object rootRule) {
+		java.util.TreeMap<String, Integer> out = new java.util.TreeMap<>();
+		if (rootRule == null) return out;
+		walkForStats(rootRule, out);
+		return out;
+	}
+
+	private static final java.util.Set<String> KNOWN_NODES = java.util.Set.of(
+		"BlockMaterialRule", "SimpleBlockStateRule",
+		"SequenceMaterialRule", "SequenceBlockStateRule",
+		"ConditionMaterialRule", "ConditionalBlockStateRule",
+		"AboveYMaterialCondition", "NoiseThresholdMaterialCondition",
+		"VerticalGradientMaterialCondition", "StoneDepthMaterialCondition",
+		"WaterMaterialCondition", "HoleMaterialCondition",
+		"SurfaceMaterialCondition", "BiomeMaterialCondition",
+		"TemperatureMaterialCondition", "SteepMaterialCondition",
+		"NotMaterialCondition"
+	);
+
+	private static void walkForStats(Object node, java.util.Map<String, Integer> counts) {
+		String name = node.getClass().getSimpleName();
+		String key = KNOWN_NODES.contains(name) ? name : ("_UNKNOWN:" + name);
+		counts.merge(key, 1, Integer::sum);
+
+		Class<?> c = node.getClass();
+		while (c != null && c != Object.class) {
+			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+				if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+				try {
+					f.setAccessible(true);
+					Object v = f.get(node);
+					if (v == null) continue;
+					recurseStatsIfRuleNode(v, counts);
+				} catch (ReflectiveOperationException | RuntimeException ignored) {
+					// skip
+				}
+			}
+			c = c.getSuperclass();
+		}
+	}
+
+	private static void recurseStatsIfRuleNode(Object v, java.util.Map<String, Integer> counts) {
+		if (v instanceof java.util.List<?> list) {
+			for (Object item : list) recurseStatsIfRuleNode(item, counts);
+			return;
+		}
+		String pkg = v.getClass().getPackageName();
+		if (pkg.contains("surface")) {
+			walkForStats(v, counts);
+		}
+	}
+
 	private void emit(byte opcode) {
 		out.write(opcode & 0xFF);
 		opcodeCount++;
