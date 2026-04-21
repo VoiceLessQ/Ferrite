@@ -35,7 +35,8 @@
 		"RedstoneOracleMixin",
 		"RedstoneControllerInvoker",
 		"RedstoneRustMixin",
-		"FerriteControllerInstallMixin"
+		"FerriteControllerInstallMixin",
+		"SurfaceValidatorMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

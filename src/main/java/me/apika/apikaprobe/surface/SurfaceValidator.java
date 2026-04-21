@@ -1,0 +1,266 @@
+package me.apika.apikaprobe.surface;
+
+import java.util.concurrent.atomic.AtomicLong;
+
+import me.apika.apikaprobe.ExampleMod;
+
+/**
+ * Live diff-and-log validator for the bytecode evaluator.
+ *
+ * Hooked into {@code SurfaceBuilder.buildSurface} via
+ * {@code SurfaceValidatorMixin}. When enabled, every Nth call to the
+ * top-level {@code BlockStateRule.tryApply(x, y, z)} runs the
+ * compiled-bytecode evaluator with the same column inputs, diffs the
+ * result against vanilla's, and logs mismatches.
+ *
+ * <h3>Sampling</h3>
+ * 1-in-{@link #SAMPLE_EVERY_N} sampling (default 1000). The hot loop
+ * fires 16K-65K times per chunk per PROFILING.md, so per-call
+ * validation would tank chunkgen. Sampling at this rate yields
+ * thousands of comparisons per minute of active play — enough to
+ * surface systematic mismatches without measurable overhead.
+ *
+ * <h3>Spike scope</h3>
+ * Context extraction from {@code MaterialRuleContext} is best-effort
+ * reflection. A handful of fields are placeholders (isCold, isSteep,
+ * surfaceHeight) — those will mismatch in their respective conditions
+ * and that's intentional. The diff lines tell us what to fix next.
+ *
+ * <h3>Lifecycle</h3>
+ * Tree is installed via {@code /ferrite surface validate} (compiles
+ * the active world's surface rule and stores it here). When
+ * {@link #cachedTree} is non-null, the mixin is live. {@code /ferrite
+ * surface validate-off} clears it.
+ */
+public final class SurfaceValidator {
+
+	private SurfaceValidator() {}
+
+	private static final int SAMPLE_EVERY_N = 1000;
+	private static final long REPORT_INTERVAL_TICKS = 100; // 5 seconds @ 20 TPS
+
+	private static volatile CompiledRuleTree cachedTree = null;
+
+	private static final AtomicLong sampleCounter = new AtomicLong();
+	private static final AtomicLong totalSamples = new AtomicLong();
+	private static final AtomicLong matches = new AtomicLong();
+	private static final AtomicLong mismatches = new AtomicLong();
+	private static final AtomicLong nullVanilla = new AtomicLong();
+	private static final AtomicLong evalNull = new AtomicLong();
+	private static final AtomicLong contextBuildFails = new AtomicLong();
+	private static long lastReportTick = 0;
+
+	public static boolean isEnabled() {
+		return cachedTree != null;
+	}
+
+	public static void install(CompiledRuleTree tree) {
+		cachedTree = tree;
+		resetStats();
+		ExampleMod.LOGGER.info("[surface-validate] installed compiled tree (bytecode={} bytes, hasFallback={})",
+				tree.bytecode().length, tree.hasFallback());
+	}
+
+	public static void uninstall() {
+		cachedTree = null;
+		ExampleMod.LOGGER.info("[surface-validate] uninstalled — final stats: " + statsLine());
+	}
+
+	private static void resetStats() {
+		sampleCounter.set(0);
+		totalSamples.set(0);
+		matches.set(0);
+		mismatches.set(0);
+		nullVanilla.set(0);
+		evalNull.set(0);
+		contextBuildFails.set(0);
+	}
+
+	public static String statsLine() {
+		long total = totalSamples.get();
+		long m = matches.get();
+		long mm = mismatches.get();
+		long nv = nullVanilla.get();
+		long en = evalNull.get();
+		long cf = contextBuildFails.get();
+		double rate = total == 0 ? 0.0 : (100.0 * m / total);
+		return String.format(
+				"[surface-validate] samples=%d match=%.1f%% mismatches=%d nullVanilla=%d evalNull=%d ctxBuildFails=%d",
+				total, rate, mm, nv, en, cf);
+	}
+
+	/**
+	 * Per-server-tick reporter hook. Logs the stats line every
+	 * {@link #REPORT_INTERVAL_TICKS} ticks while the validator is
+	 * enabled. Currently unused — wire from a tick mixin if desired.
+	 */
+	public static void onServerTick(long currentTick) {
+		if (!isEnabled()) return;
+		if (currentTick - lastReportTick < REPORT_INTERVAL_TICKS) return;
+		lastReportTick = currentTick;
+		ExampleMod.LOGGER.info(statsLine());
+	}
+
+	/**
+	 * Called from the mixin redirect on every {@code tryApply} call.
+	 * Sampling decision happens here to keep the redirect hot-path tiny.
+	 */
+	public static void maybeValidate(Object surfaceBuilder, int x, int y, int z, Object vanillaResult) {
+		CompiledRuleTree tree = cachedTree;
+		if (tree == null) return;
+		long counter = sampleCounter.incrementAndGet();
+		if (counter % SAMPLE_EVERY_N != 0) return;
+
+		ColumnContext ctx = buildContext(surfaceBuilder, x, y, z);
+		if (ctx == null) {
+			contextBuildFails.incrementAndGet();
+			return;
+		}
+
+		Object ourResult;
+		try {
+			ourResult = SurfaceRuleEvaluator.evaluate(tree, ctx);
+		} catch (RuntimeException e) {
+			ExampleMod.LOGGER.warn("[surface-validate] evaluator threw at ({},{},{}): {}",
+					x, y, z, e.toString());
+			return;
+		}
+
+		totalSamples.incrementAndGet();
+		String vName = stringify(vanillaResult);
+		String oName = stringify(ourResult);
+		if (vanillaResult == null) nullVanilla.incrementAndGet();
+		if (ourResult == null) evalNull.incrementAndGet();
+
+		if (java.util.Objects.equals(vName, oName)) {
+			matches.incrementAndGet();
+		} else {
+			mismatches.incrementAndGet();
+			// Rate-limit the per-mismatch log line to avoid flooding —
+			// log only the first 50, then suppress.
+			long mm = mismatches.get();
+			if (mm <= 50) {
+				ExampleMod.LOGGER.warn(
+					"[surface-validate] mismatch #{} at ({},{},{}) vanilla={} eval={} biome={} runDepth={} fluid={}",
+					mm, x, y, z, vName, oName,
+					ctx.biomeName(), ctx.runDepth(), ctx.fluidHeight());
+			} else if (mm == 51) {
+				ExampleMod.LOGGER.warn("[surface-validate] suppressing further mismatch lines (>50)");
+			}
+		}
+	}
+
+	private static String stringify(Object blockstate) {
+		if (blockstate == null) return "null";
+		// Try .getBlock().getRegistryEntry().getKey().getValue() — keep best-effort
+		try {
+			Object block = blockstate.getClass().getMethod("getBlock").invoke(blockstate);
+			if (block != null) {
+				try {
+					Class<?> registries = Class.forName("net.minecraft.registry.Registries");
+					Object reg = registries.getField("BLOCK").get(null);
+					for (java.lang.reflect.Method m : reg.getClass().getMethods()) {
+						if (m.getName().equals("getId") && m.getParameterCount() == 1) {
+							Object id = m.invoke(reg, block);
+							if (id != null) return id.toString();
+						}
+					}
+				} catch (ReflectiveOperationException | RuntimeException ignored) {
+					// fall through
+				}
+			}
+		} catch (ReflectiveOperationException | RuntimeException ignored) {
+			// fall through
+		}
+		return blockstate.toString();
+	}
+
+	/**
+	 * Reflectively build a {@link ColumnContext} from the
+	 * {@code SurfaceBuilder}'s active {@code MaterialRuleContext}.
+	 *
+	 * Returns null if any required field can't be resolved — the
+	 * sample is then dropped and counted in {@code contextBuildFails}.
+	 */
+	private static ColumnContext buildContext(Object surfaceBuilder, int x, int y, int z) {
+		try {
+			Object ruleContext = readField(surfaceBuilder, "context");
+			if (ruleContext == null) return null;
+
+			String biome = readBiomeName(ruleContext);
+			int runDepth = readIntField(ruleContext, "runDepth");
+			int stoneDepthAbove = readIntField(ruleContext, "stoneDepthAbove");
+			int stoneDepthBelow = readIntField(ruleContext, "stoneDepthBelow");
+			int fluidHeight = readIntField(ruleContext, "fluidHeight");
+			int blockY = readIntField(ruleContext, "blockY");
+
+			// Spike placeholders — these will mismatch in their respective
+			// conditions, that's intentional signal.
+			boolean isCold = false;
+			boolean isSteep = false;
+			int surfaceHeight = blockY;
+
+			return new ColumnContext(
+					biome, blockY != 0 ? blockY : y,
+					runDepth, stoneDepthAbove, stoneDepthBelow,
+					fluidHeight, isCold, isSteep, surfaceHeight,
+					new double[16]); // 16 noise channel slots, all zero — NoiseThresh will likely mismatch
+		} catch (RuntimeException e) {
+			return null;
+		}
+	}
+
+	private static String readBiomeName(Object ruleContext) {
+		try {
+			Object supplier = readField(ruleContext, "biomeSupplier");
+			if (supplier == null) return "unknown";
+			Object biomeEntry = supplier.getClass().getMethod("get").invoke(supplier);
+			if (biomeEntry == null) return "unknown";
+			// RegistryEntry.getKey() → Optional<RegistryKey>
+			java.lang.reflect.Method getKey = biomeEntry.getClass().getMethod("getKey");
+			Object key = getKey.invoke(biomeEntry);
+			if (key instanceof java.util.Optional<?> opt && opt.isPresent()) {
+				Object regKey = opt.get();
+				Object id = regKey.getClass().getMethod("getValue").invoke(regKey);
+				return id == null ? "unknown" : id.toString();
+			}
+			return biomeEntry.toString();
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return "unknown";
+		}
+	}
+
+	private static Object readField(Object o, String name) {
+		Class<?> c = o.getClass();
+		while (c != null && c != Object.class) {
+			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+				if (!f.getName().equals(name)) continue;
+				try {
+					f.setAccessible(true);
+					return f.get(o);
+				} catch (ReflectiveOperationException e) {
+					return null;
+				}
+			}
+			c = c.getSuperclass();
+		}
+		return null;
+	}
+
+	private static int readIntField(Object o, String name) {
+		Class<?> c = o.getClass();
+		while (c != null && c != Object.class) {
+			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+				if (!f.getName().equals(name)) continue;
+				try {
+					f.setAccessible(true);
+					return f.getInt(o);
+				} catch (ReflectiveOperationException e) {
+					return 0;
+				}
+			}
+			c = c.getSuperclass();
+		}
+		return 0;
+	}
+}

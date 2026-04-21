@@ -9,6 +9,7 @@ import me.apika.apikaprobe.redstone.FerriteWireConfig;
 import me.apika.apikaprobe.surface.CompiledRuleTree;
 import me.apika.apikaprobe.surface.SurfaceRuleAccess;
 import me.apika.apikaprobe.surface.SurfaceRuleCompiler;
+import me.apika.apikaprobe.surface.SurfaceValidator;
 
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
@@ -60,7 +61,10 @@ public final class FerriteCommand {
 								.then(CommandManager.literal("status").executes(FerriteCommand::statusAc))))
 				.then(CommandManager.literal("surface")
 						.then(CommandManager.literal("compile").executes(FerriteCommand::surfaceCompile))
-						.then(CommandManager.literal("stats").executes(FerriteCommand::surfaceStats))));
+						.then(CommandManager.literal("stats").executes(FerriteCommand::surfaceStats))
+						.then(CommandManager.literal("validate").executes(FerriteCommand::surfaceValidate))
+						.then(CommandManager.literal("validate-off").executes(FerriteCommand::surfaceValidateOff))
+						.then(CommandManager.literal("validate-stats").executes(FerriteCommand::surfaceValidateStats))));
 	}
 
 	/**
@@ -184,6 +188,44 @@ public final class FerriteCommand {
 		ExampleMod.LOGGER.info("[surface] node type counts:");
 		stats.forEach((name, count) -> ExampleMod.LOGGER.info("[surface]   {} = {}", name, count));
 		sendFeedback(ctx, "[surface] full breakdown in latest.log under [surface]", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * /ferrite surface validate — compile the active world's surface
+	 * rule and install it as the validator's active tree. The mixin
+	 * picks up subsequent tryApply calls and diffs against vanilla.
+	 * Mismatches log to [surface-validate]; rate-limited to first 50.
+	 */
+	private static int surfaceValidate(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
+		if (!extracted.ok()) {
+			String msg = "[surface-validate] install failed: " + extracted.error();
+			sendFeedback(ctx, msg, false);
+			ExampleMod.LOGGER.warn(msg);
+			return 0;
+		}
+		CompiledRuleTree tree = SurfaceRuleCompiler.compile(extracted.surfaceRule());
+		SurfaceValidator.install(tree);
+		String msg = String.format(
+			"[surface-validate] enabled (bytes=%d hasFallback=%s) — load chunks to generate samples",
+			tree.bytecode().length, tree.hasFallback());
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int surfaceValidateOff(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		String finalStats = SurfaceValidator.statsLine();
+		SurfaceValidator.uninstall();
+		sendFeedback(ctx, "[surface-validate] disabled — final stats: " + finalStats, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int surfaceValidateStats(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		String line = SurfaceValidator.statsLine();
+		sendFeedback(ctx, line, false);
+		ExampleMod.LOGGER.info(line);
 		return Command.SINGLE_SUCCESS;
 	}
 
