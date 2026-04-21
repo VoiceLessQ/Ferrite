@@ -29,6 +29,12 @@ public final class SurfaceRuleCompilerSelfTest {
 		failed += run("everyKnownConditionType", SurfaceRuleCompilerSelfTest::everyKnownConditionType);
 		failed += run("unknownNodeFallback",     SurfaceRuleCompilerSelfTest::unknownNodeFallback);
 		failed += run("nestedSequenceTree",      SurfaceRuleCompilerSelfTest::nestedSequenceTree);
+		failed += run("opHoleZeroOperands",      SurfaceRuleCompilerSelfTest::opHoleZeroOperands);
+		failed += run("opSteepZeroOperands",     SurfaceRuleCompilerSelfTest::opSteepZeroOperands);
+		failed += run("opSurfaceZeroOperands",   SurfaceRuleCompilerSelfTest::opSurfaceZeroOperands);
+		failed += run("opTemperatureZeroOperands", SurfaceRuleCompilerSelfTest::opTemperatureZeroOperands);
+		failed += run("opAboveYWithOperands",    SurfaceRuleCompilerSelfTest::opAboveYWithOperands);
+		failed += run("opAboveYDefaultOperands", SurfaceRuleCompilerSelfTest::opAboveYDefaultOperands);
 
 		if (failed == 0) {
 			System.out.println("[surface-rule-self-test] ALL PASS");
@@ -135,6 +141,81 @@ public final class SurfaceRuleCompilerSelfTest {
 		assertInRange("opcodeCount nested", t.opcodeCount(), 5, 64);
 	}
 
+	// --- operand-extraction tests (items 1-5) -----------------------------
+
+	private static void assertBytecode(String what, byte[] actual, byte... expected) {
+		if (actual.length != expected.length) {
+			throw new AssertionError(what + " length expected=" + expected.length + " actual=" + actual.length);
+		}
+		for (int i = 0; i < expected.length; i++) {
+			if (actual[i] != expected[i]) {
+				throw new AssertionError(what + " byte[" + i + "] expected=" + (expected[i] & 0xFF)
+						+ " actual=" + (actual[i] & 0xFF));
+			}
+		}
+	}
+
+	private static byte[] le32(int v) {
+		return new byte[]{
+			(byte)(v        & 0xFF),
+			(byte)((v >>> 8)  & 0xFF),
+			(byte)((v >>> 16) & 0xFF),
+			(byte)((v >>> 24) & 0xFF)
+		};
+	}
+
+	private static byte[] concat(byte[] a, byte[] b) {
+		byte[] r = new byte[a.length + b.length];
+		System.arraycopy(a, 0, r, 0, a.length);
+		System.arraycopy(b, 0, r, a.length, b.length);
+		return r;
+	}
+
+	private static void opHoleZeroOperands() {
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(new HoleMaterialCondition());
+		assertFalse("hasFallback", t.hasFallback());
+		assertBytecode("hole bytes", t.bytecode(), RuleBytecode.OP_HOLE);
+	}
+
+	private static void opSteepZeroOperands() {
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(new SteepMaterialCondition());
+		assertFalse("hasFallback", t.hasFallback());
+		assertBytecode("steep bytes", t.bytecode(), RuleBytecode.OP_STEEP);
+	}
+
+	private static void opSurfaceZeroOperands() {
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(new SurfaceMaterialCondition());
+		assertFalse("hasFallback", t.hasFallback());
+		assertBytecode("surface bytes", t.bytecode(), RuleBytecode.OP_SURFACE);
+	}
+
+	private static void opTemperatureZeroOperands() {
+		// Vanilla TemperatureMaterialCondition is a parameterless singleton —
+		// no expect_cold immediate exists to extract. Spec divergence noted.
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(new TemperatureMaterialCondition());
+		assertFalse("hasFallback", t.hasFallback());
+		assertBytecode("temperature bytes", t.bytecode(), RuleBytecode.OP_TEMPERATURE);
+	}
+
+	private static void opAboveYWithOperands() {
+		Object node = new AboveYMaterialCondition(7, true);
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
+		assertFalse("hasFallback", t.hasFallback());
+		byte[] expected = concat(new byte[]{RuleBytecode.OP_ABOVE_Y}, le32(7));
+		expected = concat(expected, new byte[]{1});
+		assertBytecode("above_y(7,true) bytes", t.bytecode(), expected);
+		assertEq("above_y total length", 6, t.bytecode().length);
+	}
+
+	private static void opAboveYDefaultOperands() {
+		Object node = new AboveYMaterialCondition(); // 0, false
+		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
+		assertFalse("hasFallback", t.hasFallback());
+		byte[] expected = concat(new byte[]{RuleBytecode.OP_ABOVE_Y}, le32(0));
+		expected = concat(expected, new byte[]{0});
+		assertBytecode("above_y(0,false) bytes", t.bytecode(), expected);
+	}
+
 	// --- synthetic node classes -------------------------------------------
 	// Class simple-names must match vanilla MaterialRules$Inner names so
 	// the compiler's switch dispatch hits. Package is irrelevant — the
@@ -190,7 +271,15 @@ public final class SurfaceRuleCompilerSelfTest {
 		}
 	}
 
-	static final class AboveYMaterialCondition {}
+	static final class AboveYMaterialCondition {
+		@SuppressWarnings("unused") final int surfaceDepthMultiplier;
+		@SuppressWarnings("unused") final boolean addStoneDepthBelow;
+		AboveYMaterialCondition() { this(0, false); }
+		AboveYMaterialCondition(int surfaceDepthMultiplier, boolean addStoneDepthBelow) {
+			this.surfaceDepthMultiplier = surfaceDepthMultiplier;
+			this.addStoneDepthBelow = addStoneDepthBelow;
+		}
+	}
 	static final class NoiseThresholdMaterialCondition {}
 	static final class VerticalGradientMaterialCondition {}
 	static final class StoneDepthMaterialCondition {}

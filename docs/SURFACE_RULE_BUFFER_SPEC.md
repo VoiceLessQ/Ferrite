@@ -99,7 +99,7 @@ per column.
 | `0x06` | `COND_HOLE` | `HoleMaterialCondition` | (none) | `run_depth` |
 | `0x07` | `COND_SURFACE` | `SurfaceMaterialCondition` | (none) | `surface_height`, `blockY` |
 | `0x08` | `COND_BIOME` | `BiomeMaterialCondition` | `biome_set_idx: u16` (offset into pooled biome-ID set table) | `biome_id` (integer set membership against pooled set) |
-| `0x09` | `COND_TEMPERATURE` | `TemperatureMaterialCondition` | `expect_cold: u8` | `is_cold` |
+| `0x09` | `COND_TEMPERATURE` | `TemperatureMaterialCondition` | (none) | `is_cold` — vanilla's condition is a parameterless singleton that always tests `biome.isCold`; no `expect_cold` immediate exists to extract |
 | `0x0A` | `COND_STEEP` | `SteepMaterialCondition` | (none) | `is_steep` |
 | `0x0B` | `COND_NOT` | `NotMaterialCondition` | followed by inline child opcode stream until matching `END` | inverts child result |
 

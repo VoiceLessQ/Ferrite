@@ -51,6 +51,53 @@ public final class SurfaceRuleCompiler {
 		opcodeCount++;
 	}
 
+	private void emitInt(int v) {
+		out.write(v        & 0xFF);
+		out.write((v >>> 8)  & 0xFF);
+		out.write((v >>> 16) & 0xFF);
+		out.write((v >>> 24) & 0xFF);
+	}
+
+	private void emitU8(boolean b) {
+		out.write(b ? 1 : 0);
+	}
+
+	/**
+	 * Read an int field by name from a node, with a default if missing.
+	 * Used for operand extraction across vanilla and synthetic test nodes.
+	 */
+	private static int readIntField(Object node, String name, int dflt) {
+		try {
+			java.lang.reflect.Field f = findField(node.getClass(), name);
+			if (f == null) return dflt;
+			f.setAccessible(true);
+			return f.getInt(node);
+		} catch (ReflectiveOperationException e) {
+			return dflt;
+		}
+	}
+
+	private static boolean readBoolField(Object node, String name, boolean dflt) {
+		try {
+			java.lang.reflect.Field f = findField(node.getClass(), name);
+			if (f == null) return dflt;
+			f.setAccessible(true);
+			return f.getBoolean(node);
+		} catch (ReflectiveOperationException e) {
+			return dflt;
+		}
+	}
+
+	private static java.lang.reflect.Field findField(Class<?> c, String name) {
+		while (c != null && c != Object.class) {
+			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+				if (f.getName().equals(name)) return f;
+			}
+			c = c.getSuperclass();
+		}
+		return null;
+	}
+
 	private void visitRule(Object node) {
 		String name = node.getClass().getSimpleName();
 		switch (name) {
@@ -81,7 +128,16 @@ public final class SurfaceRuleCompiler {
 	private boolean tryVisitCondition(Object node) {
 		String name = node.getClass().getSimpleName();
 		switch (name) {
-			case "AboveYMaterialCondition"          -> emit(RuleBytecode.OP_ABOVE_Y);
+			case "AboveYMaterialCondition" -> {
+				// Vanilla: AboveY(YOffset anchor, int surfaceDepthMultiplier,
+				// boolean addStoneDepthBelow). YOffset is resolved to an
+				// absolute Y at compile time via the height context (deferred
+				// to the live-tree pass — synthetic test nodes carry the
+				// already-resolved field directly as `surfaceDepthMultiplier`).
+				emit(RuleBytecode.OP_ABOVE_Y);
+				emitInt(readIntField(node, "surfaceDepthMultiplier", 0));
+				emitU8(readBoolField(node, "addStoneDepthBelow", false));
+			}
 			case "NoiseThresholdMaterialCondition"  -> emit(RuleBytecode.OP_NOISE_THRESH);
 			case "VerticalGradientMaterialCondition"-> emit(RuleBytecode.OP_VERT_GRADIENT);
 			case "StoneDepthMaterialCondition"      -> emit(RuleBytecode.OP_STONE_DEPTH);
