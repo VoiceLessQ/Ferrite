@@ -41,7 +41,10 @@ public final class SurfaceRuleEvaluator {
 	private SurfaceRuleEvaluator() {}
 
 	public static Object evaluate(CompiledRuleTree tree, ColumnContext ctx) {
-		if (tree.hasFallback()) return null; // dispatcher routes to vanilla
+		// Don't short-circuit on tree.hasFallback() — that flag is for the
+		// dispatcher (tells it "result may be wrong, route to vanilla").
+		// The validator wants to walk the bytecode and only bail when it
+		// actually executes an OP_FALLBACK opcode mid-stream.
 		byte[] bc = tree.bytecode();
 		int ip = 0;
 		boolean condResult = false;
