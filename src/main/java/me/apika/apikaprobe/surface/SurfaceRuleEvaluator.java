@@ -58,7 +58,12 @@ public final class SurfaceRuleEvaluator {
 					return valueResult;
 				}
 				case RuleBytecode.OP_FALLBACK -> {
-					return null;
+					// Soft skip — this alternative came from a node the
+					// compiler couldn't emit operands for (TerracottaBands,
+					// VertGradient). Don't set valueResult; the enclosing
+					// Sequence/Condition fall-through handles this as
+					// "branch produced nothing." Returning null here would
+					// abort the whole eval, masking every other branch.
 				}
 				case RuleBytecode.OP_BLOCK -> {
 					int id = readIntLE(bc, ip); ip += 4;
