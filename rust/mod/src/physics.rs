@@ -281,6 +281,13 @@ pub fn collect_colliders_from_snapshot(
 
                 let start = snap.palette_offsets[pidx] as usize;
                 let end = start + count as usize;
+                // Defensive bounds check: a malformed snapshot (palette
+                // offsets pointing past aabb_table) would otherwise read
+                // garbage or panic deep inside the loop.
+                let need = end.checked_mul(6).unwrap_or(usize::MAX);
+                if need > snap.aabb_table.len() {
+                    return false; // fallback to vanilla
+                }
                 let (ox, oy, oz) = (bx as f64, by as f64, bz as f64);
                 for i in start..end {
                     let base = i * 6;
@@ -315,10 +322,15 @@ fn collect_candidate_step_heights(
     already_y: f32,
 ) -> Vec<f32> {
     let mut heights: Vec<f32> = Vec::with_capacity(8);
+    // Tolerance for "h is the same height we already considered." Direct
+    // float equality (`h == already_y`) misses values that differ only by
+    // accumulated FP error in the f64-to-f32 conversion above; a tight
+    // epsilon catches those without false positives in the typical case.
+    const SAME_HEIGHT_EPS: f32 = 1.0e-6;
     for s in shapes {
         for &coord in &[s.min_y, s.max_y] {
             let h = (coord - aabb.min_y) as f32;
-            if h < 0.0 || h == already_y { continue; }
+            if h < 0.0 || (h - already_y).abs() < SAME_HEIGHT_EPS { continue; }
             // Vanilla's `break` on h > max_step only works because coords
             // arrive sorted within a shape; here we just filter.
             if h > max_step { continue; }

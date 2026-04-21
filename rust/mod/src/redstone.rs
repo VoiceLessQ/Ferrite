@@ -100,7 +100,10 @@ pub fn compute_wire_power(nodes: &[RedstoneNode], results: &mut [RedstoneResult]
         for (i, node) in nodes.iter().enumerate() {
             let mut new_power = node.source_power;
             for &ni in node.neighbor_indices.iter() {
-                if ni == NO_NEIGHBOR {
+                // Reject sentinel and any other negative before casting to
+                // usize (a negative i32 cast becomes a huge usize and would
+                // either panic in bounds check or silently read garbage).
+                if ni < 0 {
                     continue;
                 }
                 let ni_u = ni as usize;

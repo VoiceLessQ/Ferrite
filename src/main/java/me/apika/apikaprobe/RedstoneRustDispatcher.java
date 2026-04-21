@@ -210,10 +210,12 @@ public final class RedstoneRustDispatcher {
 			maybeLogOverflow();
 			return -1;
 		}
-		BlockPos im = pos.toImmutable();
-		s.indexByPos.put(im, count);
-		s.posByIndex[count] = im;
-		s.frontier.add(im);
+		// `pos` is always immutable here: callers pass either a fresh BlockPos
+		// from offset()/up()/down() (all of which return immutable instances)
+		// or an already-immutable position. Skip the redundant toImmutable().
+		s.indexByPos.put(pos, count);
+		s.posByIndex[count] = pos;
+		s.frontier.add(pos);
 		return count + 1;
 	}
 
@@ -288,26 +290,30 @@ public final class RedstoneRustDispatcher {
 	private static void applyDeltas(ServerWorld world, int deltaCount) {
 		if (deltaCount == 0) return;
 		ACTIVE.get()[0] = true;
+		// Single reusable Mutable so the per-delta hot path doesn't allocate
+		// two BlockPos per result. setBlockState/updateNeighbors only read
+		// coordinates from the parameter, so a Mutable is safe to reuse.
+		BlockPos.Mutable scratchPos = new BlockPos.Mutable();
 		try {
 			for (int i = 0; i < deltaCount; i++) {
-				BlockPos pos = new BlockPos(
+				scratchPos.set(
 						RedstoneHandoff.readResultX(i),
 						RedstoneHandoff.readResultY(i),
 						RedstoneHandoff.readResultZ(i));
 				int newPower = RedstoneHandoff.readResultNewPower(i);
-				BlockState state = world.getBlockState(pos);
+				BlockState state = world.getBlockState(scratchPos);
 				if (!state.isOf(Blocks.REDSTONE_WIRE)) continue;
 				world.setBlockState(
-						pos,
+						scratchPos,
 						state.with(RedstoneWireBlock.POWER, newPower),
 						Block.NOTIFY_LISTENERS);
 			}
 			for (int i = 0; i < deltaCount; i++) {
-				BlockPos pos = new BlockPos(
+				scratchPos.set(
 						RedstoneHandoff.readResultX(i),
 						RedstoneHandoff.readResultY(i),
 						RedstoneHandoff.readResultZ(i));
-				world.updateNeighbors(pos, Blocks.REDSTONE_WIRE);
+				world.updateNeighbors(scratchPos, Blocks.REDSTONE_WIRE);
 			}
 		} finally {
 			ACTIVE.get()[0] = false;

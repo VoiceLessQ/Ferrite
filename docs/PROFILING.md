@@ -81,6 +81,18 @@ different measurement technique.
 
 ### Rust bulk handoff compute is 7× faster than vanilla equivalent
 
+> **Retroactive status note (added after 0.3.0-alpha's redstone port):**
+> the 7× figure below is accurate as an isolation benchmark but did not
+> survive integration with vanilla's chunk-gen pipeline — capturing
+> density-function state to feed the Rust kernel turns out to cost more
+> than the kernel saves. The same "per-call JNI overhead exceeds per-call
+> compute saving" pattern that shelved the per-cascade redstone Rust BFS
+> in 0.3.0-alpha would recur here at the density-sample level. Ferrite
+> no longer advertises a 7× chunk-gen speedup as a forward-looking
+> claim; the measurement framework is retained in the jar for diagnostic
+> value, output gated off. See the README and CurseForge description for
+> the current "shelved, pivoting to surface rules" framing.
+
 `TerrainBulkHandoff` + `terrain.rs` implemented a bulk pipeline: Java
 samples finalDensity at 1225 cell corners, hands them to Rust, Rust
 performs trilinear interpolation + simplified aquifer decisions for all

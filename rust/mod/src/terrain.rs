@@ -73,12 +73,16 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_computeChunkTerrain<'
     let corners_y = cells_y + 1;
     let corner_count = corners_x * corners_y * corners_z;
 
-    assert!(
-        corner_len_bytes >= corner_count * 4,
-        "corner buffer too small: {} bytes, need {}",
-        corner_len_bytes,
-        corner_count * 4
-    );
+    // Defensive: malformed inputs must not abort the JVM. Vanilla worldgen
+    // owns the fallback path; we just bail out and let it run.
+    if corner_len_bytes < corner_count * 4 {
+        eprintln!(
+            "Ferrite native: corner buffer too small ({} bytes, need {}); skipping",
+            corner_len_bytes,
+            corner_count * 4
+        );
+        return;
+    }
 
     let corners: &[f32] =
         unsafe { std::slice::from_raw_parts(corner_ptr as *const f32, corner_count) };

@@ -37,6 +37,12 @@ public final class CrammingDispatcher {
 	private static long lastProcessedTick = Long.MIN_VALUE;
 	private static final List<LivingEntity> MOB_SCRATCH = new ArrayList<>(1024);
 
+	// Rate limiter for the "too many mobs to batch" warning. Without this,
+	// a single overloaded tick would print MAX_ENTITIES-overflow lines on
+	// every subsequent tick until the mob count drops, which is pure noise.
+	private static final long OVERFLOW_LOG_MIN_GAP_NS = 1_000_000_000L;
+	private static volatile long lastOverflowLogNs;
+
 	// Parallel output arrays sized to MAX_ENTITIES; reused every tick.
 	private static final double[] ACCUM_DX = new double[CrammingHandoff.MAX_ENTITIES];
 	private static final double[] ACCUM_DZ = new double[CrammingHandoff.MAX_ENTITIES];
@@ -88,6 +94,7 @@ public final class CrammingDispatcher {
 		if (count > CrammingHandoff.MAX_ENTITIES) {
 			// Too many mobs — fall back. The Mixin already cancelled, so
 			// vanilla won't run. Rare; safer than partial batching.
+			maybeLogOverflow(count);
 			return;
 		}
 
@@ -119,6 +126,14 @@ public final class CrammingDispatcher {
 		diagBatches++;
 		diagMobs += count;
 		diagPushed += pushedThisBatch;
+	}
+
+	private static void maybeLogOverflow(int count) {
+		long now = System.nanoTime();
+		if (now - lastOverflowLogNs < OVERFLOW_LOG_MIN_GAP_NS) return;
+		lastOverflowLogNs = now;
+		LOGGER.warn("[cramming-dispatch] {} mobs exceeds MAX_ENTITIES={}, falling back to vanilla",
+				count, CrammingHandoff.MAX_ENTITIES);
 	}
 
 	private static void maybeLogDiag() {

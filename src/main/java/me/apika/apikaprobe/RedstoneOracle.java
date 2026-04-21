@@ -108,11 +108,25 @@ public final class RedstoneOracle {
 		ServerTickEvents.END_SERVER_TICK.register(server -> maybeReport());
 	}
 
+	private static volatile boolean controllerInitFailed;
+
 	private static RedstoneController controller() {
 		RedstoneController c = oracleController;
-		if (c == null) {
-			c = new DefaultRedstoneController((RedstoneWireBlock) Blocks.REDSTONE_WIRE);
-			oracleController = c;
+		if (c == null && !controllerInitFailed) {
+			// Defensive: Blocks.REDSTONE_WIRE should be non-null long before
+			// any wire update fires, but if a mod-load ordering quirk leaves
+			// it unregistered at our first call we catch it here, log once,
+			// and disable the oracle for the rest of the session rather than
+			// rethrowing into the cascade hot path.
+			try {
+				c = new DefaultRedstoneController((RedstoneWireBlock) Blocks.REDSTONE_WIRE);
+				oracleController = c;
+			} catch (RuntimeException e) {
+				controllerInitFailed = true;
+				LOGGER.warn("[redstone-oracle] controller init failed; oracle disabled for this session: {}",
+						e.getMessage());
+				return null;
+			}
 		}
 		return c;
 	}
@@ -163,7 +177,9 @@ public final class RedstoneOracle {
 
 	private static void runBfsVerification(World world, Snapshot snap) {
 		BFS_RUNS.incrementAndGet();
-		RedstoneControllerInvoker inv = (RedstoneControllerInvoker) controller();
+		RedstoneController c = controller();
+		if (c == null) return; // controller init failed — silently skip
+		RedstoneControllerInvoker inv = (RedstoneControllerInvoker) c;
 
 		ArrayDeque<BlockPos> frontier = new ArrayDeque<>();
 		HashSet<BlockPos> visited = new HashSet<>();

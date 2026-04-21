@@ -57,26 +57,31 @@ public final class FerriteCommand {
 								.then(CommandManager.literal("status").executes(FerriteCommand::statusAc)))));
 	}
 
+	/**
+	 * Enables the Rust BFS dispatcher for the current server session only.
+	 * Setting is held in a static volatile field, NOT persisted — flips
+	 * back to the default ({@code false}) on server restart.
+	 */
 	private static int enableRust(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			sendFeedback(ctx, "Rust native unavailable — flag set but no route will take effect.", false);
 		}
 		RedstoneHandoff.USE_RUST = true;
-		sendFeedback(ctx, "[ferrite] Rust redstone BFS enabled", true);
-		ExampleMod.LOGGER.info("[ferrite] Rust redstone BFS enabled (via /ferrite)");
+		sendFeedback(ctx, "[redstone] Rust BFS enabled (this session only)", true);
+		ExampleMod.LOGGER.info("[redstone] Rust BFS enabled (via /ferrite, this session only)");
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int disableRust(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
 		RedstoneHandoff.USE_RUST = false;
-		sendFeedback(ctx, "[ferrite] Rust redstone BFS disabled (vanilla path)", true);
-		ExampleMod.LOGGER.info("[ferrite] Rust redstone BFS disabled (via /ferrite)");
+		sendFeedback(ctx, "[redstone] Rust BFS disabled (vanilla path)", true);
+		ExampleMod.LOGGER.info("[redstone] Rust BFS disabled (via /ferrite)");
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int statusRust(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
 		String msg = String.format(
-				"[ferrite] redstone rust USE_RUST=%s native=%s  (watch latest.log for [redstone] phase numbers every 5s)",
+				"[redstone] rust USE_RUST=%s native=%s  (watch latest.log for [redstone] phase numbers every 5s)",
 				RedstoneHandoff.USE_RUST,
 				RustBridge.NATIVE_AVAILABLE ? "available" : "MISSING");
 		sendFeedback(ctx, msg, false);
@@ -84,26 +89,32 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
+	/**
+	 * Enables the Alternate-Current wire algorithm for the current server
+	 * session only. Setting is held in a static volatile field, NOT
+	 * persisted — flips back to the default ({@code false}) on server
+	 * restart. Re-issue the command after each restart if you want it on.
+	 */
 	private static int enableAc(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
 		if (RedstoneHandoff.USE_RUST) {
 			sendFeedback(ctx, "Warning: Rust BFS is also enabled. Running both paths at once is untested and not recommended.", false);
 		}
 		FerriteWireConfig.ENABLED = true;
-		sendFeedback(ctx, "[ferrite] Alternate-Current wire algorithm enabled", true);
-		ExampleMod.LOGGER.info("[ferrite] AC wire algorithm enabled (via /ferrite)");
+		sendFeedback(ctx, "[redstone] Alternate-Current wire algorithm enabled (this session only)", true);
+		ExampleMod.LOGGER.info("[redstone] AC wire algorithm enabled (via /ferrite, this session only)");
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int disableAc(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
 		FerriteWireConfig.ENABLED = false;
-		sendFeedback(ctx, "[ferrite] Alternate-Current wire algorithm disabled (vanilla path)", true);
-		ExampleMod.LOGGER.info("[ferrite] AC wire algorithm disabled (via /ferrite)");
+		sendFeedback(ctx, "[redstone] Alternate-Current wire algorithm disabled (vanilla path)", true);
+		ExampleMod.LOGGER.info("[redstone] AC wire algorithm disabled (via /ferrite)");
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int statusAc(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
 		String msg = String.format(
-				"[ferrite] redstone ac ENABLED=%s update-order=%s  (watch latest.log for [redstone] phase numbers every 5s)",
+				"[redstone] ac ENABLED=%s update-order=%s  (watch latest.log for [redstone] phase numbers every 5s)",
 				FerriteWireConfig.ENABLED,
 				FerriteWireConfig.UPDATE_ORDER.id());
 		sendFeedback(ctx, msg, false);

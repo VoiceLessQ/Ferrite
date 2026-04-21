@@ -24,6 +24,9 @@ import net.minecraft.util.shape.VoxelShape;
 import net.minecraft.util.shape.VoxelShapes;
 import net.minecraft.world.World;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Zero-copy handoff between Java and Rust for Entity.adjustMovementForCollisions.
  *
@@ -95,6 +98,14 @@ public final class PhysicsHandoff {
 	public static final int RES_FLAG_VERTICAL   = 1 << 1;
 	public static final int RES_FLAG_STEPPED_UP = 1 << 2;
 	public static final int RES_FLAG_FALLBACK   = 1 << 3;
+
+	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
+
+	// Rate limiter for palette / AABB-table overflow warnings. A
+	// pathological chunk would otherwise log on every snapshot attempt;
+	// one warn per second is enough signal for the operator to investigate.
+	private static final long OVERFLOW_LOG_MIN_GAP_NS = 1_000_000_000L;
+	private static volatile long lastOverflowLogNs;
 
 	// --- Pre-allocated buffers ---------------------------------------------
 
@@ -217,11 +228,13 @@ public final class PhysicsHandoff {
 							pidx = registerPaletteEntry(state, world, SCRATCH_POS);
 							if (pidx < 0) {
 								// Palette overflow → fallback.
+								maybeLogOverflow("palette", MAX_PALETTE_ENTRIES);
 								return false;
 							}
 							if (PALETTE_COUNTS_TMP[pidx] != PALETTE_COMPLEX_COUNT) {
 								aabbTableLen += PALETTE_COUNTS_TMP[pidx];
 								if (aabbTableLen > MAX_AABBS_IN_PALETTE) {
+									maybeLogOverflow("aabb-table", MAX_AABBS_IN_PALETTE);
 									return false;
 								}
 							}
@@ -519,4 +532,12 @@ public final class PhysicsHandoff {
 	private static final Class<?> KEEP_VOXEL_SHAPES = VoxelShapes.class;
 	@SuppressWarnings("unused")
 	private static final Class<?> KEEP_BOOLEAN_BIFUNCTION = BooleanBiFunction.class;
+
+	private static void maybeLogOverflow(String which, int limit) {
+		long now = System.nanoTime();
+		if (now - lastOverflowLogNs < OVERFLOW_LOG_MIN_GAP_NS) return;
+		lastOverflowLogNs = now;
+		LOGGER.warn("[physics-snapshot] {} overflow (limit={}), falling back to vanilla",
+				which, limit);
+	}
 }
