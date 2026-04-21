@@ -251,6 +251,39 @@ public final class SurfaceRuleCompiler {
 		}
 	}
 
+	private static Object readField(Object node, String name) {
+		java.lang.reflect.Field f = findField(node.getClass(), name);
+		if (f == null) return null;
+		try {
+			f.setAccessible(true);
+			return f.get(node);
+		} catch (ReflectiveOperationException e) {
+			return null;
+		}
+	}
+
+	/**
+	 * Resolve a YOffset to an absolute Y for the vanilla overworld
+	 * (minY=-64, maxY=320). Three vanilla variants:
+	 *   Fixed(y)            → y
+	 *   AboveBottom(offset) → -64 + offset
+	 *   BelowTop(offset)    → 320 - offset
+	 * Returns 0 if the YOffset class isn't recognised — those AboveY
+	 * conditions will mis-evaluate and surface in the validator diff.
+	 */
+	private static int resolveYOffset(Object yOffset) {
+		if (yOffset == null) return 0;
+		String name = yOffset.getClass().getSimpleName();
+		int offset = readIntField(yOffset, "offset", 0);
+		int y = readIntField(yOffset, "y", offset);
+		return switch (name) {
+			case "Fixed" -> y;
+			case "AboveBottom" -> -64 + offset;
+			case "BelowTop" -> 320 - offset;
+			default -> 0;
+		};
+	}
+
 	private static double readDoubleField(Object node, String name, double dflt) {
 		try {
 			java.lang.reflect.Field f = findField(node.getClass(), name);
@@ -535,14 +568,20 @@ public final class SurfaceRuleCompiler {
 		String name = node.getClass().getSimpleName();
 		switch (name) {
 			case "AboveYMaterialCondition" -> {
-				// Vanilla: AboveY(YOffset anchor, int surfaceDepthMultiplier,
-				// boolean addStoneDepthBelow). YOffset is resolved to an
-				// absolute Y at compile time via the height context (deferred
-				// to the live-tree pass — synthetic test nodes carry the
-				// already-resolved field directly as `surfaceDepthMultiplier`).
+				// Vanilla formula:
+				//   return (blockY + (addStoneDepth ? stoneDepthAbove : 0))
+				//       >= (anchor.getY(heightContext) + runDepth * surfaceDepthMultiplier);
+				// Operands: i32 anchorY (resolved at compile time using
+				// overworld minY=-64/maxY=320), i32 surfaceDepthMultiplier,
+				// u8 addStoneDepth. Total 10 bytes per OP_ABOVE_Y.
 				emit(RuleBytecode.OP_ABOVE_Y);
+				emitInt(resolveYOffset(readField(node, "anchor")));
 				emitInt(readIntField(node, "surfaceDepthMultiplier", 0));
-				emitU8(readBoolField(node, "addStoneDepthBelow", false));
+				// Field is "addStoneDepth" in vanilla 1.21.11 (not addStoneDepthBelow).
+				// Try both names for back-compat with my synthetic test nodes.
+				boolean asd = readBoolField(node, "addStoneDepth", false)
+						|| readBoolField(node, "addStoneDepthBelow", false);
+				emitU8(asd);
 			}
 			case "NoiseThresholdMaterialCondition" -> {
 				emit(RuleBytecode.OP_NOISE_THRESH);

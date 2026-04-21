@@ -114,10 +114,15 @@ public final class SurfaceRuleEvaluator {
 					if (negateNext) { condResult = !condResult; negateNext = false; }
 				}
 				case RuleBytecode.OP_ABOVE_Y -> {
+					int anchorY = readIntLE(bc, ip); ip += 4;
 					int surfaceDepthMultiplier = readIntLE(bc, ip); ip += 4;
-					int addStoneDepthBelow = bc[ip++] & 0xFF;
-					int adjusted = ctx.blockY() + (addStoneDepthBelow != 0 ? ctx.stoneDepthBelow() : 0);
-					condResult = adjusted >= surfaceDepthMultiplier;
+					int addStoneDepth = bc[ip++] & 0xFF;
+					// Vanilla formula:
+					//   (blockY + (addStoneDepth ? stoneDepthAbove : 0))
+					//     >= (anchorY + runDepth * surfaceDepthMultiplier)
+					int lhs = ctx.blockY() + (addStoneDepth != 0 ? ctx.stoneDepthAbove() : 0);
+					int rhs = anchorY + ctx.runDepth() * surfaceDepthMultiplier;
+					condResult = lhs >= rhs;
 					if (negateNext) { condResult = !condResult; negateNext = false; }
 				}
 				case RuleBytecode.OP_STONE_DEPTH -> {

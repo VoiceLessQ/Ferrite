@@ -236,10 +236,13 @@ public final class SurfaceRuleCompilerSelfTest {
 		Object node = new AboveYMaterialCondition(7, true);
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
 		assertFalse("hasFallback", t.hasFallback());
-		byte[] body = concat(new byte[]{RuleBytecode.OP_ABOVE_Y}, le32(7));
+		// Layout: OP(1) + i32 anchorY(4) + i32 surfaceDepthMultiplier(4) + u8 addStoneDepth(1) = 10
+		// Synthetic node has no anchor field → resolveYOffset returns 0.
+		byte[] body = concat(new byte[]{RuleBytecode.OP_ABOVE_Y}, le32(0));
+		body = concat(body, le32(7));
 		body = concat(body, new byte[]{1});
 		assertBytecode("above_y(7,true) bytes", t.bytecode(), withTerminator(body));
-		assertEq("above_y total length (incl terminator)", 7, t.bytecode().length);
+		assertEq("above_y total length (incl terminator)", 11, t.bytecode().length);
 	}
 
 	private static int readBlockIdAt(byte[] bytecode, int offset) {
@@ -539,6 +542,7 @@ public final class SurfaceRuleCompilerSelfTest {
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(node);
 		assertFalse("hasFallback", t.hasFallback());
 		byte[] body = concat(new byte[]{RuleBytecode.OP_ABOVE_Y}, le32(0));
+		body = concat(body, le32(0));
 		body = concat(body, new byte[]{0});
 		assertBytecode("above_y(0,false) bytes", t.bytecode(), withTerminator(body));
 	}
