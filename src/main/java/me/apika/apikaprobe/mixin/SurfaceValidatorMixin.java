@@ -2,6 +2,7 @@ package me.apika.apikaprobe.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 import me.apika.apikaprobe.surface.SurfaceValidator;
@@ -37,7 +38,7 @@ public abstract class SurfaceValidatorMixin {
 			target = "Lnet/minecraft/world/gen/surfacebuilder/MaterialRules$BlockStateRule;tryApply(III)Lnet/minecraft/block/BlockState;"
 		)
 	)
-	private BlockState ferrite$validateTryApply(Object rule, int x, int y, int z) {
+	private BlockState ferrite$validateTryApply(@Coerce Object rule, int x, int y, int z) {
 		// rule is MaterialRules$BlockStateRule (package-private interface).
 		// Invoke tryApply via reflection — single virtual dispatch is cheap
 		// and avoids needing an access widener for a one-off mixin.
