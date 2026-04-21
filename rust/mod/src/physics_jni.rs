@@ -96,13 +96,13 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_computeEntityPhysics<
 
     // --- Parse snapshot ----------------------------------------------------
 
-    let snapshot = unsafe {
-        match parse_snapshot(snap_ptr, snap_cap) {
-            Some(s) => s,
-            None => {
-                mark_all_fallback(results);
-                return;
-            }
+    let snap_bytes: &[u8] =
+        unsafe { slice::from_raw_parts(snap_ptr as *const u8, snap_cap) };
+    let snapshot = match unsafe { parse_snapshot(snap_bytes) } {
+        Some(s) => s,
+        None => {
+            mark_all_fallback(results);
+            return;
         }
     };
 
@@ -136,17 +136,25 @@ fn mark_all_fallback(results: &mut [EntityResult]) {
     }
 }
 
-/// Parses the snapshot header + slices from a raw buffer pointer. Returns
-/// None if the buffer is too small to contain the sections implied by its
-/// header. Caller must ensure the lifetime of the returned slices doesn't
-/// outlive the JNI call.
+/// Parses the snapshot header + slices from a byte slice. Returns None if
+/// the buffer is too small to contain the sections implied by its header.
 ///
-/// Safety: ptr must be a valid, aligned pointer to at least `cap` bytes of
-/// readable memory. The returned WorldSnapshot borrows from this memory.
-unsafe fn parse_snapshot(ptr: *mut u8, cap: usize) -> Option<WorldSnapshot<'static>> {
+/// The returned `WorldSnapshot<'a>` borrows from `buf`, so its lifetime is
+/// properly bounded — a refactor that tries to outlive `buf` (e.g. store
+/// the snapshot in a static or return it from the JNI function) will be
+/// caught by the borrow checker instead of becoming UB at runtime.
+///
+/// Safety: `buf` must alias correctly with the PhysicsHandoff.java layout
+/// — specifically, the i32/u16/u32/f32 sub-regions implied by the header
+/// must be valid reads of properly aligned, initialized values of those
+/// types. Java's direct ByteBuffer allocator paired with the Java-side
+/// serializer satisfies this.
+unsafe fn parse_snapshot<'a>(buf: &'a [u8]) -> Option<WorldSnapshot<'a>> {
+    let cap = buf.len();
     if cap < SNAPSHOT_HEADER_BYTES {
         return None;
     }
+    let ptr = buf.as_ptr();
     let header = slice::from_raw_parts(ptr as *const i32, 9);
     let origin_x = header[0];
     let origin_y = header[1];
@@ -176,11 +184,13 @@ unsafe fn parse_snapshot(ptr: *mut u8, cap: usize) -> Option<WorldSnapshot<'stat
         return None;
     }
 
-    let cells = slice::from_raw_parts(ptr.add(cells_off) as *const u16, cell_count);
-    let palette_offsets =
+    let cells: &'a [u16] =
+        slice::from_raw_parts(ptr.add(cells_off) as *const u16, cell_count);
+    let palette_offsets: &'a [u32] =
         slice::from_raw_parts(ptr.add(pofs_off) as *const u32, palette_count);
-    let palette_counts = slice::from_raw_parts(ptr.add(pcnt_off), palette_count);
-    let aabb_table =
+    let palette_counts: &'a [u8] =
+        slice::from_raw_parts(ptr.add(pcnt_off), palette_count);
+    let aabb_table: &'a [f32] =
         slice::from_raw_parts(ptr.add(aabb_off) as *const f32, aabb_table_len * 6);
 
     Some(WorldSnapshot {
