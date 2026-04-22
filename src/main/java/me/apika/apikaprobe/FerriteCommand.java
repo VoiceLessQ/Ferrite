@@ -10,6 +10,7 @@ import me.apika.apikaprobe.surface.CompiledRuleTree;
 import me.apika.apikaprobe.surface.SurfaceRuleAccess;
 import me.apika.apikaprobe.surface.SurfaceRuleCompiler;
 import me.apika.apikaprobe.surface.SurfaceBatchHandoff;
+import me.apika.apikaprobe.surface.SurfaceRuleDisassembler;
 import me.apika.apikaprobe.surface.ColumnContext;
 import me.apika.apikaprobe.surface.SurfaceRuleEvaluator;
 import me.apika.apikaprobe.surface.SurfaceValidator;
@@ -70,7 +71,8 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("validate-stats").executes(FerriteCommand::surfaceValidateStats))
 						.then(CommandManager.literal("batch-test").executes(FerriteCommand::surfaceBatchTest))
 						.then(CommandManager.literal("trace-next").executes(FerriteCommand::surfaceTraceNext))
-						.then(CommandManager.literal("dump-biomes").executes(FerriteCommand::surfaceDumpBiomes))));
+						.then(CommandManager.literal("dump-biomes").executes(FerriteCommand::surfaceDumpBiomes))
+						.then(CommandManager.literal("dump").executes(FerriteCommand::surfaceDump))));
 	}
 
 	/**
@@ -345,6 +347,44 @@ public final class FerriteCommand {
 	 * names in that set. Lets us verify whether a given biome (e.g.
 	 * warm_ocean) is actually present in the sets it should be in.
 	 */
+	/**
+	 * /ferrite surface dump — disassembles the active world's compiled
+	 * surface rule bytecode and writes it to {@code run/surface-dump.txt}
+	 * (full ~3800 lines won't fit in chat). Each opcode line shows IP,
+	 * mnemonic, immediates, and a brief decode (e.g. biome set contents
+	 * for OP_BIOME, channel name for OP_NOISE_THRESH, then/else targets
+	 * for OP_IF_ELSE).
+	 *
+	 * <p>Companion to /ferrite surface trace-next: trace identifies
+	 * which IP range the eval skipped; dump reveals what's at those IPs
+	 * so we can map "ip 58-429" to the rule structure that should fire
+	 * but didn't.
+	 */
+	private static int surfaceDump(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
+		if (!extracted.ok()) {
+			sendFeedback(ctx, "[surface-dump] extract failed: " + extracted.error(), false);
+			return 0;
+		}
+		CompiledRuleTree tree = SurfaceRuleCompiler.compile(extracted.surfaceRule());
+		java.util.List<String> lines = SurfaceRuleDisassembler.disassemble(tree);
+		java.nio.file.Path out = java.nio.file.Paths.get("surface-dump.txt").toAbsolutePath();
+		try {
+			java.nio.file.Files.write(out, lines, java.nio.charset.StandardCharsets.UTF_8);
+		} catch (java.io.IOException e) {
+			String msg = "[surface-dump] write failed: " + e.getMessage();
+			sendFeedback(ctx, msg, false);
+			ExampleMod.LOGGER.warn(msg);
+			return 0;
+		}
+		String msg = String.format(
+			"[surface-dump] wrote %d lines (%d bytecode) to %s",
+			lines.size(), tree.bytecode().length, out);
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
 	private static int surfaceDumpBiomes(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
 		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
 		if (!extracted.ok()) {
