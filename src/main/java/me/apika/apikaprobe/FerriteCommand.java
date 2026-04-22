@@ -68,7 +68,8 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("validate").executes(FerriteCommand::surfaceValidate))
 						.then(CommandManager.literal("validate-off").executes(FerriteCommand::surfaceValidateOff))
 						.then(CommandManager.literal("validate-stats").executes(FerriteCommand::surfaceValidateStats))
-						.then(CommandManager.literal("batch-test").executes(FerriteCommand::surfaceBatchTest))));
+						.then(CommandManager.literal("batch-test").executes(FerriteCommand::surfaceBatchTest))
+						.then(CommandManager.literal("trace-next").executes(FerriteCommand::surfaceTraceNext))));
 	}
 
 	/**
@@ -325,6 +326,26 @@ public final class FerriteCommand {
 			sendFeedback(ctx, dmsg, false);
 			ExampleMod.LOGGER.warn(dmsg);
 		}
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * /ferrite surface trace-next — arms a one-shot flag in the validator.
+	 * The next mismatch the validator sees gets a full opcode trace dump
+	 * to {@code [surface-validate]} log lines, then the flag clears
+	 * itself. Workflow: arm, teleport into a chunk-gen-active area, hit
+	 * a mismatch, read the trace from latest.log to pinpoint which
+	 * condition diverged.
+	 */
+	private static int surfaceTraceNext(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		if (!SurfaceValidator.isEnabled()) {
+			sendFeedback(ctx, "[surface-validate] not enabled — run /ferrite surface validate first", false);
+			return 0;
+		}
+		SurfaceValidator.traceNextMismatch = true;
+		String msg = "[surface-validate] armed: next mismatch will dump full opcode trace to latest.log";
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
 	}
 

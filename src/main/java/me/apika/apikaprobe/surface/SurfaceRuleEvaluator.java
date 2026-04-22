@@ -103,6 +103,171 @@ public final class SurfaceRuleEvaluator {
 		return tree.blockstateTable()[id];
 	}
 
+	/**
+	 * Same dispatch as {@link #evaluate}, but appends a human-readable
+	 * line to {@code trace} for each opcode executed: opcode name,
+	 * operand values, condResult/valueResult after the step, and any
+	 * branch decisions for IF_ELSE/SEQUENCE_NEXT.
+	 *
+	 * <p>Returns the same value {@code evaluate} would. Used by
+	 * {@code /ferrite surface trace-next} to pinpoint exactly which
+	 * condition diverged from vanilla on a mismatching position.
+	 */
+	public static Object evaluateWithTrace(CompiledRuleTree tree, ColumnContext ctx, java.util.List<String> trace) {
+		byte[] bc = tree.bytecode();
+		int ip = 0;
+		boolean condResult = false;
+		Object valueResult = null;
+		boolean negateNext = false;
+
+		while (ip < bc.length) {
+			int opIp = ip;
+			byte op = bc[ip++];
+			switch (op) {
+				case RuleBytecode.OP_RETURN_DONE -> {
+					trace.add(String.format("[%04d] OP_RETURN_DONE → return %s", opIp, fmt(valueResult)));
+					return valueResult;
+				}
+				case RuleBytecode.OP_FALLBACK -> trace.add(String.format("[%04d] OP_FALLBACK (soft skip)", opIp));
+				case RuleBytecode.OP_BLOCK -> {
+					int id = readIntLE(bc, ip); ip += 4;
+					Object state = (id >= 0 && id < tree.blockstateTable().length) ? tree.blockstateTable()[id] : null;
+					valueResult = state;
+					trace.add(String.format("[%04d] OP_BLOCK id=%d → value=%s", opIp, id, fmt(state)));
+				}
+				case RuleBytecode.OP_IF_ELSE -> {
+					int thenOff = readIntLE(bc, ip); ip += 4;
+					int elseOff = readIntLE(bc, ip); ip += 4;
+					int target = condResult ? thenOff : elseOff;
+					trace.add(String.format("[%04d] OP_IF_ELSE then=%d else=%d cond=%s → ip=%d", opIp, thenOff, elseOff, condResult, target));
+					ip = target;
+				}
+				case RuleBytecode.OP_SEQUENCE_NEXT -> {
+					int endOff = readIntLE(bc, ip); ip += 4;
+					boolean jumped = valueResult != null;
+					if (jumped) ip = endOff;
+					trace.add(String.format("[%04d] OP_SEQUENCE_NEXT end=%d value=%s → %s", opIp, endOff, fmt(valueResult), jumped ? "JUMP" : "fall"));
+				}
+				case RuleBytecode.OP_NOT -> {
+					negateNext = true;
+					trace.add(String.format("[%04d] OP_NOT (next condition inverted)", opIp));
+				}
+				case RuleBytecode.OP_HOLE -> {
+					condResult = ctx.runDepth() <= 0;
+					if (negateNext) { condResult = !condResult; negateNext = false; }
+					trace.add(String.format("[%04d] OP_HOLE runDepth=%d → cond=%s", opIp, ctx.runDepth(), condResult));
+				}
+				case RuleBytecode.OP_STEEP -> {
+					condResult = ctx.isSteep();
+					if (negateNext) { condResult = !condResult; negateNext = false; }
+					trace.add(String.format("[%04d] OP_STEEP → cond=%s", opIp, condResult));
+				}
+				case RuleBytecode.OP_TEMPERATURE -> {
+					condResult = ctx.isCold();
+					if (negateNext) { condResult = !condResult; negateNext = false; }
+					trace.add(String.format("[%04d] OP_TEMPERATURE isCold=%s → cond=%s", opIp, ctx.isCold(), condResult));
+				}
+				case RuleBytecode.OP_SURFACE -> {
+					condResult = ctx.blockY() >= ctx.surfaceHeight();
+					if (negateNext) { condResult = !condResult; negateNext = false; }
+					trace.add(String.format("[%04d] OP_SURFACE blockY=%d surfaceH=%d → cond=%s", opIp, ctx.blockY(), ctx.surfaceHeight(), condResult));
+				}
+				case RuleBytecode.OP_BIOME -> {
+					int idx = readU16LE(bc, ip); ip += 2;
+					java.util.List<String> set = tree.biomeSetTable()[idx];
+					condResult = set.contains(ctx.biomeName());
+					if (negateNext) { condResult = !condResult; negateNext = false; }
+					trace.add(String.format("[%04d] OP_BIOME idx=%d biome=%s setSize=%d → cond=%s", opIp, idx, ctx.biomeName(), set.size(), condResult));
+				}
+				case RuleBytecode.OP_NOISE_THRESH -> {
+					int chIdx = readU16LE(bc, ip); ip += 2;
+					double minT = readDoubleLE(bc, ip); ip += 8;
+					double maxT = readDoubleLE(bc, ip); ip += 8;
+					double v = ctx.noiseValues()[chIdx];
+					condResult = v >= minT && v <= maxT;
+					if (negateNext) { condResult = !condResult; negateNext = false; }
+					trace.add(String.format("[%04d] OP_NOISE_THRESH ch=%d v=%.4f range=[%.4f,%.4f] → cond=%s", opIp, chIdx, v, minT, maxT, condResult));
+				}
+				case RuleBytecode.OP_ABOVE_Y -> {
+					int anchorY = readIntLE(bc, ip); ip += 4;
+					int sdMul = readIntLE(bc, ip); ip += 4;
+					int addStone = bc[ip++] & 0xFF;
+					int lhs = ctx.blockY() + (addStone != 0 ? ctx.stoneDepthAbove() : 0);
+					int rhs = anchorY + ctx.runDepth() * sdMul;
+					condResult = lhs >= rhs;
+					if (negateNext) { condResult = !condResult; negateNext = false; }
+					trace.add(String.format("[%04d] OP_ABOVE_Y anchor=%d sdMul=%d addStone=%d lhs=%d rhs=%d → cond=%s", opIp, anchorY, sdMul, addStone, lhs, rhs, condResult));
+				}
+				case RuleBytecode.OP_STONE_DEPTH -> {
+					int offset = readIntLE(bc, ip); ip += 4;
+					int addSurface = bc[ip++] & 0xFF;
+					int sdRange = readIntLE(bc, ip); ip += 4;
+					int surfType = bc[ip++] & 0xFF;
+					int depth = surfType == 0 ? ctx.stoneDepthBelow() : ctx.stoneDepthAbove();
+					int addS = addSurface != 0 ? ctx.runDepth() : 0;
+					int secAdj = sdRange == 0 ? 0 : (int)((ctx.secondaryDepth() + 1.0) * sdRange / 2.0);
+					int rhs = 1 + offset + addS + secAdj;
+					condResult = depth <= rhs;
+					if (negateNext) { condResult = !condResult; negateNext = false; }
+					trace.add(String.format("[%04d] OP_STONE_DEPTH offset=%d addSurface=%d sdRange=%d type=%s depth=%d rhs=%d → cond=%s", opIp, offset, addSurface, sdRange, surfType == 0 ? "CEILING" : "FLOOR", depth, rhs, condResult));
+				}
+				case RuleBytecode.OP_WATER -> {
+					int offset = readIntLE(bc, ip); ip += 4;
+					int sdMul = readIntLE(bc, ip); ip += 4;
+					boolean addStone = bc[ip++] != 0;
+					int wh = ctx.fluidHeight();
+					if (wh == Integer.MIN_VALUE) {
+						condResult = true;
+						trace.add(String.format("[%04d] OP_WATER waterHeight=MIN_VALUE → cond=true (no fluid)", opIp));
+					} else {
+						int lhs = ctx.blockY() + (addStone ? ctx.stoneDepthAbove() : 0);
+						int rhs = wh + offset + ctx.runDepth() * sdMul;
+						condResult = lhs >= rhs;
+						trace.add(String.format("[%04d] OP_WATER offset=%d sdMul=%d addStone=%s wh=%d lhs=%d rhs=%d → cond=%s", opIp, offset, sdMul, addStone, wh, lhs, rhs, condResult));
+					}
+					if (negateNext) { condResult = !condResult; negateNext = false; }
+				}
+				case RuleBytecode.OP_VERT_GRADIENT -> {
+					int trueB = readIntLE(bc, ip); ip += 4;
+					int falseA = readIntLE(bc, ip); ip += 4;
+					int y = ctx.blockY();
+					String mode;
+					if (y <= trueB) { condResult = true; mode = "below-true-zone"; }
+					else if (y >= falseA) { condResult = false; mode = "above-false-zone"; }
+					else { condResult = y <= (trueB + falseA) / 2; mode = "midpoint-approx"; }
+					if (negateNext) { condResult = !condResult; negateNext = false; }
+					trace.add(String.format("[%04d] OP_VERT_GRADIENT trueAtBelow=%d falseAtAbove=%d y=%d %s → cond=%s", opIp, trueB, falseA, y, mode, condResult));
+				}
+				default -> {
+					trace.add(String.format("[%04d] UNKNOWN opcode=0x%02x → return null", opIp, op & 0xFF));
+					return null;
+				}
+			}
+		}
+		trace.add(String.format("[%04d] end of bytecode → return %s", ip, fmt(valueResult)));
+		return valueResult;
+	}
+
+	private static String fmt(Object o) {
+		if (o == null) return "null";
+		try {
+			Object block = o.getClass().getMethod("getBlock").invoke(o);
+			if (block != null) {
+				Class<?> reg = Class.forName("net.minecraft.registry.Registries");
+				Object br = reg.getField("BLOCK").get(null);
+				for (java.lang.reflect.Method m : br.getClass().getMethods()) {
+					if (m.getName().equals("getId") && m.getParameterCount() == 1) {
+						Object id = m.invoke(br, block);
+						if (id != null) return id.toString();
+					}
+				}
+			}
+		} catch (ReflectiveOperationException | RuntimeException ignored) {
+			// fall through
+		}
+		return o.toString();
+	}
+
 	public static Object evaluate(CompiledRuleTree tree, ColumnContext ctx) {
 		// Don't short-circuit on tree.hasFallback() — that flag is for the
 		// dispatcher (tells it "result may be wrong, route to vanilla").

@@ -41,6 +41,11 @@ public final class SurfaceValidator {
 
 	private static volatile CompiledRuleTree cachedTree = null;
 
+	/** When true, the next mismatch the validator sees triggers a full
+	 *  opcode trace dump from the Java evaluator, then this flag clears
+	 *  itself. Set via /ferrite surface trace-next. */
+	public static volatile boolean traceNextMismatch = false;
+
 	/** Captured per-thread MaterialRuleContext receiver, set by the
 	 *  initVerticalContext redirect just before tryApply fires. */
 	private static final ThreadLocal<Object> threadCtxRef = new ThreadLocal<>();
@@ -194,6 +199,24 @@ public final class SurfaceValidator {
 					ctx.fluidHeight(), ctx.blockY());
 			} else if (mm == 51) {
 				ExampleMod.LOGGER.warn("[surface-validate] suppressing further mismatch lines (>50)");
+			}
+			// Trace-on-next-mismatch: dump the full opcode trace from the
+			// Java evaluator to surface exactly which condition diverged.
+			if (traceNextMismatch) {
+				traceNextMismatch = false;
+				java.util.List<String> trace = new java.util.ArrayList<>(64);
+				Object traced = SurfaceRuleEvaluator.evaluateWithTrace(tree, ctx, trace);
+				ExampleMod.LOGGER.warn(
+					"[surface-validate] === TRACE at ({},{},{}) vanilla={} eval={} traced={} ===",
+					x, y, z, vName, oName, stringify(traced));
+				ExampleMod.LOGGER.warn("[surface-validate]   ctx: biome={} blockY={} runDepth={} stoneAbove={} stoneBelow={} fluid={} isCold={} surfH={}",
+					ctx.biomeName(), ctx.blockY(), ctx.runDepth(),
+					ctx.stoneDepthAbove(), ctx.stoneDepthBelow(),
+					ctx.fluidHeight(), ctx.isCold(), ctx.surfaceHeight());
+				for (String line : trace) {
+					ExampleMod.LOGGER.warn("[surface-validate]   {}", line);
+				}
+				ExampleMod.LOGGER.warn("[surface-validate] === END TRACE ===");
 			}
 		}
 	}
