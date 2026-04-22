@@ -190,7 +190,7 @@ that previously got "no" answers based on the 200 ns figure.
 
 Phase 2 is green-lit on this evidence.
 
-### Phase 2 — Power calculation batch  ✓ RESOLVED — workload-dependent win, ship gated with manual override
+### Phase 2 — Power calculation batch  ✓ SHIPPED ON BY DEFAULT (0.4.0-alpha)
 
 **Goal:** replace AC's per-cascade propagation loop with one JNI call
 using the existing oracle-validated Rust kernel.
@@ -303,18 +303,22 @@ The right `MIN_NODES` for the lag machine is 1; the right one for
 the repeater clock is "never." There is no single value that's
 optimal for both.
 
-**Phase 2 code disposition (final):**
-- Default ships `MIN_NODES=32` — conservative, matches what real users
-  will load (no regression on small/bursty contraptions).
-- Power users running heavy lag-machine-style contraptions can drop the
-  threshold via `/ferrite redstone bfs-min 1` for the ~30% TPS win.
-  Documented in the command help.
+**Phase 2 code disposition (final, 0.4.0-alpha):**
+- `RUST_BFS = true` and `RUST_BFS_MIN_NODES = 1` ship as defaults.
+  4-core re-bench confirmed the per-bucket numbers are CPU-affinity-
+  invariant (server tick is single-threaded), so the lag-machine win
+  holds on the same hardware all prior project benchmarks used.
+- `/ferrite redstone bfs off` and `/ferrite redstone bfs-min <n>`
+  remain available for users to disable or partially gate the path
+  if a specific contraption regresses.
 - Phase 2b refactor (`rustIndex`, scratch buffers, no-lambda walk) and
   Phase 2c diagnostics (histogram, sweep command) stay in production —
-  they cost nothing when the Rust path is gated off and they're the
-  reason the manual-override path is safe to recommend.
-- Oracle reports 0 mismatches across both workloads, both with BFS on
-  and off — correctness proven across the experiment.
+  they're load-bearing for the default-on shipping decision.
+- Oracle reports 0 mismatches across both workloads in every bench
+  window — correctness proven across the experiment.
+- Repeater-clock regression (~20µs/cascade) is documented as an
+  accepted tradeoff: absolute cost is &lt;0.05 ms/tick, invisible in
+  practice, and the user has a one-command opt-out.
 
 ### Decision gate result
 
@@ -322,14 +326,12 @@ Per plan: "If either phase shows neutral or negative measurement,
 document the number in this doc, leave the Rust code in place as
 library-only for future revisit, and ship nothing."
 
-**Phase 1 ✓ Phase 2 ✓ (workload-dependent) → ship gated at 32 with
-manual override documented.** AC-Java remains the production path.
-On lag-machine-style sustained workloads, the Rust path is a real
-~30% TPS win and users can opt in via `/ferrite redstone bfs-min 1`.
-On bursty small-cascade workloads, the default gate of 32 keeps the
-Rust path out of the way so it can't regress. The plan worked
-exactly as designed — measure, gate, ship the safe default, expose
-the override.
+**Phase 1 ✓ Phase 2 ✓ → ship default ON in 0.4.0-alpha.** Per-bucket
+data showed Rust wins 1.3–2.1× across every measured size class on the
+lag machine and only loses imperceptibly (~20µs/cascade) on cold
+bursty workloads. Default flipped from gated-off (32) to active-on (1);
+`/ferrite redstone bfs off` is the one-command opt-out for users who
+hit a regression on a contraption shape we haven't measured.
 
 ### Relationship to the Session 3 description above
 

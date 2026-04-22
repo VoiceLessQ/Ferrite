@@ -56,11 +56,20 @@ public final class FerriteWireConfig {
 	 * <p>Below the threshold, runs Java unchanged — JNI overhead
 	 * vs queue throughput on tiny networks.
 	 *
-	 * <p>Default off; users enable via {@code /ferrite redstone bfs on}
-	 * after manually validating against vanilla in their world.
+	 * <p>Default ON as of 0.4.0-alpha — measured ~30% wire-cost
+	 * reduction on the lag machine across all cascade sizes (1.3–2.1×
+	 * per-bucket). The repeater-clock workload shows ~20µs per-cascade
+	 * regression which is imperceptible in absolute terms. Disable via
+	 * {@code /ferrite redstone bfs off} if you observe issues on a
+	 * specific contraption.
 	 */
-	public static volatile boolean RUST_BFS = false;
+	public static volatile boolean RUST_BFS = true;
 
-	/** Minimum cascade size before the Rust batch path activates. */
-	public static volatile int RUST_BFS_MIN_NODES = 32;
+	/**
+	 * Minimum cascade size before the Rust batch path activates.
+	 * Default 1 — historically 32, lowered after Phase 2c showed Rust
+	 * wins on every measured bucket. {@code /ferrite redstone bfs-min
+	 * <n>} raises it at runtime to disable the path for small cascades.
+	 */
+	public static volatile int RUST_BFS_MIN_NODES = 1;
 }

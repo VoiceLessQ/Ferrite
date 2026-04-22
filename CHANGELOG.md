@@ -7,18 +7,60 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
-### Added
+_(no changes pending)_
 
-- Power-user override for the per-cascade Rust BFS path:
-  `/ferrite redstone bfs-min <n>` lowers the cascade-size cutoff at
-  which the Rust kernel takes over from the AC-Java loop. Default
-  remains 32 (Rust path effectively gated off for typical worlds);
-  extreme-redstone users running large sustained contraptions can set
-  it to 1 for ~30% additional wire performance. Workload-shape
-  dependent — wins on sustained high-volume cascades, loses on bursty
-  small ones, which is why the default stays conservative. See
-  [docs/REDSTONE_PORT_PLAN.md](docs/REDSTONE_PORT_PLAN.md) Phase 2c
-  for the per-bucket measurements.
+---
+
+## [0.4.0-alpha] — 2026-04-22
+
+### Changed
+
+- **Per-cascade Rust BFS now enabled by default** for the AC wire
+  algorithm (`FerriteWireConfig.RUST_BFS = true`,
+  `RUST_BFS_MIN_NODES = 1`). On heavy redstone workloads, AC's per-
+  cascade power propagation now runs in a Rust kernel via one batched
+  JNI call per cascade. Java emits the resulting block/shape updates
+  unchanged, so user-visible behavior is identical to AC alone.
+  Disable with `/ferrite redstone bfs off` if you observe issues on a
+  specific contraption.
+
+### Performance
+
+Lag-machine measurement (Ryzen 9 5900X, 4-core CPU affinity, same
+methodology as the 0.3.0 redstone numbers). Per-bucket avg cascade
+time, three windows (Java baseline → Rust forced → Java cross-check):
+
+| Cascade size | Java       | Rust       | Speedup |
+| -----------: | ---------: | ---------: | ------: |
+| 1–4 nodes    | 0.009 ms   | 0.007 ms   | 1.29×   |
+| 5–8 nodes    | 0.023 ms   | 0.015 ms   | 1.53×   |
+| 9–16 nodes   | 0.052 ms   | 0.034 ms   | 1.53×   |
+| 17–32 nodes  | 0.052 ms   | 0.025 ms   | 2.08×   |
+
+Aggregate: avg cascade time drops from 0.020 ms to 0.014 ms, **and**
+cascade throughput rises from ~240K to ~340K per 5 s window — the
+server tick has more headroom, so more cascades fit per second.
+
+Oracle reports 0 mismatches across the entire experiment; output is
+bit-for-bit identical to AC-Java and to vanilla on the validated
+windows.
+
+### Caveats
+
+- **Workload-shape dependent.** Measured on a sustained high-volume
+  lag machine. A 64-wire repeater clock measurement showed Rust
+  ~20µs per-cascade slower (0.026 ms → 0.046 ms) on cold/bursty small
+  cascades — likely JIT warmup-bound on the Rust glue path. Absolute
+  cost is imperceptible (<0.05 ms / tick) but if you have a
+  contraption that regresses, `/ferrite redstone bfs off` reverts to
+  AC-Java without restart.
+- **Manual override.** `/ferrite redstone bfs-min <n>` raises the
+  per-cascade size threshold above which Rust takes over. Set high
+  to gate the Rust path out for small cascades while keeping AC's
+  Java algorithm.
+
+See [docs/REDSTONE_PORT_PLAN.md](docs/REDSTONE_PORT_PLAN.md) Phase 2c
+for the full per-bucket data and methodology.
 
 ---
 

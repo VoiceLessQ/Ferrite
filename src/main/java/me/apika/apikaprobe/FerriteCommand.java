@@ -191,7 +191,7 @@ public final class FerriteCommand {
 	private static int setBfsMin(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
 		int n = IntegerArgumentType.getInteger(ctx, "n");
 		FerriteWireConfig.RUST_BFS_MIN_NODES = n;
-		String msg = "[redstone] bfs-min set to " + n + " (was for diagnostics; production default is 32)";
+		String msg = "[redstone] bfs-min set to " + n + " (production default is 1)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
