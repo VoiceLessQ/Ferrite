@@ -272,3 +272,47 @@ unblock the diagnosis but not the fix.
 | `vanilla=null eval=deepslate` at Y=3-4 | VertGradient gradient-zone midpoint approximation | Port Mojang's `RandomSplitter` |
 | `isSteep` placeholder (2 nodes) | Heightmap reads not trivially reflective | Defer — small impact |
 | `noiseValues` zeroed | NoiseThresholdMaterialCondition mis-fires | Real noise sampler tap |
+
+## ⚠️ Open question: validator sampling bug suspected
+
+Diagnosing the warm_ocean=sand=null mismatch with the new disassembler
++ trace tools led to a contradiction:
+
+1. Trace shows our eval at (-84, 52, 168) returns null — every condition
+   along the way evaluates correctly per Mojang's source.
+2. Vanilla `SurfaceRuleData` line 258-265 confirms the warm_ocean=sand
+   branch is gated by `ON_FLOOR`. ON_FLOOR formula:
+   `stoneDepthAbove <= 1+0+0+0` → for stoneAbove=4 → FALSE.
+3. So vanilla should ALSO return null at this position.
+4. But the validator's `@Redirect` on `tryApply` captured `vanilla=sand`.
+
+Both Java and Rust evaluators agree (java=rust=100%) — and they both
+match the structural logic in Mojang's source for the captured
+context. Yet vanilla disagrees.
+
+**Hypothesis:** the validator captures context from a different moment
+than vanilla's `tryApply` call sees. The `@Redirect` on
+`initVerticalContext` stashes the context receiver, then we read
+fields lazily during the `tryApply` redirect. There may be a window
+where the field values we read don't match the field values vanilla's
+condition tests used internally.
+
+If true: the 95.3% number is not real evaluator parity — it's
+parity-relative-to-stale-context. Real parity might already be
+higher. **Fix the measurement before fixing the evaluator further.**
+
+### Next session opens with
+
+Validator timing investigation. Build a sanity check that compares
+captured context fields against vanilla's actual field state at
+condition-evaluation time. If field values drift between our capture
+and vanilla's read, restructure the capture to read fields
+synchronously with vanilla's view.
+
+If field drift is the bug: the 95.3% number is artificially low.
+After fixing the measurement, real parity may already be in the
+98%+ range and the dispatcher swap can ship.
+
+If field drift is NOT the bug: the warm_ocean=sand contradiction
+points to a vanilla rule path our compiler doesn't traverse — back
+to structural compiler work.
