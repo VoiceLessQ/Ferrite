@@ -138,6 +138,92 @@ mid-session without restarts.
 
 ---
 
+## Roadmap: AC Rust core port (phased, measurement-gated)
+
+**Status:** on the list, not blocking. Current priority is surface rule
+batch evaluation (`docs/SURFACE_RULE_BATCH_PLAN.md`); this work begins only
+after surface rules ship or stall.
+
+**Why phased:** the PROFILING.md lesson still binds — per-call JNI overhead
+(~200–500 ns) can exceed the per-call compute it displaces at the wrong
+granularity. The phased approach measures overhead at each increment
+before committing deeper. Stop whenever a phase's exit number doesn't
+clear the bar.
+
+**Scope basis:** upstream + internal audits confirmed ~600 lines of AC are
+pure compute with no World callbacks (priority queue, power offer,
+flow-direction bit logic) and ~1,375 lines must stay in Java (neighbor
+caching, block-state reads, neighbor-updater callbacks). The port only
+targets the 600 compute-only lines.
+
+### Phase 1 — Priority queue port
+
+**Goal:** port `redstone/PriorityQueue.java` + `redstone/SimpleQueue.java`
+to `rust/mod/src/redstone_queues.rs`. Pure data structures, no World access.
+
+JNI surface: flat array of `(wire_id, priority)` pairs in, ordered output
+out. Micro-benchmark the Rust round-trip against the Java queue's
+`offer` / `poll` / `insert` on 100, 1000, and 10000 nodes. No integration
+into the controller yet — this is diagnostic only.
+
+**Exit criterion:** Rust beats Java by ≥2× on 1000+ nodes after JNI
+overhead is counted. If not, stop. The queue is not the bottleneck worth
+porting, and the cheaper conclusion is "AC-Java's queue is already good
+enough — move on."
+
+### Phase 2 — Power calculation batch
+
+**Goal:** replace AC's per-cascade propagation loop with one JNI call
+using the existing oracle-validated Rust kernel.
+
+Hook site: `WireHandler.powerNetwork()` (`redstone/WireHandler.java:632-674`).
+Graph building stays in Java (runs once before the Rust call); Rust
+receives the pre-built `WireNode` graph (source power + neighbor indices)
+and returns power deltas for Java to apply.
+
+Reuse existing infrastructure: `rust/mod/src/redstone.rs` (oracle-validated
+kernel), `RedstoneHandoff.java` (buffer layout already defined), and the
+`RedstoneRustDispatcher.ACTIVE` ThreadLocal re-entry guard pattern. No
+new Rust algorithm — only Java-side glue to feed AC's graph into the
+existing buffer.
+
+**Exit criterion:** cascade avg wall time on a lag-machine world beats
+AC-Java by ≥20% AND is not worse than AC-Java by >10% on a 64-wire run
+(protected by a minimum-node cutoff — below that threshold, AC-Java's
+loop runs unchanged). Oracle reports 0 mismatches over a 10-minute mixed
+test.
+
+### Decision gate after Phase 2
+
+If both phases pass, Phase 3 is the full integration: promote the Rust
+path to default (behind a toggle or opt-out), update CHANGELOG, bump to
+`v0.4.0-alpha`, ship.
+
+If either phase shows neutral or negative measurement, document the
+number in this doc, leave the Rust code in place as library-only for
+future revisit, and ship nothing. The existing `[redstone-rust]` counter
+infrastructure stays in the jar gated off, ready for re-measurement if
+Minecraft internals or JNI costs shift.
+
+### Relationship to the Session 3 description above
+
+The earlier **Session 3 — (Conditional) Rust batching on top** block is
+the Phase 2 + Phase 3 combined. The phased breakdown here is a refinement,
+not a replacement — Session 3's exit criteria (oracle 0-mismatches,
+measurable lag-machine speedup) remain the real gate. Phase 1 is purely
+diagnostic: it answers "is JNI overhead survivable for AC's queue shape?"
+before we wire Phase 2 into the controller at all.
+
+### Non-goals
+
+- Does not block or preempt surface rule work.
+- Does not change user-visible behavior until Phase 3 ships.
+- Does not revisit "rewrite all of AC in Rust" — the audit confirmed the
+  ~1,375-line Java-side layer cannot cross JNI efficiently; any plan
+  that moves it to Rust is unviable regardless of kernel speed.
+
+---
+
 ## Out of scope
 
 - **Batch-all-redstone-per-tick.** Semantically broken for Java
