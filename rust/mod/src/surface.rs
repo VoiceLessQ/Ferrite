@@ -175,9 +175,12 @@ pub fn evaluate(tree: &CompiledTree, ctx: &ColumnContext) -> Option<u32> {
                 ip += 1;
                 let secondary_depth_range = read_i32_le(bc, ip);
                 ip += 4;
-                let surface_type = bc[ip]; // 0=FLOOR, 1=CEILING
+                // CaveSurface enum: CEILING(0), FLOOR(1) per Mojang's
+                // unobfuscated 1.21.11 source. Vanilla routes
+                // CEILING → stoneDepthBelow, FLOOR → stoneDepthAbove.
+                let surface_type = bc[ip];
                 ip += 1;
-                let depth = if surface_type == 0 { ctx.stone_depth_above } else { ctx.stone_depth_below };
+                let depth = if surface_type == 0 { ctx.stone_depth_below } else { ctx.stone_depth_above };
                 let add_surface = if add_surface_depth { ctx.run_depth } else { 0 };
                 let secondary_adjust = if secondary_depth_range == 0 {
                     0

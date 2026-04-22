@@ -212,8 +212,12 @@ public final class SurfaceRuleEvaluator {
 					int offset = readIntLE(bc, ip); ip += 4;
 					int addSurfaceDepth = bc[ip++] & 0xFF;
 					int secondaryDepthRange = readIntLE(bc, ip); ip += 4;
+					// CaveSurface enum order: CEILING(0), FLOOR(1) — confirmed
+					// from Mojang's unobfuscated 1.21.11 source. Vanilla's
+					// StoneDepthCheck routes CEILING → stoneDepthBelow,
+					// FLOOR → stoneDepthAbove. Earlier impl had this swapped.
 					int surfaceType = bc[ip++] & 0xFF;
-					int depth = surfaceType == 0 ? ctx.stoneDepthAbove() : ctx.stoneDepthBelow();
+					int depth = surfaceType == 0 ? ctx.stoneDepthBelow() : ctx.stoneDepthAbove();
 					int addSurface = addSurfaceDepth != 0 ? ctx.runDepth() : 0;
 					int secondaryAdjust;
 					if (secondaryDepthRange == 0) {
