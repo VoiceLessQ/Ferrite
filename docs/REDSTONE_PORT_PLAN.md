@@ -156,7 +156,7 @@ flow-direction bit logic) and ~1,375 lines must stay in Java (neighbor
 caching, block-state reads, neighbor-updater callbacks). The port only
 targets the 600 compute-only lines.
 
-### Phase 1 — Priority queue port
+### Phase 1 — Priority queue port  ✅ COMPLETE — gate cleared decisively
 
 **Goal:** port `redstone/PriorityQueue.java` + `redstone/SimpleQueue.java`
 to `rust/mod/src/redstone_queues.rs`. Pure data structures, no World access.
@@ -166,10 +166,29 @@ out. Micro-benchmark the Rust round-trip against the Java queue's
 `offer` / `poll` / `insert` on 100, 1000, and 10000 nodes. No integration
 into the controller yet — this is diagnostic only.
 
-**Exit criterion:** Rust beats Java by ≥2× on 1000+ nodes after JNI
-overhead is counted. If not, stop. The queue is not the bottleneck worth
-porting, and the cheaper conclusion is "AC-Java's queue is already good
-enough — move on."
+**Exit criterion (met):** Rust beats Java by ≥2× on 1000+ nodes after
+JNI overhead is counted.
+
+**Result (live `/ferrite redstone bench`, commit `0cfac8c`):**
+
+| N      | Java       | Rust       | Ratio    | Gate |
+|-------:|-----------:|-----------:|---------:|------|
+|    100 | 0.029 ms   | 0.002 ms   | **17.00×** | ✓ |
+|   1000 | 0.059 ms   | 0.005 ms   | **10.94×** | ✓ |
+|  10000 | 0.298 ms   | 0.052 ms   |  **5.77×** | ✓ |
+
+Gate cleared at every realistic AC workload size, including the N=100
+case where pre-bench prediction said Rust would lose to JNI overhead.
+
+**Calibration update for the project:** the 200–500 ns "per-call JNI"
+figure from `PROFILING.md` was for the cramming/physics path with
+snapshot materialization on each crossing. For "pass two direct
+ByteBuffers and an int" the boundary cost is far smaller — likely
+single-digit nanoseconds amortized inside the bench's 2 µs total.
+This calibration changes the calculus for other potential ports
+that previously got "no" answers based on the 200 ns figure.
+
+Phase 2 is green-lit on this evidence.
 
 ### Phase 2 — Power calculation batch
 
