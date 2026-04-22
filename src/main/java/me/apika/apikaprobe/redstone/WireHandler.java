@@ -696,6 +696,7 @@ public class WireHandler {
 			rustWires[i].rustIndex = -1;
 			rustWires[i] = null;
 		}
+		me.apika.apikaprobe.RedstonePhaseMonitor.onRustBfsActivation();
 		return true;
 	}
 

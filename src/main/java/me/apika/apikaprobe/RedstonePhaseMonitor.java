@@ -54,6 +54,16 @@ public final class RedstonePhaseMonitor {
 	private static final AtomicLong WIRE_GATE_DRIVEN = new AtomicLong();
 	private static final AtomicLong WIRE_DIRECT = new AtomicLong();
 
+	/**
+	 * Phase 2 / 2b activation counter — increments only when a cascade
+	 * actually runs through {@code WireHandler.runRustBatch}. Distinct
+	 * from the oracle's {@code bfs-runs} (which counts shadow-compute
+	 * samples). Together with {@code cascades} this lets us compute the
+	 * fraction "Rust path / total cascades" — needed to interpret the
+	 * neutral perf result honestly.
+	 */
+	private static final AtomicLong RUST_BFS_ACTIVATIONS = new AtomicLong();
+
 	// Controller split — which RedstoneController impl handled the update.
 	// Lets us verify at a glance whether the world is running default or
 	// experimental redstone; crucial because the two have very different
@@ -117,6 +127,15 @@ public final class RedstonePhaseMonitor {
 		EXPERIMENTAL_CONTROLLER_CALLS.incrementAndGet();
 	}
 
+	/**
+	 * Called from {@code WireHandler.runRustBatch} on every successful
+	 * activation. Used to compute Rust-path activation fraction in the
+	 * window report.
+	 */
+	public static void onRustBfsActivation() {
+		RUST_BFS_ACTIVATIONS.incrementAndGet();
+	}
+
 	// --- Gate hooks ---------------------------------------------------------
 
 	public static void onGateBegin() {
@@ -148,6 +167,7 @@ public final class RedstonePhaseMonitor {
 		long wMax = WIRE_MAX_NS.getAndSet(0L);
 		long wGate = WIRE_GATE_DRIVEN.getAndSet(0L);
 		long wDirect = WIRE_DIRECT.getAndSet(0L);
+		long wRust = RUST_BFS_ACTIVATIONS.getAndSet(0L);
 		long cDefault = DEFAULT_CONTROLLER_CALLS.getAndSet(0L);
 		long cExp = EXPERIMENTAL_CONTROLLER_CALLS.getAndSet(0L);
 		long gCount = GATE_TICKS.getAndSet(0L);
@@ -158,8 +178,10 @@ public final class RedstonePhaseMonitor {
 
 		if (wCount == 0L && gCount == 0L) return;
 
-		LOGGER.info("[redstone] wire: avg={}ms max={}ms cascades={} (gate-driven={} direct={}, default={} exp={})  gates: avg={}ms max={}ms ticks={}  n={} server-ticks",
+		String rustPct = wCount == 0L ? "0.0" : String.format("%.1f", (100.0 * wRust) / wCount);
+		LOGGER.info("[redstone] wire: avg={}ms max={}ms cascades={} (gate-driven={} direct={}, default={} exp={})  rust-bfs: activations={} ({}% of cascades)  gates: avg={}ms max={}ms ticks={}  n={} server-ticks",
 				formatAvg(wCount, wTotal), formatMs(wMax), wCount, wGate, wDirect, cDefault, cExp,
+				wRust, rustPct,
 				formatAvg(gCount, gTotal), formatMs(gMax), gCount,
 				ticks);
 	}
