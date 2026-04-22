@@ -231,10 +231,25 @@ public final class SurfaceRuleEvaluator {
 					if (negateNext) { condResult = !condResult; negateNext = false; }
 				}
 				case RuleBytecode.OP_WATER -> {
+					// Vanilla formula (Mojang's unobfuscated 1.21.11 source):
+					//   return waterHeight == Integer.MIN_VALUE
+					//       || blockY + (addStoneDepth ? stoneDepthAbove : 0)
+					//          >= waterHeight + offset
+					//             + surfaceDepth * surfaceDepthMultiplier;
+					// Earlier impl had `blockY < fluidHeight + offset` — wrong
+					// inequality direction, missing MIN_VALUE short-circuit,
+					// and skipped addStoneDepth + surfaceDepthMultiplier terms.
 					int offset = readIntLE(bc, ip); ip += 4;
-					ip += 4; // skip surfaceDepthMultiplier
-					ip += 1; // skip addStoneDepthBelow
-					condResult = ctx.blockY() < ctx.fluidHeight() + offset;
+					int surfaceDepthMul = readIntLE(bc, ip); ip += 4;
+					boolean addStoneDepth = bc[ip++] != 0;
+					int waterHeight = ctx.fluidHeight();
+					if (waterHeight == Integer.MIN_VALUE) {
+						condResult = true;
+					} else {
+						int lhs = ctx.blockY() + (addStoneDepth ? ctx.stoneDepthAbove() : 0);
+						int rhs = waterHeight + offset + ctx.runDepth() * surfaceDepthMul;
+						condResult = lhs >= rhs;
+					}
 					if (negateNext) { condResult = !condResult; negateNext = false; }
 				}
 

@@ -192,11 +192,25 @@ pub fn evaluate(tree: &CompiledTree, ctx: &ColumnContext) -> Option<u32> {
                 if negate_next { cond = !cond; negate_next = false; }
             }
             OP_WATER => {
+                // Vanilla formula (Mojang's unobfuscated 1.21.11 source):
+                //   return waterHeight == i32::MIN
+                //       || blockY + (addStoneDepth ? stoneDepthAbove : 0)
+                //          >= waterHeight + offset
+                //             + surfaceDepth * surfaceDepthMultiplier;
                 let offset = read_i32_le(bc, ip);
                 ip += 4;
-                ip += 4; // skip surfaceDepthMultiplier (not yet semantically wired)
-                ip += 1; // skip addStoneDepthBelow
-                cond = ctx.block_y < ctx.fluid_height + offset;
+                let surface_depth_mul = read_i32_le(bc, ip);
+                ip += 4;
+                let add_stone_depth = bc[ip] != 0;
+                ip += 1;
+                let water_height = ctx.fluid_height;
+                cond = if water_height == i32::MIN {
+                    true
+                } else {
+                    let lhs = ctx.block_y + if add_stone_depth { ctx.stone_depth_above } else { 0 };
+                    let rhs = water_height + offset + ctx.run_depth * surface_depth_mul;
+                    lhs >= rhs
+                };
                 if negate_next { cond = !cond; negate_next = false; }
             }
             OP_VERT_GRADIENT => {
