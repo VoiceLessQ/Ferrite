@@ -142,6 +142,16 @@ public class WireConnectionManager {
 	}
 
 	/**
+	 * Direct access to the head of the connection linked list. Lets
+	 * the hot Rust-batch path walk connections without allocating a
+	 * lambda + capture per call. Only intended for that callsite —
+	 * normal traversal should still use {@link #forEach}.
+	 */
+	WireConnection head() {
+		return head;
+	}
+
+	/**
 	 * Ordered iteration: visits connections grouped by the given
 	 * update order's cardinal-neighbor sequence, so shape updates and
 	 * other order-sensitive work observe vanilla-compatible sequencing.

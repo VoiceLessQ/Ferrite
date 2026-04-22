@@ -73,6 +73,15 @@ public class WireNode extends Node {
 	/** Next wire in the {@link SimpleQueue} linked list. */
 	WireNode next_wire;
 
+	/**
+	 * Per-cascade slot index used by {@link WireHandler#runRustBatch}.
+	 * Set to the wire's position in the serialized request buffer
+	 * during the drain pass; read by neighbor-resolution to avoid a
+	 * per-cascade {@code HashMap<Long, Integer>} (boxing-heavy).
+	 * Reset is implicit — the next batch overwrites it.
+	 */
+	int rustIndex = -1;
+
 	WireNode(ServerWorld world, BlockPos pos, BlockState state) {
 		super(world);
 

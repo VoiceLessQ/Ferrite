@@ -91,6 +91,16 @@ public class WireHandler {
 	/** True while the handler is draining the updates queue. */
 	private boolean updating;
 
+	/**
+	 * Reusable scratch for {@link #runRustBatch} — pre-allocated to
+	 * the buffer cap so cascades never trigger fresh allocation on
+	 * the hot path. Phase 2's first measurement showed that per-cascade
+	 * allocation (HashMap, capturing lambda, slot int[]) was the actual
+	 * bottleneck, not Rust compute. These two arrays kill all of it.
+	 */
+	private final WireNode[] rustWires = new WireNode[RedstoneHandoff.MAX_NODES];
+	private final int[] rustNeighbors = new int[RedstoneHandoff.NEIGHBOR_SLOTS];
+
 	public WireHandler(ServerWorld world) {
 		this.world = world;
 
@@ -603,13 +613,14 @@ public class WireHandler {
 	private boolean runRustBatch() {
 		int n = search.size();
 
-		WireNode[] wires = new WireNode[n];
-		java.util.Map<Long, Integer> coordToIdx = new java.util.HashMap<>(n * 2);
+		// Drain `search` into the pre-allocated scratch array; tag each
+		// wire with its slot index. No HashMap, no boxing — neighbor
+		// resolution below reads w.rustIndex directly.
 		int idx = 0;
 		while (!search.isEmpty()) {
 			WireNode w = search.poll();
-			wires[idx] = w;
-			coordToIdx.put(w.pos.asLong(), idx);
+			rustWires[idx] = w;
+			w.rustIndex = idx;
 			idx++;
 		}
 
@@ -617,30 +628,33 @@ public class WireHandler {
 		// normally do this; on the batch path we do it ourselves so the
 		// Rust kernel sees correct source contributions.
 		for (int i = 0; i < n; i++) {
-			findExternalPower(wires[i]);
+			findExternalPower(rustWires[i]);
 		}
 
-		// Serialize.
+		// Serialize. Direct linked-list walk avoids the per-wire lambda
+		// allocation that connections.forEach(c -> ...) costs.
 		RedstoneHandoff.resetRequestBuffer();
-		int[] neighbors = new int[RedstoneHandoff.NEIGHBOR_SLOTS];
 		for (int i = 0; i < n; i++) {
-			final WireNode w = wires[i];
-			java.util.Arrays.fill(neighbors, RedstoneHandoff.NO_NEIGHBOR);
-			final int[] slot = {0};
-			w.connections.forEach(c -> {
-				if (slot[0] >= RedstoneHandoff.NEIGHBOR_SLOTS) return;
-				Integer ni = coordToIdx.get(c.wire.pos.asLong());
-				if (ni != null) {
-					neighbors[slot[0]++] = ni;
+			WireNode w = rustWires[i];
+			int slot = 0;
+			for (WireConnection c = w.connections.head(); c != null; c = c.next) {
+				if (slot >= RedstoneHandoff.NEIGHBOR_SLOTS) break;
+				int ni = c.wire.rustIndex;
+				if (ni >= 0) {
+					rustNeighbors[slot++] = ni;
 				}
-			});
+			}
+			// Fill the rest with NO_NEIGHBOR sentinel.
+			for (int k = slot; k < RedstoneHandoff.NEIGHBOR_SLOTS; k++) {
+				rustNeighbors[k] = RedstoneHandoff.NO_NEIGHBOR;
+			}
 			RedstoneHandoff.writeNode(
 					i,
 					w.pos.getX(), w.pos.getY(), w.pos.getZ(),
 					w.currentPower,
 					w.externalPower,
 					RedstoneHandoff.FLAG_IS_WIRE,
-					neighbors);
+					rustNeighbors);
 		}
 
 		// One JNI call.
@@ -652,22 +666,35 @@ public class WireHandler {
 					n);
 		} catch (UnsatisfiedLinkError | RuntimeException e) {
 			// Native blew up — re-seed search with our drained wires so
-			// the Java fallback path runs cleanly.
-			for (WireNode w : wires) search.offer(w);
+			// the Java fallback path runs cleanly. Clear rustIndex marks
+			// to keep state clean.
+			for (int i = 0; i < n; i++) {
+				rustWires[i].rustIndex = -1;
+				search.offer(rustWires[i]);
+				rustWires[i] = null;
+			}
 			return false;
 		}
 
-		// Read deltas. Set virtualPower per wire, queue for emission.
+		// Read deltas. Result format is (x, y, z, newPower) — look up the
+		// wire via the existing fastutil Long2ObjectMap (primitive-keyed,
+		// no Long boxing) instead of our own HashMap.
 		for (int i = 0; i < changed; i++) {
 			long key = net.minecraft.util.math.BlockPos.asLong(
 					RedstoneHandoff.readResultX(i),
 					RedstoneHandoff.readResultY(i),
 					RedstoneHandoff.readResultZ(i));
-			Integer wi = coordToIdx.get(key);
-			if (wi == null) continue;
-			WireNode wire = wires[wi];
+			Node node = nodes.get(key);
+			if (!(node instanceof WireNode wire)) continue;
 			wire.virtualPower = RedstoneHandoff.readResultNewPower(i);
 			queueWire(wire);
+		}
+
+		// Clear rustIndex marks + scratch slots so subsequent cascades
+		// don't see stale tags. Cheap — straight-line write.
+		for (int i = 0; i < n; i++) {
+			rustWires[i].rustIndex = -1;
+			rustWires[i] = null;
 		}
 		return true;
 	}
