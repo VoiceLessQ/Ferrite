@@ -187,9 +187,11 @@ public final class SurfaceValidator {
 			long mm = mismatches.get();
 			if (mm <= 50) {
 				ExampleMod.LOGGER.warn(
-					"[surface-validate] mismatch #{} at ({},{},{}) vanilla={} eval={} biome={} runDepth={} fluid={}",
+					"[surface-validate] mismatch #{} at ({},{},{}) vanilla={} eval={} biome={} runDepth={} stoneAbove={} stoneBelow={} fluid={} blockY={}",
 					mm, x, y, z, vName, oName,
-					ctx.biomeName(), ctx.runDepth(), ctx.fluidHeight());
+					ctx.biomeName(), ctx.runDepth(),
+					ctx.stoneDepthAbove(), ctx.stoneDepthBelow(),
+					ctx.fluidHeight(), ctx.blockY());
 			} else if (mm == 51) {
 				ExampleMod.LOGGER.warn("[surface-validate] suppressing further mismatch lines (>50)");
 			}
