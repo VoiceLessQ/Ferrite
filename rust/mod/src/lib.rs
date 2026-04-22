@@ -6,6 +6,7 @@ pub mod cramming;
 mod cramming_jni;
 pub mod redstone;
 mod redstone_jni;
+pub mod surface;
 
 pub use engine::Java_me_apika_apikaprobe_RustBridge_initEngine;
 pub use terrain::Java_me_apika_apikaprobe_RustBridge_computeChunkTerrain;
