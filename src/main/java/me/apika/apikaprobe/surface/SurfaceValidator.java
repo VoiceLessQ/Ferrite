@@ -249,14 +249,26 @@ public final class SurfaceValidator {
 		int stoneDepthAbove = vert[0];
 		int stoneDepthBelow = vert[1];
 		int fluidHeight = vert[2];
+		int blockX = vert[3];
 		int blockY = vert[4];
+		int blockZ = vert[5];
 		int runDepth = readIntField(ruleContext, "runDepth");
 		double secondaryDepth = readSecondaryDepth(ruleContext);
 
-		// Spike placeholders — will mismatch in their respective conditions.
-		boolean isCold = false;
+		// isCold: vanilla calls biome.value().coldEnoughToSnow(pos, seaLevel).
+		// Pull biomeSupplier (already used by readBiomeName), call .get() →
+		// RegistryEntry → .value() → coldEnoughToSnow(BlockPos, int).
+		boolean isCold = readIsCold(ruleContext, blockX, blockY, blockZ);
+
+		// surfaceHeight: vanilla calls ruleContext.getMinSurfaceLevel() —
+		// returns preliminarySurfaceLevel + surfaceDepth - 8. Used by
+		// OP_SURFACE (AbovePreliminarySurfaceCondition: blockY >= getMinSurfaceLevel()).
+		int surfaceHeight = readMinSurfaceLevel(ruleContext, blockY);
+
+		// Steep: still placeholder. Vanilla calls SurfaceSystem state and
+		// heightmap reads that aren't trivially reflective. Two
+		// SteepMaterialCondition occurrences in tree — accept as residual.
 		boolean isSteep = false;
-		int surfaceHeight = blockY;
 
 		return new ColumnContext(
 				biome, blockY,
@@ -264,6 +276,75 @@ public final class SurfaceValidator {
 				fluidHeight, isCold, isSteep, surfaceHeight,
 				secondaryDepth,
 				new double[16]); // 16 noise channels — all zero, NoiseThresh will mismatch
+	}
+
+	/**
+	 * Calls {@code biome.value().coldEnoughToSnow(pos, seaLevel)} via
+	 * reflection. Vanilla's TemperatureHelperCondition uses this exact
+	 * call (Mojang's source line 442). Returns false on any reflection
+	 * failure — the OP_TEMPERATURE branch will then mismatch in those
+	 * positions but the validator will surface them clearly.
+	 */
+	private static boolean readIsCold(Object ruleContext, int blockX, int blockY, int blockZ) {
+		try {
+			Object supplier = findSupplierField(ruleContext);
+			if (!(supplier instanceof java.util.function.Supplier<?> s)) return false;
+			Object biomeEntry = s.get();
+			if (biomeEntry == null) return false;
+			Object biomeValue = biomeEntry.getClass().getMethod("value").invoke(biomeEntry);
+			if (biomeValue == null) return false;
+
+			int seaLevel = readSeaLevel(ruleContext);
+			Object pos = newBlockPos(blockX, blockY, blockZ);
+			if (pos == null) return false;
+
+			for (java.lang.reflect.Method m : biomeValue.getClass().getMethods()) {
+				if (!m.getName().equals("coldEnoughToSnow") || m.getParameterCount() != 2) continue;
+				Object out = m.invoke(biomeValue, pos, seaLevel);
+				return out instanceof Boolean b && b;
+			}
+		} catch (ReflectiveOperationException | RuntimeException ignored) {
+			// fall through
+		}
+		return false;
+	}
+
+	private static int readSeaLevel(Object ruleContext) {
+		try {
+			java.lang.reflect.Method m = ruleContext.getClass().getMethod("getSeaLevel");
+			Object v = m.invoke(ruleContext);
+			if (v instanceof Integer i) return i;
+		} catch (ReflectiveOperationException | RuntimeException ignored) {
+			// fall through
+		}
+		return 63; // overworld default; safe fallback
+	}
+
+	private static Object newBlockPos(int x, int y, int z) {
+		try {
+			Class<?> cls = Class.forName("net.minecraft.util.math.BlockPos");
+			return cls.getConstructor(int.class, int.class, int.class).newInstance(x, y, z);
+		} catch (ReflectiveOperationException | RuntimeException ignored) {
+			return null;
+		}
+	}
+
+	/**
+	 * Calls {@code ruleContext.getMinSurfaceLevel()} via reflection.
+	 * Vanilla AbovePreliminarySurfaceCondition tests
+	 * {@code blockY >= getMinSurfaceLevel()} (Mojang's source line 394).
+	 * Falls back to {@code blockY} if the method isn't found —
+	 * placeholder behaviour was the same.
+	 */
+	private static int readMinSurfaceLevel(Object ruleContext, int defaultY) {
+		try {
+			java.lang.reflect.Method m = ruleContext.getClass().getMethod("getMinSurfaceLevel");
+			Object v = m.invoke(ruleContext);
+			if (v instanceof Integer i) return i;
+		} catch (ReflectiveOperationException | RuntimeException ignored) {
+			// fall through
+		}
+		return defaultY;
 	}
 
 	private static double readSecondaryDepth(Object ruleContext) {
