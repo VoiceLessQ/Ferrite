@@ -7,7 +7,24 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
-_(no changes pending)_
+### Added
+
+- `/ferrite cramming on | off | status` — runtime toggle for the
+  batched cramming dispatcher. Lets users A/B Ferrite vs vanilla in
+  their own world without restart. Default ON (matches prior
+  behavior).
+
+### Documentation
+
+- Clarified that Ferrite's cramming path does **not** apply vanilla
+  cramming damage. Previously documented only in the source comment
+  at [`CrammingDispatcher.java:110-114`](src/main/java/me/apika/apikaprobe/CrammingDispatcher.java#L110-L114);
+  now surfaced in README. The omission is a deliberate trade-off, not
+  a missed feature: combined with `/gamerule maxEntityCramming 0` it
+  enables huge stable mob farms that vanilla physically can't reach
+  (cramming damage thins the herd before the perf bottleneck shows).
+  Users who want vanilla cramming damage back can run
+  `/ferrite cramming off`.
 
 ---
 

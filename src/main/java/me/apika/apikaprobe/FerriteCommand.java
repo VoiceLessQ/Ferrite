@@ -56,6 +56,10 @@ public final class FerriteCommand {
 	private static void registerRoot(CommandDispatcher<ServerCommandSource> dispatcher) {
 		dispatcher.register(CommandManager.literal("ferrite")
 				.requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
+				.then(CommandManager.literal("cramming")
+						.then(CommandManager.literal("on").executes(FerriteCommand::enableCramming))
+						.then(CommandManager.literal("off").executes(FerriteCommand::disableCramming))
+						.then(CommandManager.literal("status").executes(FerriteCommand::statusCramming)))
 				.then(CommandManager.literal("redstone")
 						.then(CommandManager.literal("rust")
 								.then(CommandManager.literal("on").executes(FerriteCommand::enableRust))
@@ -83,6 +87,39 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("trace-next").executes(FerriteCommand::surfaceTraceNext))
 						.then(CommandManager.literal("dump-biomes").executes(FerriteCommand::surfaceDumpBiomes))
 						.then(CommandManager.literal("dump").executes(FerriteCommand::surfaceDump))));
+	}
+
+	/**
+	 * Toggle Ferrite's batched mob-vs-mob cramming dispatcher. When OFF,
+	 * the cancel mixin no-ops and vanilla LivingEntity.tickCramming runs
+	 * unmodified — including vanilla cramming damage. Lets users A/B
+	 * the perf claim ("stable TPS at 1000+ mobs") in their own world.
+	 * Volatile, not persisted.
+	 */
+	private static int enableCramming(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		CrammingDispatcher.ENABLED = true;
+		String msg = "[cramming] Ferrite cramming enabled — batched Rust path active (vanilla cramming damage NOT applied)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int disableCramming(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		CrammingDispatcher.ENABLED = false;
+		String msg = "[cramming] Ferrite cramming disabled — vanilla path active (cramming damage will fire per maxEntityCramming gamerule)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int statusCramming(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		String msg = String.format(
+			"[cramming] ENABLED=%s native=%s  (watch [cramming-dispatch] in latest.log for batch counts)",
+			CrammingDispatcher.ENABLED,
+			RustBridge.NATIVE_AVAILABLE ? "available" : "MISSING");
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
 	}
 
 	/**
