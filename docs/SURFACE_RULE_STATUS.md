@@ -1,6 +1,6 @@
 # Surface rule port — status
 
-Snapshot as of commit `61b7057`. Companion to the forward-looking
+Snapshot as of commit `868994c`. Companion to the forward-looking
 `SURFACE_RULE_BATCH_PLAN.md` and `SURFACE_RULE_BUFFER_SPEC.md` — this
 doc captures what's actually built and runnable today.
 
@@ -10,10 +10,9 @@ doc captures what's actually built and runnable today.
   divergences=0` from the live three-way validator). The Rust port is
   provably correct — identical output to the Java evaluator across all
   biomes and conditions tested.
-- **92.4% match** between the bytecode evaluator and vanilla
-  `buildSurface` (live diff sampler, 1-in-1000 columns; up from 89.8%
-  last session, possibly variance from the random teleport hops landing
-  in different biome distributions).
+- **95.3% match** between the bytecode evaluator and vanilla
+  `buildSurface` (live diff sampler, 1-in-1000 columns; up from 92.4%
+  via parity-pass fixes against Mojang's unobfuscated 1.21.11 source).
 - **Java reference evaluator** (`SurfaceRuleEvaluator.java`) is the
   spec — Rust port (`rust/mod/src/surface.rs`) mirrors it byte-for-byte.
 - **JNI binding shipped** (`rust/mod/src/surface_jni.rs`,
@@ -206,4 +205,37 @@ e90a830  OP_VERT_GRADIENT spike approx
 a1b374d  field arg-order fix → 89.8%
 933c8a2  Rust eval loop port (9/9 Rust tests)
 61b7057  JNI binding + three-way validator → vanilla 92.4%, java=rust 100%
+98e48ff  per-chunk batch JNI + handoff (465 ns/col, java=rust 256/256)
+bafd01e  CaveSurface ordinal fix (StoneDepth direction was swapped)
+6639e7c  OP_WATER exact formula (was inverted + missing terms) → 94.3%
+868994c  isCold + surfaceHeight real reads (drop two placeholders) → 95.3%
 ```
+
+## Parity arc this session
+
+```
+session start:  92.4%
++ CaveSurface ordinal fix:                   91.3%   [variance, dirt-deep bug fixed]
++ OP_WATER exact formula:                    94.3%   [+3.0]
++ isCold + surfaceHeight real reads:         95.3%   [+1.0]
+                                       net:  +2.9 percentage points
+```
+
+Java=Rust=100% throughout — Rust port unbroken across all fixes.
+
+## Workflow change
+
+Mojang shipped 1.21.11 source unobfuscated. We extract from
+`minecraft-26.1.2-server-src.zip` to `./26.1.2/server/...` and read
+`SurfaceRules.java` directly. Replaces the earlier javap-on-named-jar
+workflow — same 5 minutes per condition, zero ambiguity.
+
+## Remaining 4.7% gap
+
+| Pattern | Cause | Fix difficulty |
+|---|---|---|
+| `vanilla=deepslate eval=sand/grass` at Y=-26,-27 stoneAbove=1-2 | Structural — likely a biome condition matching too broadly | Need trace tool first |
+| `vanilla=null eval=deepslate` at Y=3-4 | VertGradient gradient-zone (-8..0) where midpoint approx differs from vanilla per-position random | Hard — port `RandomSplitter` |
+| `vanilla=dirt/sand eval=null` near surface | Some condition over-rejecting | Need trace tool |
+| `isSteep` placeholder (2 nodes) | Heightmap reads not trivially reflective | Small impact, defer |
+| `noiseValues` zeroed | NoiseThresholdMaterialCondition mis-fires consistently | Need real noise sampler tap |
