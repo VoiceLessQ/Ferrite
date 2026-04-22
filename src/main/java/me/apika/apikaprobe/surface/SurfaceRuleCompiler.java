@@ -594,15 +594,17 @@ public final class SurfaceRuleCompiler {
 				emitDouble(readDoubleField(node, "maxThreshold", 0.0));
 			}
 			case "VerticalGradientMaterialCondition" -> {
-				// Real seed extraction needs vanilla's randomDeriver (a
-				// per-world RNG splitter that produces a deterministic
-				// double per-Y from the seed Identifier). Without booting
-				// MC the splitter can't be reproduced, so emit fallback
-				// for this condition. Two occurrences in the default
-				// overworld tree — rounding error against the 528-node
-				// total.
-				emit(RuleBytecode.OP_FALLBACK);
-				hasFallback = true;
+				// Vanilla formula:
+				//   if (blockY <= trueAtAndBelow) return true;
+				//   if (blockY >= falseAtAndAbove) return false;
+				//   else: per-position random (RandomSplitter) with linearly
+				//         mapped probability — spike approximates with
+				//         midpoint cutoff (correct outside gradient zone,
+				//         ~50% wrong inside it).
+				// Operand: i32 trueAtAndBelow + i32 falseAtAndAbove = 9 bytes.
+				emit(RuleBytecode.OP_VERT_GRADIENT);
+				emitInt(resolveYOffset(readField(node, "trueAtAndBelow")));
+				emitInt(resolveYOffset(readField(node, "falseAtAndAbove")));
 			}
 			case "StoneDepthMaterialCondition" -> {
 				// Vanilla: StoneDepth(int offset, boolean addSurfaceDepth,

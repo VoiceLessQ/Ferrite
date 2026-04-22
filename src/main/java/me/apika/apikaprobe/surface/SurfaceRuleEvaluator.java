@@ -105,6 +105,20 @@ public final class SurfaceRuleEvaluator {
 					condResult = set.contains(ctx.biomeName());
 					if (negateNext) { condResult = !condResult; negateNext = false; }
 				}
+				case RuleBytecode.OP_VERT_GRADIENT -> {
+					int trueAtAndBelow = readIntLE(bc, ip); ip += 4;
+					int falseAtAndAbove = readIntLE(bc, ip); ip += 4;
+					int y = ctx.blockY();
+					if (y <= trueAtAndBelow) {
+						condResult = true;
+					} else if (y >= falseAtAndAbove) {
+						condResult = false;
+					} else {
+						// Vanilla: random with prob mapped from y. Spike: midpoint cutoff.
+						condResult = y <= (trueAtAndBelow + falseAtAndAbove) / 2;
+					}
+					if (negateNext) { condResult = !condResult; negateNext = false; }
+				}
 				case RuleBytecode.OP_NOISE_THRESH -> {
 					int chIdx = readU16LE(bc, ip); ip += 2;
 					double minT = readDoubleLE(bc, ip); ip += 8;
