@@ -1,6 +1,6 @@
 # Surface rule port — status
 
-Snapshot as of commit `868994c`. Companion to the forward-looking
+Snapshot as of commit `649edfc`. Companion to the forward-looking
 `SURFACE_RULE_BATCH_PLAN.md` and `SURFACE_RULE_BUFFER_SPEC.md` — this
 doc captures what's actually built and runnable today.
 
@@ -209,6 +209,8 @@ a1b374d  field arg-order fix → 89.8%
 bafd01e  CaveSurface ordinal fix (StoneDepth direction was swapped)
 6639e7c  OP_WATER exact formula (was inverted + missing terms) → 94.3%
 868994c  isCold + surfaceHeight real reads (drop two placeholders) → 95.3%
+cf4cb32  trace-next debug command (opcode-level divergence dump)
+649edfc  dump-biomes debug command (biome pool table inspector)
 ```
 
 ## Parity arc this session
@@ -230,12 +232,43 @@ Mojang shipped 1.21.11 source unobfuscated. We extract from
 `SurfaceRules.java` directly. Replaces the earlier javap-on-named-jar
 workflow — same 5 minutes per condition, zero ambiguity.
 
-## Remaining 4.7% gap
+## Remaining ~5% gap — trace tool revealed it's structural
 
-| Pattern | Cause | Fix difficulty |
+The trace tool (`/ferrite surface trace-next`) was built to diagnose
+the residual mismatches surgically. First trace run hit a
+warm_ocean=sand=null mismatch and revealed the core issue is **not**
+single-formula bugs anymore.
+
+**Trace finding for warm_ocean position (Y=52, sand vs null):**
+
+```
+[0028] OP_SURFACE blockY=52 surfaceH=52 → cond=true   (entered surface branch)
+[0038] OP_STONE_DEPTH addSurface=0 depth=4 rhs=1 → cond=false
+[0049] OP_IF_ELSE → ip=430 (skipped then-branch ip 58..429)
+[0435] OP_BIOME idx=0 biome=warm_ocean setSize=3 → cond=false (badlands set)
+[0438] OP_IF_ELSE → ip=932 (skipped warm_ocean branch?)
+... 4 more sequence alternatives, all gating-condition-false ...
+[3809] OP_RETURN_DONE → return null
+```
+
+`dump-biomes` confirms warm_ocean IS in pool sets #1 and #3:
+- set #1: `[beach, snowy_beach, warm_ocean]`
+- set #3: `[deep_lukewarm_ocean, lukewarm_ocean, warm_ocean]`
+
+But trace shows we never visit OP_BIOME at idx=1 or idx=3. Those
+opcodes live inside then-branches we skipped because gating
+conditions (StoneDepth, IF_ELSE conds) returned false.
+
+**Hypothesis:** the bytecode compiler is either (a) miscapturing
+the structure of nested biome-specific rules, OR (b) one of the
+gating StoneDepth conditions has wrong operands extracted.
+
+This is **structural compiler work**, not formula refinement. Tools
+unblock the diagnosis but not the fix.
+
+| Pattern | Cause | Fix |
 |---|---|---|
-| `vanilla=deepslate eval=sand/grass` at Y=-26,-27 stoneAbove=1-2 | Structural — likely a biome condition matching too broadly | Need trace tool first |
-| `vanilla=null eval=deepslate` at Y=3-4 | VertGradient gradient-zone (-8..0) where midpoint approx differs from vanilla per-position random | Hard — port `RandomSplitter` |
-| `vanilla=dirt/sand eval=null` near surface | Some condition over-rejecting | Need trace tool |
-| `isSteep` placeholder (2 nodes) | Heightmap reads not trivially reflective | Small impact, defer |
-| `noiseValues` zeroed | NoiseThresholdMaterialCondition mis-fires consistently | Need real noise sampler tap |
+| Branches we don't visit (most of remaining 5%) | Bytecode compiler misses/miscaptures rule structure | Bytecode disassembler + cross-ref vanilla `OverworldBiomeBuilder` tree |
+| `vanilla=null eval=deepslate` at Y=3-4 | VertGradient gradient-zone midpoint approximation | Port Mojang's `RandomSplitter` |
+| `isSteep` placeholder (2 nodes) | Heightmap reads not trivially reflective | Defer — small impact |
+| `noiseValues` zeroed | NoiseThresholdMaterialCondition mis-fires | Real noise sampler tap |

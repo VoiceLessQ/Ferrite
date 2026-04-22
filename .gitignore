@@ -58,3 +58,6 @@ gradle/wrapper/gradle-wrapper.jar
 # windows
 Thumbs.db
 
+
+# extracted Mojang source (reference reading only)
+/26.1.2/
