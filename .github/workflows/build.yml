@@ -120,3 +120,33 @@ jobs:
         with:
           name: Artifacts
           path: build/libs/
+
+  # Auto-publishes a GitHub Release when a tag matching v* is pushed.
+  # Body is taken from docs/CURSEFORGE_DESCRIPTION.md at the tag's commit
+  # (always describes what shipped at that version). Pre-release flag is
+  # auto-set if the tag name contains "alpha" or "beta".
+  #
+  # Bypass: don't push a tag and this job never runs. Manual releases
+  # via the web UI still work the same way.
+  release:
+    needs: assemble-jar
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: checkout (need docs/CURSEFORGE_DESCRIPTION.md at tag commit)
+        uses: actions/checkout@v4
+      - name: download jar artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Artifacts
+          path: jars/
+      - name: publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Ferrite ${{ github.ref_name }}"
+          body_path: docs/CURSEFORGE_DESCRIPTION.md
+          files: jars/ferrite-*.jar
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
+          fail_on_unmatched_files: true
