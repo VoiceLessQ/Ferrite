@@ -61,6 +61,10 @@ public final class SurfaceValidator {
 	private static final AtomicLong nullVanilla = new AtomicLong();
 	private static final AtomicLong evalNull = new AtomicLong();
 	private static final AtomicLong contextBuildFails = new AtomicLong();
+	// Three-way diff counters (Java vs Rust). Independent of vanilla diff.
+	private static final AtomicLong rustSamples = new AtomicLong();
+	private static final AtomicLong rustJavaAgreement = new AtomicLong();
+	private static final AtomicLong rustJavaDivergence = new AtomicLong();
 	private static long lastReportTick = 0;
 
 	public static boolean isEnabled() {
@@ -87,6 +91,9 @@ public final class SurfaceValidator {
 		nullVanilla.set(0);
 		evalNull.set(0);
 		contextBuildFails.set(0);
+		rustSamples.set(0);
+		rustJavaAgreement.set(0);
+		rustJavaDivergence.set(0);
 	}
 
 	public static String statsLine() {
@@ -97,9 +104,13 @@ public final class SurfaceValidator {
 		long en = evalNull.get();
 		long cf = contextBuildFails.get();
 		double rate = total == 0 ? 0.0 : (100.0 * m / total);
+		long rs = rustSamples.get();
+		long ra = rustJavaAgreement.get();
+		long rd = rustJavaDivergence.get();
+		double javaRustRate = rs == 0 ? 0.0 : (100.0 * ra / rs);
 		return String.format(
-				"[surface-validate] samples=%d match=%.1f%% mismatches=%d nullVanilla=%d evalNull=%d ctxBuildFails=%d",
-				total, rate, mm, nv, en, cf);
+				"[surface-validate] samples=%d match=%.1f%% mismatches=%d nullVanilla=%d evalNull=%d ctxBuildFails=%d | rust samples=%d java=rust=%.1f%% divergences=%d",
+				total, rate, mm, nv, en, cf, rs, javaRustRate, rd);
 	}
 
 	/**
@@ -137,6 +148,28 @@ public final class SurfaceValidator {
 			ExampleMod.LOGGER.warn("[surface-validate] evaluator threw at ({},{},{}): {}",
 					x, y, z, e.toString());
 			return;
+		}
+
+		// Three-way diff: also run the Rust evaluator if native is loaded.
+		// Java is the spec — Rust must agree. Vanilla diff stays the
+		// source of truth for "are our condition formulas right?"
+		Object rustResult = SurfaceRuleEvaluator.evaluateViaRust(tree, ctx);
+		if (rustResult != null || me.apika.apikaprobe.RustBridge.NATIVE_AVAILABLE) {
+			rustSamples.incrementAndGet();
+			String javaName = stringify(ourResult);
+			String rustName = stringify(rustResult);
+			if (java.util.Objects.equals(javaName, rustName)) {
+				rustJavaAgreement.incrementAndGet();
+			} else {
+				long rd = rustJavaDivergence.incrementAndGet();
+				if (rd <= 50) {
+					ExampleMod.LOGGER.warn(
+						"[surface-validate] JAVA≠RUST #{} at ({},{},{}) java={} rust={} biome={}",
+						rd, x, y, z, javaName, rustName, ctx.biomeName());
+				} else if (rd == 51) {
+					ExampleMod.LOGGER.warn("[surface-validate] suppressing further JAVA≠RUST lines (>50)");
+				}
+			}
 		}
 
 		totalSamples.incrementAndGet();

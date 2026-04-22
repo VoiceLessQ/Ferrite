@@ -40,6 +40,69 @@ public final class SurfaceRuleEvaluator {
 
 	private SurfaceRuleEvaluator() {}
 
+	/**
+	 * Evaluates the same {@link CompiledRuleTree} via the native Rust
+	 * implementation. Returns the same Object that the Java
+	 * {@link #evaluate} would return for the same inputs (the entry
+	 * from {@link CompiledRuleTree#blockstateTable} at the index Rust
+	 * resolved, or {@code null} if no rule matched).
+	 *
+	 * <p>If the native library isn't loaded for this platform, returns
+	 * null silently — caller should treat that as "Rust path
+	 * unavailable" and fall back to the Java evaluator.
+	 *
+	 * <p>Allocates fresh direct ByteBuffers per call. That's wasteful
+	 * but correct for the validator-replacement spike (1-in-1000
+	 * sampling — the per-call allocation cost is invisible against
+	 * the JNI overhead). Per-chunk batching with reused buffers is
+	 * the next optimization.
+	 */
+	public static Object evaluateViaRust(CompiledRuleTree tree, ColumnContext ctx) {
+		if (!me.apika.apikaprobe.RustBridge.NATIVE_AVAILABLE) return null;
+
+		// Pack bytecode into a direct buffer.
+		java.nio.ByteBuffer bcBuf = java.nio.ByteBuffer.allocateDirect(tree.bytecode().length);
+		bcBuf.put(tree.bytecode());
+		bcBuf.flip();
+
+		// Pre-compute biome match bits: 1 byte per biome-set-pool entry,
+		// 1 if this column's biome name is in that pool entry.
+		int biomeSetCount = tree.biomeSetTable().length;
+		java.nio.ByteBuffer bitsBuf = java.nio.ByteBuffer.allocateDirect(biomeSetCount);
+		String currentBiome = ctx.biomeName();
+		for (int i = 0; i < biomeSetCount; i++) {
+			bitsBuf.put((byte) (tree.biomeSetTable()[i].contains(currentBiome) ? 1 : 0));
+		}
+		bitsBuf.flip();
+
+		// Pack noise values as f64 little-endian.
+		double[] noise = ctx.noiseValues();
+		int noiseCount = noise == null ? 0 : noise.length;
+		java.nio.ByteBuffer noiseBuf = java.nio.ByteBuffer.allocateDirect(noiseCount * 8)
+				.order(java.nio.ByteOrder.LITTLE_ENDIAN);
+		for (int i = 0; i < noiseCount; i++) {
+			noiseBuf.putDouble(noise[i]);
+		}
+		noiseBuf.flip();
+
+		int id;
+		try {
+			id = me.apika.apikaprobe.RustBridge.evaluateSurfaceRule(
+					bcBuf, tree.bytecode().length,
+					bitsBuf, biomeSetCount,
+					ctx.blockY(), ctx.runDepth(),
+					ctx.stoneDepthAbove(), ctx.stoneDepthBelow(),
+					ctx.fluidHeight(), ctx.isCold(), ctx.isSteep(),
+					ctx.surfaceHeight(), ctx.secondaryDepth(),
+					noiseBuf, noiseCount);
+		} catch (UnsatisfiedLinkError | RuntimeException e) {
+			return null;
+		}
+
+		if (id < 0 || id >= tree.blockstateTable().length) return null;
+		return tree.blockstateTable()[id];
+	}
+
 	public static Object evaluate(CompiledRuleTree tree, ColumnContext ctx) {
 		// Don't short-circuit on tree.hasFallback() — that flag is for the
 		// dispatcher (tells it "result may be wrong, route to vanilla").

@@ -48,6 +48,12 @@ pub struct ColumnContext<'a> {
     pub surface_height: i32,
     pub secondary_depth: f64,
     pub noise_values: &'a [f64],
+    /// Optional precomputed biome-set-pool match bitset. When set,
+    /// `OP_BIOME` reads `biome_match_bits[set_idx]` instead of doing
+    /// binary-search membership against `tree.biome_set_table`. Used
+    /// by the JNI fast path so Java can do the biome lookup once per
+    /// column and pass an N-byte vector.
+    pub biome_match_bits: Option<&'a [u8]>,
 }
 
 /// One pool entry per BiomeMaterialCondition node — the set of biome
@@ -129,9 +135,13 @@ pub fn evaluate(tree: &CompiledTree, ctx: &ColumnContext) -> Option<u32> {
             OP_BIOME => {
                 let idx = read_u16_le(bc, ip) as usize;
                 ip += 2;
-                cond = match tree.biome_set_table.get(idx) {
-                    Some(set) => set.binary_search(&ctx.biome_id).is_ok(),
-                    None => false,
+                // JNI fast path: Java pre-computes per-set hit bits.
+                // Library path: binary-search the inlined u16 set.
+                cond = if let Some(bits) = ctx.biome_match_bits {
+                    bits.get(idx).copied().unwrap_or(0) != 0
+                } else {
+                    tree.biome_set_table.get(idx)
+                        .is_some_and(|set| set.binary_search(&ctx.biome_id).is_ok())
                 };
                 if negate_next { cond = !cond; negate_next = false; }
             }
@@ -260,6 +270,7 @@ mod tests {
             surface_height: 64,
             secondary_depth: 0.0,
             noise_values: &[],
+            biome_match_bits: None,
         }
     }
 

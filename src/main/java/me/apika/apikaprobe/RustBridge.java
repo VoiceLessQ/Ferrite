@@ -98,4 +98,33 @@ public class RustBridge {
       java.nio.ByteBuffer requests,
       java.nio.ByteBuffer results,
       int nodeCount);
+
+  /**
+   * Evaluates a compiled surface rule for one column position. Returns
+   * the blockstate ID (≥0, indexes into the per-tree blockstate table)
+   * or -1 if no rule matched.
+   *
+   * <p>{@code biomeMatchBits} is a precomputed bitset (1 byte per
+   * biome-set-pool entry, 0=miss, 1=hit) so Rust can do O(1) biome
+   * lookups instead of walking string sets across the JNI boundary.
+   *
+   * <p>{@code noiseValues} is a direct byte buffer of {@code noiseCount}
+   * f64s in little-endian order — pre-sampled by Java per column.
+   */
+  public static native int evaluateSurfaceRule(
+      java.nio.ByteBuffer bytecode,
+      int bytecodeLen,
+      java.nio.ByteBuffer biomeMatchBits,
+      int biomeMatchCount,
+      int blockY,
+      int runDepth,
+      int stoneDepthAbove,
+      int stoneDepthBelow,
+      int fluidHeight,
+      boolean isCold,
+      boolean isSteep,
+      int surfaceHeight,
+      double secondaryDepth,
+      java.nio.ByteBuffer noiseValues,
+      int noiseCount);
 }
