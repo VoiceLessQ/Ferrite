@@ -126,12 +126,27 @@ public final class SurfaceRuleEvaluator {
 					if (negateNext) { condResult = !condResult; negateNext = false; }
 				}
 				case RuleBytecode.OP_STONE_DEPTH -> {
+					// Vanilla formula (decoded from javap):
+					//   depth = surfaceType==CEILING ? stoneDepthBelow : stoneDepthAbove
+					//   addSurface = addSurfaceDepth ? runDepth : 0
+					//   secondaryAdjust = secondaryDepthRange == 0 ? 0
+					//     : (int)MathHelper.map(secondaryDepth, -1.0, 1.0, 0.0, secondaryDepthRange)
+					//   return depth <= 1 + offset + addSurface + secondaryAdjust
 					int offset = readIntLE(bc, ip); ip += 4;
-					ip += 1; // skip addSurfaceDepth (semantic TBD)
-					ip += 4; // skip secondaryDepthRange
+					int addSurfaceDepth = bc[ip++] & 0xFF;
+					int secondaryDepthRange = readIntLE(bc, ip); ip += 4;
 					int surfaceType = bc[ip++] & 0xFF;
 					int depth = surfaceType == 0 ? ctx.stoneDepthAbove() : ctx.stoneDepthBelow();
-					condResult = depth <= offset;
+					int addSurface = addSurfaceDepth != 0 ? ctx.runDepth() : 0;
+					int secondaryAdjust;
+					if (secondaryDepthRange == 0) {
+						secondaryAdjust = 0;
+					} else {
+						// MathHelper.map(v, -1, 1, 0, R) = (v + 1) * R / 2
+						double mapped = (ctx.secondaryDepth() + 1.0) * secondaryDepthRange / 2.0;
+						secondaryAdjust = (int) mapped;
+					}
+					condResult = depth <= 1 + offset + addSurface + secondaryAdjust;
 					if (negateNext) { condResult = !condResult; negateNext = false; }
 				}
 				case RuleBytecode.OP_WATER -> {

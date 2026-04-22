@@ -212,6 +212,7 @@ public final class SurfaceValidator {
 		int stoneDepthBelow = vert[2];
 		int stoneDepthAbove = vert[3];
 		int runDepth = vert[4];
+		double secondaryDepth = readSecondaryDepth(ruleContext);
 
 		// Spike placeholders — will mismatch in their respective conditions.
 		boolean isCold = false;
@@ -222,7 +223,19 @@ public final class SurfaceValidator {
 				biome, blockY,
 				runDepth, stoneDepthAbove, stoneDepthBelow,
 				fluidHeight, isCold, isSteep, surfaceHeight,
+				secondaryDepth,
 				new double[16]); // 16 noise channels — all zero, NoiseThresh will mismatch
+	}
+
+	private static double readSecondaryDepth(Object ruleContext) {
+		try {
+			java.lang.reflect.Method m = ruleContext.getClass().getMethod("getSecondaryDepth");
+			Object v = m.invoke(ruleContext);
+			if (v instanceof Double d) return d;
+		} catch (ReflectiveOperationException | RuntimeException ignored) {
+			// fall through
+		}
+		return 0.0;
 	}
 
 	private static String readBiomeName(Object ruleContext) {

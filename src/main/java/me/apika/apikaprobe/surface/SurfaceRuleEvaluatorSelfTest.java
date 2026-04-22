@@ -53,11 +53,11 @@ public final class SurfaceRuleEvaluatorSelfTest {
 	// --- helpers -----------------------------------------------------------
 
 	private static ColumnContext ctx(int runDepth) {
-		return new ColumnContext("minecraft:plains", 64, runDepth, 5, 5, 63, false, false, 64, new double[8]);
+		return new ColumnContext("minecraft:plains", 64, runDepth, 5, 5, 63, false, false, 64, 0.0, new double[8]);
 	}
 
 	private static ColumnContext ctxFor(String biome, double[] noise) {
-		return new ColumnContext(biome, 64, 5, 5, 5, 63, false, false, 64, noise);
+		return new ColumnContext(biome, 64, 5, 5, 5, 63, false, false, 64, 0.0, noise);
 	}
 
 	// --- tests -------------------------------------------------------------

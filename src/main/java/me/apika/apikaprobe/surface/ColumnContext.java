@@ -25,5 +25,6 @@ public record ColumnContext(
 		boolean isCold,
 		boolean isSteep,
 		int surfaceHeight,
+		double secondaryDepth,
 		double[] noiseValues) {
 }
