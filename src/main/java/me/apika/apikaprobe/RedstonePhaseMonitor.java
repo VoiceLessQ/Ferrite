@@ -64,6 +64,28 @@ public final class RedstonePhaseMonitor {
 	 */
 	private static final AtomicLong RUST_BFS_ACTIVATIONS = new AtomicLong();
 
+	// Cascade-size histogram + per-bucket timing. A cascade is one
+	// WireHandler.update() invocation; "size" is search.size() after
+	// searchNetwork() — i.e. the wire-only count of the BFS frontier.
+	// Two parallel sets of counters (java vs rust) so we can compare
+	// cost per size class when MIN_NODES is dropped to force the Rust
+	// path on every cascade.
+	private static final int[] BUCKET_UPPER = {4, 8, 16, 32, 64, 128, Integer.MAX_VALUE};
+	private static final String[] BUCKET_LABEL = {"1-4", "5-8", "9-16", "17-32", "33-64", "65-128", "129+"};
+	private static final int N_BUCKETS = BUCKET_UPPER.length;
+	private static final AtomicLong[] BUCKET_JAVA_N = new AtomicLong[N_BUCKETS];
+	private static final AtomicLong[] BUCKET_JAVA_NS = new AtomicLong[N_BUCKETS];
+	private static final AtomicLong[] BUCKET_RUST_N = new AtomicLong[N_BUCKETS];
+	private static final AtomicLong[] BUCKET_RUST_NS = new AtomicLong[N_BUCKETS];
+	static {
+		for (int i = 0; i < N_BUCKETS; i++) {
+			BUCKET_JAVA_N[i] = new AtomicLong();
+			BUCKET_JAVA_NS[i] = new AtomicLong();
+			BUCKET_RUST_N[i] = new AtomicLong();
+			BUCKET_RUST_NS[i] = new AtomicLong();
+		}
+	}
+
 	// Controller split — which RedstoneController impl handled the update.
 	// Lets us verify at a glance whether the world is running default or
 	// experimental redstone; crucial because the two have very different
@@ -136,6 +158,29 @@ public final class RedstonePhaseMonitor {
 		RUST_BFS_ACTIVATIONS.incrementAndGet();
 	}
 
+	/**
+	 * Record one cascade: its wire-only size (search.size() after BFS
+	 * expansion), its end-to-end wall time (depower/Rust + powerNetwork),
+	 * and whether the Rust batch path actually ran. Buckets are log2.
+	 */
+	public static void onCascade(int wireCount, long durationNs, boolean batched) {
+		int b = bucketOf(wireCount);
+		if (batched) {
+			BUCKET_RUST_N[b].incrementAndGet();
+			BUCKET_RUST_NS[b].addAndGet(durationNs);
+		} else {
+			BUCKET_JAVA_N[b].incrementAndGet();
+			BUCKET_JAVA_NS[b].addAndGet(durationNs);
+		}
+	}
+
+	private static int bucketOf(int n) {
+		for (int i = 0; i < N_BUCKETS; i++) {
+			if (n <= BUCKET_UPPER[i]) return i;
+		}
+		return N_BUCKETS - 1;
+	}
+
 	// --- Gate hooks ---------------------------------------------------------
 
 	public static void onGateBegin() {
@@ -184,6 +229,38 @@ public final class RedstonePhaseMonitor {
 				wRust, rustPct,
 				formatAvg(gCount, gTotal), formatMs(gMax), gCount,
 				ticks);
+
+		// Per-bucket histogram + timing. Drains and emits only the
+		// buckets that have data this window.
+		StringBuilder sizes = new StringBuilder("[redstone-bfs] sizes=[");
+		StringBuilder timing = new StringBuilder("[redstone-bfs] timing:");
+		boolean anyBucket = false;
+		boolean firstSize = true;
+		for (int i = 0; i < N_BUCKETS; i++) {
+			long jn = BUCKET_JAVA_N[i].getAndSet(0L);
+			long jns = BUCKET_JAVA_NS[i].getAndSet(0L);
+			long rn = BUCKET_RUST_N[i].getAndSet(0L);
+			long rns = BUCKET_RUST_NS[i].getAndSet(0L);
+			long total = jn + rn;
+			if (total == 0L) continue;
+			anyBucket = true;
+			if (!firstSize) sizes.append(' ');
+			firstSize = false;
+			sizes.append(BUCKET_LABEL[i]).append(':').append(total);
+
+			timing.append("  bucket=").append(BUCKET_LABEL[i])
+					.append(": java(n=").append(jn)
+					.append(" avg=").append(formatAvg(jn, jns)).append("ms)");
+			if (rn > 0) {
+				timing.append(" rust(n=").append(rn)
+						.append(" avg=").append(formatAvg(rn, rns)).append("ms)");
+			}
+		}
+		sizes.append(']');
+		if (anyBucket) {
+			LOGGER.info(sizes.toString());
+			LOGGER.info(timing.toString());
+		}
 	}
 
 	private static String formatAvg(long count, long totalNs) {

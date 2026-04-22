@@ -2,6 +2,7 @@ package me.apika.apikaprobe;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 
@@ -68,7 +69,10 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("bfs")
 								.then(CommandManager.literal("on").executes(FerriteCommand::enableBfs))
 								.then(CommandManager.literal("off").executes(FerriteCommand::disableBfs))
-								.then(CommandManager.literal("status").executes(FerriteCommand::statusBfs))))
+								.then(CommandManager.literal("status").executes(FerriteCommand::statusBfs)))
+						.then(CommandManager.literal("bfs-min")
+								.then(CommandManager.argument("n", IntegerArgumentType.integer(1, 4096))
+										.executes(FerriteCommand::setBfsMin))))
 				.then(CommandManager.literal("surface")
 						.then(CommandManager.literal("compile").executes(FerriteCommand::surfaceCompile))
 						.then(CommandManager.literal("stats").executes(FerriteCommand::surfaceStats))
@@ -172,6 +176,22 @@ public final class FerriteCommand {
 	private static int disableBfs(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
 		FerriteWireConfig.RUST_BFS = false;
 		String msg = "[redstone] Rust BFS Phase 2 disabled (Java path)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * /ferrite redstone bfs-min &lt;n&gt; — set the minimum cascade size
+	 * (in wires) at which the Rust BFS path activates. Default 32. Setting
+	 * to 1 forces Rust on every cascade, useful for forcing per-bucket
+	 * timing data on small cascades that the production gate would skip.
+	 * Volatile, not persisted.
+	 */
+	private static int setBfsMin(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		int n = IntegerArgumentType.getInteger(ctx, "n");
+		FerriteWireConfig.RUST_BFS_MIN_NODES = n;
+		String msg = "[redstone] bfs-min set to " + n + " (was for diagnostics; production default is 32)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;

@@ -576,6 +576,13 @@ public class WireHandler {
 	private void update() {
 		searchNetwork();
 
+		// Cascade-size + per-bucket timing for the BFS sweep experiment.
+		// Capture size before runRustBatch drains `search`; time covers
+		// the propagation + emission phase (the only part that differs
+		// between Java and Rust paths).
+		int cascadeWires = search.size();
+		long cascadeStart = System.nanoTime();
+
 		// Phase 2 of the AC Rust core port (docs/REDSTONE_PORT_PLAN.md).
 		// When toggled on AND the cascade has at least N wires, run one
 		// JNI batch instead of Java's iterative propagation. Below the
@@ -584,8 +591,8 @@ public class WireHandler {
 		// unchanged afterward — only the compute step differs.
 		boolean batched = false;
 		if (FerriteWireConfig.RUST_BFS
-				&& search.size() >= FerriteWireConfig.RUST_BFS_MIN_NODES
-				&& search.size() <= RedstoneHandoff.MAX_NODES
+				&& cascadeWires >= FerriteWireConfig.RUST_BFS_MIN_NODES
+				&& cascadeWires <= RedstoneHandoff.MAX_NODES
 				&& me.apika.apikaprobe.RustBridge.NATIVE_AVAILABLE) {
 			batched = runRustBatch();
 		}
@@ -600,6 +607,11 @@ public class WireHandler {
 			// otherwise subsequent cascades will be locked out.
 			updating = false;
 			throw t;
+		} finally {
+			if (cascadeWires > 0) {
+				me.apika.apikaprobe.RedstonePhaseMonitor.onCascade(
+						cascadeWires, System.nanoTime() - cascadeStart, batched);
+			}
 		}
 	}
 
