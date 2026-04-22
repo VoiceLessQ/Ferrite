@@ -9,6 +9,9 @@ import me.apika.apikaprobe.redstone.FerriteWireConfig;
 import me.apika.apikaprobe.surface.CompiledRuleTree;
 import me.apika.apikaprobe.surface.SurfaceRuleAccess;
 import me.apika.apikaprobe.surface.SurfaceRuleCompiler;
+import me.apika.apikaprobe.surface.SurfaceBatchHandoff;
+import me.apika.apikaprobe.surface.ColumnContext;
+import me.apika.apikaprobe.surface.SurfaceRuleEvaluator;
 import me.apika.apikaprobe.surface.SurfaceValidator;
 
 import net.minecraft.server.command.CommandManager;
@@ -64,7 +67,8 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("stats").executes(FerriteCommand::surfaceStats))
 						.then(CommandManager.literal("validate").executes(FerriteCommand::surfaceValidate))
 						.then(CommandManager.literal("validate-off").executes(FerriteCommand::surfaceValidateOff))
-						.then(CommandManager.literal("validate-stats").executes(FerriteCommand::surfaceValidateStats))));
+						.then(CommandManager.literal("validate-stats").executes(FerriteCommand::surfaceValidateStats))
+						.then(CommandManager.literal("batch-test").executes(FerriteCommand::surfaceBatchTest))));
 	}
 
 	/**
@@ -219,6 +223,108 @@ public final class FerriteCommand {
 		String finalStats = SurfaceValidator.statsLine();
 		SurfaceValidator.uninstall();
 		sendFeedback(ctx, "[surface-validate] disabled — final stats: " + finalStats, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * /ferrite surface batch-test — exercises the batch JNI path against
+	 * the per-call path on synthetic columns and reports agreement.
+	 *
+	 * <p>Generates N=256 synthetic ColumnContexts with varied inputs (Y,
+	 * runDepth, biome rotated through all biome-set-pool entries),
+	 * evaluates each via {@link SurfaceRuleEvaluator#evaluateViaRust}
+	 * (per-call) AND via {@link SurfaceBatchHandoff} (one batched call),
+	 * then asserts blockstate IDs match column-for-column.
+	 *
+	 * <p>This is the correctness gate before swapping the dispatcher to
+	 * batched mode — if per-call ≡ batched on synthetic input, the
+	 * batched path is safe to use against real chunks.
+	 */
+	private static int surfaceBatchTest(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
+		if (!extracted.ok()) {
+			sendFeedback(ctx, "[surface-batch] extract failed: " + extracted.error(), false);
+			return 0;
+		}
+		CompiledRuleTree tree = SurfaceRuleCompiler.compile(extracted.surfaceRule());
+		final int N = 256;
+		// Synthetic context generator. Vary inputs to exercise different
+		// branches: Y across full overworld range, runDepth bouncing,
+		// biome name rotated through one of the entries in each pool set
+		// (so we hit a real biome match rather than always "unknown").
+		java.util.List<String>[] biomePool = tree.biomeSetTable();
+		String[] sampledBiomes = new String[N];
+		for (int i = 0; i < N; i++) {
+			if (biomePool.length == 0) { sampledBiomes[i] = "unknown"; continue; }
+			java.util.List<String> entry = biomePool[i % biomePool.length];
+			sampledBiomes[i] = entry.isEmpty() ? "unknown" : entry.get(0);
+		}
+
+		ColumnContext[] inputs = new ColumnContext[N];
+		double[] zeroNoise = new double[tree.noiseChannelTable().length];
+		for (int i = 0; i < N; i++) {
+			int blockY = -64 + (i % 384);                  // sweep full overworld Y range
+			int runDepth = (i * 7) % 60 - 30;              // -30..29
+			int sda = (i * 3) % 12;                        // 0..11
+			int sdb = (i * 5) % 12;                        // 0..11
+			inputs[i] = new ColumnContext(
+					sampledBiomes[i], blockY, runDepth, sda, sdb,
+					i % 80,                                 // fluidHeight 0..79
+					(i & 1) != 0, (i & 2) != 0,             // isCold/isSteep alternating
+					i % 100,                                // surfaceHeight 0..99
+					((i % 21) - 10) / 10.0,                 // secondaryDepth -1.0..0.95
+					zeroNoise);
+		}
+
+		// Per-call results.
+		Object[] perCall = new Object[N];
+		for (int i = 0; i < N; i++) {
+			perCall[i] = SurfaceRuleEvaluator.evaluateViaRust(tree, inputs[i]);
+		}
+
+		// Batched results.
+		SurfaceBatchHandoff handoff = new SurfaceBatchHandoff();
+		handoff.setTree(tree);
+		handoff.beginBatch(N);
+		for (int i = 0; i < N; i++) {
+			handoff.packColumn(i, inputs[i]);
+		}
+		long t0 = System.nanoTime();
+		handoff.dispatch();
+		long batchNanos = System.nanoTime() - t0;
+
+		Object[] batched = new Object[N];
+		for (int i = 0; i < N; i++) {
+			batched[i] = handoff.readResult(i);
+		}
+
+		// Diff.
+		int agree = 0;
+		int divergeFirst = -1;
+		for (int i = 0; i < N; i++) {
+			boolean same = java.util.Objects.equals(
+					perCall[i] == null ? null : perCall[i].toString(),
+					batched[i] == null ? null : batched[i].toString());
+			if (same) agree++;
+			else if (divergeFirst < 0) divergeFirst = i;
+		}
+
+		String msg = String.format(
+				"[surface-batch] N=%d agree=%d/%d batchDispatch=%.3f ms/N=%.0f ns per col",
+				N, agree, N, batchNanos / 1_000_000.0, (double) batchNanos / N);
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		if (divergeFirst >= 0) {
+			ColumnContext c = inputs[divergeFirst];
+			String dmsg = String.format(
+					"[surface-batch] first divergence at col %d: perCall=%s batched=%s (Y=%d runDepth=%d biome=%s)",
+					divergeFirst,
+					perCall[divergeFirst] == null ? "null" : perCall[divergeFirst].toString(),
+					batched[divergeFirst] == null ? "null" : batched[divergeFirst].toString(),
+					c.blockY(), c.runDepth(), c.biomeName());
+			sendFeedback(ctx, dmsg, false);
+			ExampleMod.LOGGER.warn(dmsg);
+		}
 		return Command.SINGLE_SUCCESS;
 	}
 

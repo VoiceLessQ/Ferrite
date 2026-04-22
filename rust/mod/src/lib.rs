@@ -10,6 +10,7 @@ pub mod surface;
 mod surface_jni;
 
 pub use surface_jni::Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRule;
+pub use surface_jni::Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRuleBatch;
 
 pub use engine::Java_me_apika_apikaprobe_RustBridge_initEngine;
 pub use terrain::Java_me_apika_apikaprobe_RustBridge_computeChunkTerrain;

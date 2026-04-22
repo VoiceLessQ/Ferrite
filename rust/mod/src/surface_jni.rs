@@ -15,6 +15,7 @@
 
 use std::slice;
 
+use rayon::prelude::*;
 use rosttasse::jni::objects::{JByteBuffer, JClass};
 use rosttasse::jni::sys::{jboolean, jdouble, jint};
 use rosttasse::JNIEnv;
@@ -100,6 +101,161 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRule<'
         Some(id) if (id as i64) <= jint::MAX as i64 => id as jint,
         _ => RESULT_NULL,
     }
+}
+
+/// Batch entry: evaluates `column_count` columns in parallel via Rayon.
+/// One JNI call per chunk replaces ~1k–60k single-column calls.
+///
+/// All per-column inputs are parallel arrays in direct ByteBuffers.
+/// Output is `i32 × column_count`, written in place.
+///
+/// # Buffer layout
+///
+/// Per-column scalars (fixed stride per column):
+///   block_ys, run_depths, stone_above, stone_below, fluid_heights,
+///   surface_heights → i32 × column_count
+///   flags          → u8 × column_count   (bit0=isCold, bit1=isSteep)
+///   secondary_depths → f64 × column_count
+///
+/// Variable-stride (per-column slices into flat buffers):
+///   biome_match_bits → biome_set_count × column_count u8
+///                       (column c's bits live at [c * biome_set_count ..])
+///   noise_values     → noise_channel_count × column_count f64
+///                       (column c's noise lives at [c * noise_channel_count ..])
+///
+/// Output:
+///   results → i32 × column_count (blockstate ID or -1 for null)
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRuleBatch<'local>(
+    env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    bytecode_buf: JByteBuffer<'local>,
+    bytecode_len: jint,
+    biome_set_count: jint,
+    noise_channel_count: jint,
+    biome_match_bits_buf: JByteBuffer<'local>,
+    block_ys_buf: JByteBuffer<'local>,
+    run_depths_buf: JByteBuffer<'local>,
+    stone_above_buf: JByteBuffer<'local>,
+    stone_below_buf: JByteBuffer<'local>,
+    fluid_heights_buf: JByteBuffer<'local>,
+    surface_heights_buf: JByteBuffer<'local>,
+    flags_buf: JByteBuffer<'local>,
+    secondary_depths_buf: JByteBuffer<'local>,
+    noise_values_buf: JByteBuffer<'local>,
+    results_buf: JByteBuffer<'local>,
+    column_count: jint,
+) {
+    let n = column_count.max(0) as usize;
+    if n == 0 {
+        return;
+    }
+
+    let bsc = biome_set_count.max(0) as usize;
+    let ncc = noise_channel_count.max(0) as usize;
+
+    // Resolve all input buffers. Any failure → fill results with -1
+    // and bail (Java falls back to vanilla for this chunk).
+    let bytecode = match get_byte_slice(&env, &bytecode_buf, bytecode_len) {
+        Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+    };
+    let biome_bits = match get_byte_slice(&env, &biome_match_bits_buf, (bsc * n) as jint) {
+        Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+    };
+    let block_ys = match get_i32_slice(&env, &block_ys_buf, n) {
+        Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+    };
+    let run_depths = match get_i32_slice(&env, &run_depths_buf, n) {
+        Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+    };
+    let stone_above = match get_i32_slice(&env, &stone_above_buf, n) {
+        Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+    };
+    let stone_below = match get_i32_slice(&env, &stone_below_buf, n) {
+        Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+    };
+    let fluid_heights = match get_i32_slice(&env, &fluid_heights_buf, n) {
+        Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+    };
+    let surface_heights = match get_i32_slice(&env, &surface_heights_buf, n) {
+        Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+    };
+    let flags = match get_byte_slice(&env, &flags_buf, n as jint) {
+        Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+    };
+    let secondary_depths = match get_f64_slice(&env, &secondary_depths_buf, n) {
+        Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+    };
+    let noise_values = if ncc == 0 {
+        &[][..]
+    } else {
+        match get_f64_slice(&env, &noise_values_buf, n * ncc) {
+            Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+        }
+    };
+    let results = match get_i32_slice_mut(&env, &results_buf, n) {
+        Some(s) => s, None => return,
+    };
+
+    let tree = CompiledTree {
+        bytecode,
+        biome_set_table: &[],
+        blockstate_count: u32::MAX,
+    };
+
+    // Per-column eval, parallelised across columns. Each closure reads
+    // its column's slice from each parallel array; no allocations inside.
+    results.par_iter_mut().enumerate().for_each(|(col, out)| {
+        let bits_start = col * bsc;
+        let noise_start = col * ncc;
+        let ctx = ColumnContext {
+            biome_id: 0,
+            block_y: block_ys[col],
+            run_depth: run_depths[col],
+            stone_depth_above: stone_above[col],
+            stone_depth_below: stone_below[col],
+            fluid_height: fluid_heights[col],
+            is_cold: (flags[col] & 0x01) != 0,
+            is_steep: (flags[col] & 0x02) != 0,
+            surface_height: surface_heights[col],
+            secondary_depth: secondary_depths[col],
+            noise_values: if ncc == 0 { &[] } else { &noise_values[noise_start..noise_start + ncc] },
+            biome_match_bits: if bsc == 0 { None } else { Some(&biome_bits[bits_start..bits_start + bsc]) },
+        };
+        *out = match evaluate(&tree, &ctx) {
+            Some(id) if (id as i64) <= jint::MAX as i64 => id as jint,
+            _ => RESULT_NULL,
+        };
+    });
+}
+
+fn fill_results_null<'env>(env: &JNIEnv<'env>, buf: &JByteBuffer<'env>, count: usize) {
+    if let Some(results) = get_i32_slice_mut(env, buf, count) {
+        for r in results.iter_mut() {
+            *r = RESULT_NULL;
+        }
+    }
+}
+
+fn get_i32_slice<'a, 'env>(env: &JNIEnv<'env>, buf: &'a JByteBuffer<'env>, count: usize) -> Option<&'a [jint]> {
+    let bytes = get_byte_slice(env, buf, (count * 4) as jint)?;
+    Some(unsafe { slice::from_raw_parts(bytes.as_ptr() as *const jint, count) })
+}
+
+fn get_i32_slice_mut<'a, 'env>(env: &JNIEnv<'env>, buf: &'a JByteBuffer<'env>, count: usize) -> Option<&'a mut [jint]> {
+    let len = count * 4;
+    let ptr = env.get_direct_buffer_address(buf).ok()?;
+    let cap = env.get_direct_buffer_capacity(buf).ok()?;
+    if cap < len {
+        return None;
+    }
+    Some(unsafe { slice::from_raw_parts_mut(ptr as *mut jint, count) })
+}
+
+fn get_f64_slice<'a, 'env>(env: &JNIEnv<'env>, buf: &'a JByteBuffer<'env>, count: usize) -> Option<&'a [f64]> {
+    let bytes = get_byte_slice(env, buf, (count * 8) as jint)?;
+    Some(unsafe { slice::from_raw_parts(bytes.as_ptr() as *const f64, count) })
 }
 
 /// Resolve a direct ByteBuffer to a byte slice of the requested length.

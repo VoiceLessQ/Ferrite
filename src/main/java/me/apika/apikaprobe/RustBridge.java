@@ -127,4 +127,37 @@ public class RustBridge {
       double secondaryDepth,
       java.nio.ByteBuffer noiseValues,
       int noiseCount);
+
+  /**
+   * Batch evaluation: one JNI call per chunk. Replaces ~1k–60k single-
+   * column calls, amortizing the JNI boundary cost across all columns.
+   * Rust runs the eval loop per-column in parallel via Rayon.
+   *
+   * <p>All input buffers are direct {@link java.nio.ByteBuffer}s with
+   * little-endian byte order. Per-column scalars are parallel arrays
+   * of length {@code columnCount}. {@code biomeMatchBits} and
+   * {@code noiseValues} are flattened: column {@code c}'s slice lives
+   * at {@code [c * stride .. (c+1) * stride]}.
+   *
+   * <p>Output {@code results} is i32 × columnCount, written in place;
+   * each entry is a blockstate ID (≥0, indexes the per-tree table) or
+   * -1 if no rule matched for that column.
+   */
+  public static native void evaluateSurfaceRuleBatch(
+      java.nio.ByteBuffer bytecode,
+      int bytecodeLen,
+      int biomeSetCount,
+      int noiseChannelCount,
+      java.nio.ByteBuffer biomeMatchBits,
+      java.nio.ByteBuffer blockYs,
+      java.nio.ByteBuffer runDepths,
+      java.nio.ByteBuffer stoneAbove,
+      java.nio.ByteBuffer stoneBelow,
+      java.nio.ByteBuffer fluidHeights,
+      java.nio.ByteBuffer surfaceHeights,
+      java.nio.ByteBuffer flags,
+      java.nio.ByteBuffer secondaryDepths,
+      java.nio.ByteBuffer noiseValues,
+      java.nio.ByteBuffer results,
+      int columnCount);
 }
