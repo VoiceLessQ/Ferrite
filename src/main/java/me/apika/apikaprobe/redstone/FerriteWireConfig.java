@@ -41,4 +41,26 @@ public final class FerriteWireConfig {
 	 * should be deliberate.
 	 */
 	public static volatile UpdateOrder UPDATE_ORDER = UpdateOrder.HORIZONTAL_FIRST_OUTWARD;
+
+	/**
+	 * AC Rust core port — Phase 2 (docs/REDSTONE_PORT_PLAN.md).
+	 *
+	 * <p>When {@code true} AND a cascade has at least
+	 * {@link #RUST_BFS_MIN_NODES} wires, the per-cascade power
+	 * propagation runs in Rust (one batched JNI call) instead of
+	 * Java's queue-based loop. After the batch returns, Java's
+	 * existing emission path (setPower + queueNeighbors +
+	 * updateNeighborShapes) runs in priority order — only the
+	 * compute step changes.
+	 *
+	 * <p>Below the threshold, runs Java unchanged — JNI overhead
+	 * vs queue throughput on tiny networks.
+	 *
+	 * <p>Default off; users enable via {@code /ferrite redstone bfs on}
+	 * after manually validating against vanilla in their world.
+	 */
+	public static volatile boolean RUST_BFS = false;
+
+	/** Minimum cascade size before the Rust batch path activates. */
+	public static volatile int RUST_BFS_MIN_NODES = 32;
 }

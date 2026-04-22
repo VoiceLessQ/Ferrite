@@ -64,7 +64,11 @@ public final class FerriteCommand {
 								.then(CommandManager.literal("on").executes(FerriteCommand::enableAc))
 								.then(CommandManager.literal("off").executes(FerriteCommand::disableAc))
 								.then(CommandManager.literal("status").executes(FerriteCommand::statusAc)))
-						.then(CommandManager.literal("bench").executes(FerriteCommand::redstoneBench)))
+						.then(CommandManager.literal("bench").executes(FerriteCommand::redstoneBench))
+						.then(CommandManager.literal("bfs")
+								.then(CommandManager.literal("on").executes(FerriteCommand::enableBfs))
+								.then(CommandManager.literal("off").executes(FerriteCommand::disableBfs))
+								.then(CommandManager.literal("status").executes(FerriteCommand::statusBfs))))
 				.then(CommandManager.literal("surface")
 						.then(CommandManager.literal("compile").executes(FerriteCommand::surfaceCompile))
 						.then(CommandManager.literal("stats").executes(FerriteCommand::surfaceStats))
@@ -142,6 +146,49 @@ public final class FerriteCommand {
 	 * after JNI overhead is counted? If yes → Phase 2 is green-lit.
 	 * If no → stop, document, AC-Java is good enough.
 	 */
+	/**
+	 * /ferrite redstone bfs on — enables Phase 2 of the AC Rust core
+	 * port. Cascades with ≥{@link FerriteWireConfig#RUST_BFS_MIN_NODES}
+	 * wires run their power propagation in one batched JNI call to
+	 * the Rust kernel instead of Java's queue-based loop. Java's
+	 * emission path (block updates, shape updates) still runs unchanged.
+	 *
+	 * <p>Default off — enable explicitly after validating against
+	 * vanilla in your world. Requires AC also enabled
+	 * ({@code /ferrite redstone ac on}); the BFS path runs inside
+	 * {@code FerriteRedstoneController}.
+	 */
+	private static int enableBfs(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		if (!RustBridge.NATIVE_AVAILABLE) {
+			sendFeedback(ctx, "Rust native unavailable — flag set but no batch will run.", false);
+		}
+		FerriteWireConfig.RUST_BFS = true;
+		String msg = "[redstone] Rust BFS Phase 2 enabled (this session only)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int disableBfs(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		FerriteWireConfig.RUST_BFS = false;
+		String msg = "[redstone] Rust BFS Phase 2 disabled (Java path)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int statusBfs(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		String msg = String.format(
+			"[redstone] bfs RUST_BFS=%s minNodes=%d native=%s ac=%s",
+			FerriteWireConfig.RUST_BFS,
+			FerriteWireConfig.RUST_BFS_MIN_NODES,
+			RustBridge.NATIVE_AVAILABLE ? "available" : "MISSING",
+			FerriteWireConfig.ENABLED ? "on" : "off");
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
 	private static int redstoneBench(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
 		int[] sizes = {100, 1000, 10000};
 		sendFeedback(ctx, "[redstone-bench] running (see latest.log for full results)", false);

@@ -21,6 +21,8 @@ package me.apika.apikaprobe.redstone;
 import java.util.Iterator;
 import java.util.Queue;
 
+import me.apika.apikaprobe.RedstoneHandoff;
+
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap.Entry;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMaps;
@@ -563,7 +565,23 @@ public class WireHandler {
 	 */
 	private void update() {
 		searchNetwork();
-		depowerNetwork();
+
+		// Phase 2 of the AC Rust core port (docs/REDSTONE_PORT_PLAN.md).
+		// When toggled on AND the cascade has at least N wires, run one
+		// JNI batch instead of Java's iterative propagation. Below the
+		// threshold OR if the network exceeds the buffer cap, fall back
+		// to the Java depower path. Either way, powerNetwork() runs
+		// unchanged afterward — only the compute step differs.
+		boolean batched = false;
+		if (FerriteWireConfig.RUST_BFS
+				&& search.size() >= FerriteWireConfig.RUST_BFS_MIN_NODES
+				&& search.size() <= RedstoneHandoff.MAX_NODES
+				&& me.apika.apikaprobe.RustBridge.NATIVE_AVAILABLE) {
+			batched = runRustBatch();
+		}
+		if (!batched) {
+			depowerNetwork();
+		}
 
 		try {
 			powerNetwork();
@@ -573,6 +591,85 @@ public class WireHandler {
 			updating = false;
 			throw t;
 		}
+	}
+
+	/**
+	 * Phase 2 batch path: drains {@link #search}, serializes all wires
+	 * + connectivity into the shared request buffer, calls the Rust
+	 * BFS kernel, and seeds the {@link #updates} queue with wires whose
+	 * power changed. Returns true on success; false on any failure
+	 * (caller falls back to the Java depower path).
+	 */
+	private boolean runRustBatch() {
+		int n = search.size();
+
+		WireNode[] wires = new WireNode[n];
+		java.util.Map<Long, Integer> coordToIdx = new java.util.HashMap<>(n * 2);
+		int idx = 0;
+		while (!search.isEmpty()) {
+			WireNode w = search.poll();
+			wires[idx] = w;
+			coordToIdx.put(w.pos.asLong(), idx);
+			idx++;
+		}
+
+		// Resolve external power for every wire — depowerNetwork would
+		// normally do this; on the batch path we do it ourselves so the
+		// Rust kernel sees correct source contributions.
+		for (int i = 0; i < n; i++) {
+			findExternalPower(wires[i]);
+		}
+
+		// Serialize.
+		RedstoneHandoff.resetRequestBuffer();
+		int[] neighbors = new int[RedstoneHandoff.NEIGHBOR_SLOTS];
+		for (int i = 0; i < n; i++) {
+			final WireNode w = wires[i];
+			java.util.Arrays.fill(neighbors, RedstoneHandoff.NO_NEIGHBOR);
+			final int[] slot = {0};
+			w.connections.forEach(c -> {
+				if (slot[0] >= RedstoneHandoff.NEIGHBOR_SLOTS) return;
+				Integer ni = coordToIdx.get(c.wire.pos.asLong());
+				if (ni != null) {
+					neighbors[slot[0]++] = ni;
+				}
+			});
+			RedstoneHandoff.writeNode(
+					i,
+					w.pos.getX(), w.pos.getY(), w.pos.getZ(),
+					w.currentPower,
+					w.externalPower,
+					RedstoneHandoff.FLAG_IS_WIRE,
+					neighbors);
+		}
+
+		// One JNI call.
+		int changed;
+		try {
+			changed = me.apika.apikaprobe.RustBridge.computeRedstoneBfs(
+					RedstoneHandoff.REQUEST_BUF,
+					RedstoneHandoff.RESULT_BUF,
+					n);
+		} catch (UnsatisfiedLinkError | RuntimeException e) {
+			// Native blew up — re-seed search with our drained wires so
+			// the Java fallback path runs cleanly.
+			for (WireNode w : wires) search.offer(w);
+			return false;
+		}
+
+		// Read deltas. Set virtualPower per wire, queue for emission.
+		for (int i = 0; i < changed; i++) {
+			long key = net.minecraft.util.math.BlockPos.asLong(
+					RedstoneHandoff.readResultX(i),
+					RedstoneHandoff.readResultY(i),
+					RedstoneHandoff.readResultZ(i));
+			Integer wi = coordToIdx.get(key);
+			if (wi == null) continue;
+			WireNode wire = wires[wi];
+			wire.virtualPower = RedstoneHandoff.readResultNewPower(i);
+			queueWire(wire);
+		}
+		return true;
 	}
 
 	/**
