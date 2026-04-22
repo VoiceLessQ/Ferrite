@@ -143,6 +143,18 @@ public class RustBridge {
    * each entry is a blockstate ID (≥0, indexes the per-tree table) or
    * -1 if no rule matched for that column.
    */
+  /**
+   * Phase 1 queue benchmark (docs/REDSTONE_PORT_PLAN.md). Receives an
+   * array of (u32 id, u8 priority) pairs, does "offer all, poll all",
+   * writes u32 ids in poll order to results_buf. Used only by the
+   * /ferrite redstone bench command to decide whether Phase 2 is
+   * worth pursuing.
+   */
+  public static native void benchRedstoneQueue(
+      java.nio.ByteBuffer pairs,
+      java.nio.ByteBuffer results,
+      int n);
+
   public static native void evaluateSurfaceRuleBatch(
       java.nio.ByteBuffer bytecode,
       int bytecodeLen,

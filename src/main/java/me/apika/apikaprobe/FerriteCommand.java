@@ -6,6 +6,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 
 import me.apika.apikaprobe.redstone.FerriteWireConfig;
+import me.apika.apikaprobe.redstone.RedstoneQueueBench;
 import me.apika.apikaprobe.surface.CompiledRuleTree;
 import me.apika.apikaprobe.surface.SurfaceRuleAccess;
 import me.apika.apikaprobe.surface.SurfaceRuleCompiler;
@@ -62,7 +63,8 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("ac")
 								.then(CommandManager.literal("on").executes(FerriteCommand::enableAc))
 								.then(CommandManager.literal("off").executes(FerriteCommand::disableAc))
-								.then(CommandManager.literal("status").executes(FerriteCommand::statusAc))))
+								.then(CommandManager.literal("status").executes(FerriteCommand::statusAc)))
+						.then(CommandManager.literal("bench").executes(FerriteCommand::redstoneBench)))
 				.then(CommandManager.literal("surface")
 						.then(CommandManager.literal("compile").executes(FerriteCommand::surfaceCompile))
 						.then(CommandManager.literal("stats").executes(FerriteCommand::surfaceStats))
@@ -127,6 +129,41 @@ public final class FerriteCommand {
 		FerriteWireConfig.ENABLED = false;
 		sendFeedback(ctx, "[redstone] Alternate-Current wire algorithm disabled (vanilla path)", true);
 		ExampleMod.LOGGER.info("[redstone] AC wire algorithm disabled (via /ferrite)");
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * /ferrite redstone bench — Phase 1 of the AC Rust core port
+	 * (docs/REDSTONE_PORT_PLAN.md). Micro-benchmarks the Rust priority
+	 * queue against Ferrite's Java {@link me.apika.apikaprobe.redstone.PriorityQueue}
+	 * on workloads of N = 100, 1000, 10000.
+	 *
+	 * <p>Gate question: does Rust beat Java by ≥2× on 1000+ nodes
+	 * after JNI overhead is counted? If yes → Phase 2 is green-lit.
+	 * If no → stop, document, AC-Java is good enough.
+	 */
+	private static int redstoneBench(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		int[] sizes = {100, 1000, 10000};
+		sendFeedback(ctx, "[redstone-bench] running (see latest.log for full results)", false);
+		ExampleMod.LOGGER.info("[redstone-bench] Phase 1 priority queue bench — gate: Rust ≥2× Java at N≥1000");
+		boolean gateMet = false;
+		for (int n : sizes) {
+			RedstoneQueueBench.Result r = RedstoneQueueBench.run(n);
+			String line = String.format(
+				"[redstone-bench] N=%d  java=%.3f ms  rust=%.3f ms  ratio=%.2fx  %s",
+				r.n(), r.javaMedianMs(), r.rustMedianMs(), r.ratio(),
+				r.rustWins2x() ? "✓ Rust wins ≥2×" : "· below 2× gate");
+			sendFeedback(ctx, line, false);
+			ExampleMod.LOGGER.info(line);
+			if (n >= 1000 && r.rustWins2x()) {
+				gateMet = true;
+			}
+		}
+		String verdict = gateMet
+			? "[redstone-bench] VERDICT: gate met on 1000+ nodes → Phase 2 green-lit"
+			: "[redstone-bench] VERDICT: gate not met on 1000+ nodes → STOP, AC-Java is good enough";
+		sendFeedback(ctx, verdict, false);
+		ExampleMod.LOGGER.info(verdict);
 		return Command.SINGLE_SUCCESS;
 	}
 
