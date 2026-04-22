@@ -69,7 +69,8 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("validate-off").executes(FerriteCommand::surfaceValidateOff))
 						.then(CommandManager.literal("validate-stats").executes(FerriteCommand::surfaceValidateStats))
 						.then(CommandManager.literal("batch-test").executes(FerriteCommand::surfaceBatchTest))
-						.then(CommandManager.literal("trace-next").executes(FerriteCommand::surfaceTraceNext))));
+						.then(CommandManager.literal("trace-next").executes(FerriteCommand::surfaceTraceNext))
+						.then(CommandManager.literal("dump-biomes").executes(FerriteCommand::surfaceDumpBiomes))));
 	}
 
 	/**
@@ -337,6 +338,32 @@ public final class FerriteCommand {
 	 * a mismatch, read the trace from latest.log to pinpoint which
 	 * condition diverged.
 	 */
+	/**
+	 * /ferrite surface dump-biomes — compiles the active world's surface
+	 * rule and dumps the entire biome-set-pool table to the [surface]
+	 * log. Each entry shows the pool ID and the full list of biome
+	 * names in that set. Lets us verify whether a given biome (e.g.
+	 * warm_ocean) is actually present in the sets it should be in.
+	 */
+	private static int surfaceDumpBiomes(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
+		if (!extracted.ok()) {
+			sendFeedback(ctx, "[surface-dump] extract failed: " + extracted.error(), false);
+			return 0;
+		}
+		CompiledRuleTree tree = SurfaceRuleCompiler.compile(extracted.surfaceRule());
+		java.util.List<String>[] table = tree.biomeSetTable();
+		String summary = String.format("[surface-dump] biome set pool: %d entries", table.length);
+		sendFeedback(ctx, summary, false);
+		ExampleMod.LOGGER.info(summary);
+		for (int i = 0; i < table.length; i++) {
+			java.util.List<String> entry = table[i];
+			ExampleMod.LOGGER.info("[surface-dump]   set #{} ({} biomes): {}", i, entry.size(), entry);
+		}
+		sendFeedback(ctx, "[surface-dump] full breakdown in latest.log under [surface-dump]", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
 	private static int surfaceTraceNext(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
 		if (!SurfaceValidator.isEnabled()) {
 			sendFeedback(ctx, "[surface-validate] not enabled — run /ferrite surface validate first", false);
