@@ -7,7 +7,18 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
-_(no changes pending)_
+### Added
+
+- Power-user override for the per-cascade Rust BFS path:
+  `/ferrite redstone bfs-min <n>` lowers the cascade-size cutoff at
+  which the Rust kernel takes over from the AC-Java loop. Default
+  remains 32 (Rust path effectively gated off for typical worlds);
+  extreme-redstone users running large sustained contraptions can set
+  it to 1 for ~30% additional wire performance. Workload-shape
+  dependent — wins on sustained high-volume cascades, loses on bursty
+  small ones, which is why the default stays conservative. See
+  [docs/REDSTONE_PORT_PLAN.md](docs/REDSTONE_PORT_PLAN.md) Phase 2c
+  for the per-bucket measurements.
 
 ---
 
