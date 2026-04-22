@@ -200,18 +200,22 @@ public final class SurfaceValidator {
 		int[] vert = threadVertState.get();
 		if (ruleContext == null || vert == null) return null;
 
-		// Captured arg order from initVerticalContext(I I I I I I)V — exact
-		// semantics of each int are TBD; the diff lines will tell us which
-		// position holds which field. For now treat them by intuition:
-		//   vert[0] = blockY, vert[1] = fluidHeight,
-		//   vert[2] = stoneDepthBelow, vert[3] = stoneDepthAbove,
-		//   vert[4] = runDepth, vert[5] = secondaryDepth (unused here)
+		// Captured arg order from initVerticalContext(IIIIII)V, decoded
+		// from MaterialRuleContext bytecode:
+		//   arg1 (vert[0]) = stoneDepthAbove
+		//   arg2 (vert[1]) = stoneDepthBelow
+		//   arg3 (vert[2]) = fluidHeight
+		//   arg4 (vert[3]) = blockX
+		//   arg5 (vert[4]) = blockY
+		//   arg6 (vert[5]) = blockZ
+		// runDepth is set by initHorizontalContext (sampleRunDepth) and
+		// stored as a field on the context — read it via reflection.
 		String biome = readBiomeName(ruleContext);
-		int blockY = vert[0];
-		int fluidHeight = vert[1];
-		int stoneDepthBelow = vert[2];
-		int stoneDepthAbove = vert[3];
-		int runDepth = vert[4];
+		int stoneDepthAbove = vert[0];
+		int stoneDepthBelow = vert[1];
+		int fluidHeight = vert[2];
+		int blockY = vert[4];
+		int runDepth = readIntField(ruleContext, "runDepth");
 		double secondaryDepth = readSecondaryDepth(ruleContext);
 
 		// Spike placeholders — will mismatch in their respective conditions.
