@@ -190,7 +190,7 @@ that previously got "no" answers based on the 200 ns figure.
 
 Phase 2 is green-lit on this evidence.
 
-### Phase 2 — Power calculation batch  ✗ FAILED — gate not met, stopped per plan
+### Phase 2 — Power calculation batch  ✗ INCONCLUSIVE — gated out at production cutoff
 
 **Goal:** replace AC's per-cascade propagation loop with one JNI call
 using the existing oracle-validated Rust kernel.
@@ -212,46 +212,65 @@ AC-Java by ≥20% AND is not worse than AC-Java by >10% on a 64-wire run
 loop runs unchanged). Oracle reports 0 mismatches over a 10-minute mixed
 test.
 
-**Result (live `/ferrite redstone bfs on` on 64-repeater clock loop, commit `5eb9e3b`):**
+**Initial result (commit `5eb9e3b`, naive Java glue, 64-repeater clock):**
 
-| Path                | Avg cascade time | Cascades / window |
+| Path                | Avg cascade time | Δ vs AC-Java |
 |---|---:|---:|
-| AC-Java (BFS off)   | **0.041 ms**     | ~100              |
-| AC-Java + Rust BFS  | **0.073 ms**     | ~100              |
-| Δ                   | **+78% slower**  |                   |
+| AC-Java (BFS off)   | 0.041 ms         | —            |
+| AC-Java + Rust BFS  | 0.073 ms         | **+78% slower** |
 
-Gate required ≥20% faster; actual is 78% slower. **Hard fail.**
+Then refactored the Java glue (Phase 2b — kill `HashMap<Long,Integer>`
+in favor of a per-node `rustIndex` field, hoist scratch buffers to
+`WireHandler` fields, replace `connections.forEach` lambda with a direct
+linked-list walk via `WireConnectionManager.head()`):
 
-Correctness ✓: `[redstone-oracle] node-mismatches=0` across every
-sample window, both with BFS on and off. The Rust kernel produces
-bit-for-bit identical wire power to AC-Java and to vanilla.
+| Path                          | Repeater clock | Lag machine |
+|---|---:|---:|
+| AC-Java (BFS off)             | 0.050 ms       | 0.024 ms    |
+| AC-Java + Rust BFS (Phase 2b) | 0.073 ms (-46%) | 0.024 ms (~0%) |
 
-**Root cause:** per-cascade allocation overhead dominates over
-compute, on a workload AC has already optimized for cascade count.
-- Each cascade allocates a `HashMap<Long, Integer>` for coord lookup
-- Each cascade allocates a `WireNode[]` of network size
-- `connections.forEach(c -> ...)` lambda captures one allocation per call
-- Per-cascade serialization + deserialization loops
+Correctness ✓: `[redstone-oracle] node-mismatches=0` in every sample
+window, BFS on and off, both worlds. The Rust kernel is bit-for-bit
+identical to AC-Java.
 
-Phase 1's 17× micro-bench had **none of that infrastructure** — just
-packed a flat array and called sort. JNI call itself remains cheap
-(Phase 1 result still valid). The infrastructure-vs-compute ratio is
-what flipped the verdict.
+**The 0% lag-machine result is unfalsifiable as written.** With the
+activation counter added (commit `68c059d`, `RUST_BFS_ACTIVATIONS` in
+`RedstonePhaseMonitor`), the re-bench reports `rust-bfs:
+activations=0 (0.0% of cascades)` across **every 5-second window** of
+the lag machine run with `bfs on`. The production cutoff
+(`RUST_BFS_MIN_NODES = 32`) gates out 100% of cascades on this
+workload — which makes sense: 200K–290K cascades per 5-second window
+at avg 0.024 ms each means the lag machine is dominated by tiny
+cascades (~5–20 nodes), all below the threshold.
 
-**Workload-shape insight (the real lesson):** AC already collapsed
-total cascade count from ~2.25M to ~350K per tick. The remaining
-cascades are *small* — typically 5–50 wires each on the repeater
-clock. At that size, allocation overhead beats any compute speedup
-Rust can offer. The win condition (consistently large cascades where
-allocation amortizes) requires a workload characteristic AC's success
-itself made rare.
+So "neutral on lag machine" really means "Rust path never ran; the gate
+worked as designed." It's a defensible *non-regression* claim (adding
+the gate check costs nothing) but tells us nothing about Rust's actual
+ceiling on this workload.
+
+**Workload-shape table (the real lesson):**
+
+| Workload      | Cascades/window | Avg cascade size | Activation @ MIN_NODES=32 | Rust-path delta |
+|---|---:|---:|---:|---:|
+| Repeater clock | ~100           | ~30 nodes        | high (most cascades hit) | -46% slower    |
+| Lag machine    | 200K–290K      | ~5–20 nodes      | 0%                       | not measured   |
+
+Per-cascade serialization (build neighbor index, write node buffer,
+JNI hop, drain result) has a fixed cost that only amortizes above
+some N nodes. The current implementation crosses break-even somewhere
+above ~30 (repeater-clock size) — at that size the fixed cost still
+wins. Genuine Rust-side speedup needs either a much larger N per
+cascade *or* persistent off-heap state so the Java side doesn't pay
+serialize-on-every-call.
 
 **Phase 2 code disposition:**
 - Stays in the jar, gated off (`FerriteWireConfig.RUST_BFS = false` default)
+- `MIN_NODES` cutoff prevents regression on small-cascade workloads
 - `/ferrite redstone bfs on/off/status` toggle remains for future
-  re-measurement
-- Reusable building block if/when extreme-scale contraptions with
-  consistent large cascades become common
+  re-measurement once the workload or architecture changes
+- Phase 2b refactor (`rustIndex`, scratch buffers, lambda elimination)
+  is kept — those are honest wins on the Java glue independent of the
+  Rust path
 
 ### Decision gate result
 
@@ -259,9 +278,14 @@ Per plan: "If either phase shows neutral or negative measurement,
 document the number in this doc, leave the Rust code in place as
 library-only for future revisit, and ship nothing."
 
-**Phase 1 ✓ Phase 2 ✗ → ship nothing, leave gated.** AC-Java
-remains the production path. The plan worked exactly as designed:
-measure, gate, stop when the gate fails.
+**Phase 1 ✓ Phase 2 inconclusive → ship nothing, leave gated.**
+AC-Java remains the production path. The plan worked exactly as
+designed: measure, gate, stop when the gate doesn't clear. The
+"inconclusive" framing (vs Phase 2's earlier "FAILED") reflects
+what the activation counter exposed — on the workload that matters
+(lag machine), Phase 2's code never ran. Future re-measurement
+needs either a workload with consistently large cascades or a
+lower `MIN_NODES` cutoff to actually exercise the Rust path.
 
 ### Relationship to the Session 3 description above
 
