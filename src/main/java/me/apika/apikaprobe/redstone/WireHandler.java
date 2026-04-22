@@ -647,6 +647,16 @@ public class WireHandler {
 					continue;
 				}
 
+				// Re-validate world state at commit time — another mod or
+				// a destructive cascade-internal change could have replaced
+				// this wire between discovery and now. Skip the wasted
+				// findPowerFlow/transmitPower work if the snapshot is
+				// stale. Mirrors vanilla ExperimentalRedstoneWireEvaluator
+				// line 46-56's iterator.remove() pattern.
+				if (!wire.removed && !world.getBlockState(wire.pos).isOf(Blocks.REDSTONE_WIRE)) {
+					continue;
+				}
+
 				findPowerFlow(wire);
 				transmitPower(wire);
 
