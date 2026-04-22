@@ -190,7 +190,7 @@ that previously got "no" answers based on the 200 ns figure.
 
 Phase 2 is green-lit on this evidence.
 
-### Phase 2 — Power calculation batch
+### Phase 2 — Power calculation batch  ✗ FAILED — gate not met, stopped per plan
 
 **Goal:** replace AC's per-cascade propagation loop with one JNI call
 using the existing oracle-validated Rust kernel.
@@ -212,17 +212,56 @@ AC-Java by ≥20% AND is not worse than AC-Java by >10% on a 64-wire run
 loop runs unchanged). Oracle reports 0 mismatches over a 10-minute mixed
 test.
 
-### Decision gate after Phase 2
+**Result (live `/ferrite redstone bfs on` on 64-repeater clock loop, commit `5eb9e3b`):**
 
-If both phases pass, Phase 3 is the full integration: promote the Rust
-path to default (behind a toggle or opt-out), update CHANGELOG, bump to
-`v0.4.0-alpha`, ship.
+| Path                | Avg cascade time | Cascades / window |
+|---|---:|---:|
+| AC-Java (BFS off)   | **0.041 ms**     | ~100              |
+| AC-Java + Rust BFS  | **0.073 ms**     | ~100              |
+| Δ                   | **+78% slower**  |                   |
 
-If either phase shows neutral or negative measurement, document the
-number in this doc, leave the Rust code in place as library-only for
-future revisit, and ship nothing. The existing `[redstone-rust]` counter
-infrastructure stays in the jar gated off, ready for re-measurement if
-Minecraft internals or JNI costs shift.
+Gate required ≥20% faster; actual is 78% slower. **Hard fail.**
+
+Correctness ✓: `[redstone-oracle] node-mismatches=0` across every
+sample window, both with BFS on and off. The Rust kernel produces
+bit-for-bit identical wire power to AC-Java and to vanilla.
+
+**Root cause:** per-cascade allocation overhead dominates over
+compute, on a workload AC has already optimized for cascade count.
+- Each cascade allocates a `HashMap<Long, Integer>` for coord lookup
+- Each cascade allocates a `WireNode[]` of network size
+- `connections.forEach(c -> ...)` lambda captures one allocation per call
+- Per-cascade serialization + deserialization loops
+
+Phase 1's 17× micro-bench had **none of that infrastructure** — just
+packed a flat array and called sort. JNI call itself remains cheap
+(Phase 1 result still valid). The infrastructure-vs-compute ratio is
+what flipped the verdict.
+
+**Workload-shape insight (the real lesson):** AC already collapsed
+total cascade count from ~2.25M to ~350K per tick. The remaining
+cascades are *small* — typically 5–50 wires each on the repeater
+clock. At that size, allocation overhead beats any compute speedup
+Rust can offer. The win condition (consistently large cascades where
+allocation amortizes) requires a workload characteristic AC's success
+itself made rare.
+
+**Phase 2 code disposition:**
+- Stays in the jar, gated off (`FerriteWireConfig.RUST_BFS = false` default)
+- `/ferrite redstone bfs on/off/status` toggle remains for future
+  re-measurement
+- Reusable building block if/when extreme-scale contraptions with
+  consistent large cascades become common
+
+### Decision gate result
+
+Per plan: "If either phase shows neutral or negative measurement,
+document the number in this doc, leave the Rust code in place as
+library-only for future revisit, and ship nothing."
+
+**Phase 1 ✓ Phase 2 ✗ → ship nothing, leave gated.** AC-Java
+remains the production path. The plan worked exactly as designed:
+measure, gate, stop when the gate fails.
 
 ### Relationship to the Session 3 description above
 
