@@ -296,6 +296,10 @@ gate; the seed-handoff template is the implementation.
 
 ## See also
 
+- `docs/VANILLA_WORLDGEN_REFERENCE.md` — **the source-of-truth lookup
+  doc** for every vanilla worldgen class involved in seed/PRNG/noise/
+  math. Per-class effort estimates, yarn ↔ mojmap mappings, dependency
+  ordering. Open this when you start any port from the roadmap above.
 - `JOURNEY.md` — the broader retrospective; this doc is the
   Track B / surface-dispatcher chapter expanded.
 - `docs/SURFACE_RULE_STATUS.md` — current numbers + the dispatcher
