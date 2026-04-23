@@ -108,6 +108,17 @@ want to test it can `/ferrite surface dispatch on` and accept
 the ~2.5× chunkgen cost. Default flips ON when Track B brings
 it under vanilla.
 
+**Full Track B design philosophy** — the Golden Rule, the
+port template (one-time seed handoff + per-chunk position
+batches), the Four Checks application, and the roadmap of
+ports needed (`PerlinNoiseSampler` → `DoublePerlinNoiseSampler`
+→ `NoiseConfig` → `SurfaceSystem.getSurfaceDepth` →
+`MultiNoiseBiomeSource`) lives in
+`docs/SEED_DRIVEN_DISPATCH.md`. That doc generalizes the lesson
+to other deterministic worldgen ports (structure placement,
+density compiler, spawn evaluation) — the same pattern unlocks
+all of them.
+
 ## What's built
 
 ### Java side (`src/main/java/me/apika/apikaprobe/surface/`)

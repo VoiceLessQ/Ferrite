@@ -159,6 +159,12 @@ entirely. The Xoroshiro port is the first brick of that foundation.
 Multi-session work ahead: `DoublePerlinNoiseSampler`,
 `NoiseConfig.getOrCreateNoise`, `MultiNoiseBiomeSource`.
 
+The full design philosophy — Golden Rule, port template, Four
+Checks application, roadmap, and other targets the pattern
+unlocks (structure placement, density compiler, spawn attempts) —
+lives in `docs/SEED_DRIVEN_DISPATCH.md`. Read it before starting
+the next subsystem port.
+
 ### Lighting palette reads
 
 I/O-bound, coupled to vanilla's chunk palette representation. The hot
