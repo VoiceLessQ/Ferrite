@@ -8,6 +8,7 @@ pub mod redstone;
 mod redstone_jni;
 pub mod surface;
 mod surface_jni;
+pub mod xoroshiro;
 
 pub use surface_jni::Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRule;
 pub use surface_jni::Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRuleBatch;
