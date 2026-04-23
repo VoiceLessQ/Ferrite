@@ -51,9 +51,9 @@ marks pre-release research builds.
 - `[cramming-dispatch]` log shows `damaged=N` climbing as the pile
   reaches the threshold and mobs cycle through the 1-in-4 random.
 
-**Perf (~1246-mob pile, `/gamerule maxEntityCramming 0` so mob count
-stays stable across the A/B; same world, same pile, only the toggle
-changed). Two independent runs:**
+**Perf (~1246-mob pile, 4-core CPU affinity, `/gamerule maxEntityCramming 0`
+so mob count stays stable across the A/B; same world, same pile, only
+the toggle changed). Two independent runs:**
 
 | State                | Run 1 mspt | Run 1 TPS | Run 2 mspt | Run 2 TPS |
 | -------------------- | ---------: | --------: | ---------: | --------: |
@@ -65,6 +65,12 @@ Direction is identical both runs — vanilla blows past the 50 ms tick
 budget and TPS drops; Ferrite stays under it and TPS holds at 20.
 Magnitude varies (30–50% mspt reduction) with JIT warmth and system
 load.
+
+**Isolated cramming-math sub-budget** (from `[movement-internals] cramming`,
+same run): ~0.06 ms with Ferrite vs ~18.81 ms vanilla on the same pile —
+roughly **310× reduction in the cramming math itself**, isolated from
+the rest of the entity tick. This is the sharpest version of the claim
+because it strips out unrelated entity costs.
 
 **Self-serve verification path for users:**
 
