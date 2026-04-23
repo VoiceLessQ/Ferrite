@@ -193,6 +193,10 @@ public final class SurfaceDispatcher {
 					st.surfaceHeights[i], st.secondaryDepths[i],
 					noisePerCol);
 			handoff.packColumn(i, ctx);
+			// Pack world-space (x, z) so Rust's OP_VERT_GRADIENT can do
+			// the per-block PRNG roll. Without this, Rust falls back to
+			// midpoint at (0, y, 0) which would deterministically misroll.
+			handoff.packColumnXZ(i, st.xs[i], st.zs[i]);
 		}
 
 		handoff.dispatch();

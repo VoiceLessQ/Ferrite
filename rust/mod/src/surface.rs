@@ -38,7 +38,13 @@ pub const OP_FALLBACK: u8 = 0x7F;
 
 pub struct ColumnContext<'a> {
     pub biome_id: u16,
+    /// World-space X for this column. Required by OP_VERT_GRADIENT's
+    /// per-block PRNG (XoroshiroPositionalRandomFactory.at(x, y, z)).
+    /// Callers without a meaningful position can pass 0.
+    pub block_x: i32,
     pub block_y: i32,
+    /// World-space Z for this column. See `block_x`.
+    pub block_z: i32,
     pub run_depth: i32,
     pub stone_depth_above: i32,
     pub stone_depth_below: i32,
@@ -70,6 +76,13 @@ pub struct CompiledTree<'a> {
     /// O(log n) membership lookup.
     pub biome_set_table: &'a [&'a BiomeIdSet],
     pub blockstate_count: u32, // for bounds checks
+    /// Optional table of (seed_lo, seed_hi) pairs aligned with
+    /// CompiledRuleTree.randomNameTable on the Java side. Indexed by
+    /// the `name_idx` operand of OP_VERT_GRADIENT. Each pair drives a
+    /// `XoroshiroPositionalRandomFactory` for the per-block PRNG roll.
+    /// When None or shorter than the operand idx, OP_VERT_GRADIENT
+    /// falls back to its midpoint approximation.
+    pub random_factory_seeds: Option<&'a [i64]>,
 }
 
 /// Returns the blockstate ID produced by the bytecode for this column,
@@ -215,15 +228,14 @@ pub fn evaluate(tree: &CompiledTree, ctx: &ColumnContext) -> Option<u32> {
             }
             OP_VERT_GRADIENT => {
                 // Operand: u16 random_name_idx + i32 true_at_and_below
-                // + i32 false_at_and_above. The name index lets the Java
-                // validator look up a per-block PRNG splitter; this Rust
-                // path doesn't yet implement Xoroshiro-based positional
-                // random, so it reads-and-ignores the index and falls
-                // back to the midpoint cutoff. TODO: port vanilla's
-                // RandomSplitter (Xoroshiro128++) so the Rust path can
-                // also produce vanilla-identical results inside the
-                // gradient zone.
-                let _name_idx = read_u16_le(bc, ip) as usize;
+                // + i32 false_at_and_above. When the tree carries a
+                // random_factory_seeds table (Java extracts it from
+                // vanilla's Xoroshiro128PlusPlusRandom$Splitter at
+                // install via reflection on seedLo/seedHi), we do the
+                // real per-block PRNG roll matching vanilla bit-exact.
+                // Falls back to midpoint approximation only when seeds
+                // are absent (legacy callers, synthetic tests).
+                let name_idx = read_u16_le(bc, ip) as usize;
                 ip += 2;
                 let true_at_and_below = read_i32_le(bc, ip);
                 ip += 4;
@@ -234,7 +246,32 @@ pub fn evaluate(tree: &CompiledTree, ctx: &ColumnContext) -> Option<u32> {
                     true
                 } else if y >= false_at_and_above {
                     false
+                } else if let Some(seeds) = tree.random_factory_seeds {
+                    // Each factory takes 2 i64 entries (seed_lo, seed_hi).
+                    let base = name_idx * 2;
+                    if base + 1 < seeds.len() {
+                        let seed_lo = seeds[base];
+                        let seed_hi = seeds[base + 1];
+                        // Vanilla's WaterCondition / VerticalGradient compute:
+                        //   probability = Mth.map(y, trueAtAndBelow,
+                        //                         falseAtAndAbove, 1.0, 0.0)
+                        //   = 1.0 - (y - trueAt) / (falseAt - trueAt)
+                        //   roll = factory.at(x, y, z).nextFloat()
+                        //   return roll < probability
+                        let span = (false_at_and_above - true_at_and_below) as f64;
+                        let probability =
+                            1.0 - ((y - true_at_and_below) as f64) / span;
+                        let factory = crate::xoroshiro::XoroshiroPositionalRandomFactory::new(
+                            seed_lo, seed_hi);
+                        let mut rng = factory.at(ctx.block_x, y, ctx.block_z);
+                        let roll = rng.next_float();
+                        (roll as f64) < probability
+                    } else {
+                        // Out-of-range name_idx — fall back to midpoint.
+                        y <= (true_at_and_below + false_at_and_above) / 2
+                    }
                 } else {
+                    // No factory table — midpoint placeholder.
                     y <= (true_at_and_below + false_at_and_above) / 2
                 };
                 if negate_next { cond = !cond; negate_next = false; }
@@ -287,7 +324,9 @@ mod tests {
     fn ctx_default() -> ColumnContext<'static> {
         ColumnContext {
             biome_id: 0,
+            block_x: 0,
             block_y: 64,
+            block_z: 0,
             run_depth: 5,
             stone_depth_above: 5,
             stone_depth_below: 5,
@@ -305,14 +344,14 @@ mod tests {
     fn eval_single_block_returns_id() {
         // OP_BLOCK + u32(42) + OP_RETURN_DONE
         let bc: &[u8] = &[OP_BLOCK, 42, 0, 0, 0, OP_RETURN_DONE];
-        let tree = CompiledTree { bytecode: bc, biome_set_table: &[], blockstate_count: 100 };
+        let tree = CompiledTree { bytecode: bc, biome_set_table: &[], blockstate_count: 100, random_factory_seeds: None };
         assert_eq!(evaluate(&tree, &ctx_default()), Some(42));
     }
 
     #[test]
     fn eval_empty_returns_none() {
         let bc: &[u8] = &[OP_RETURN_DONE];
-        let tree = CompiledTree { bytecode: bc, biome_set_table: &[], blockstate_count: 0 };
+        let tree = CompiledTree { bytecode: bc, biome_set_table: &[], blockstate_count: 0, random_factory_seeds: None };
         assert_eq!(evaluate(&tree, &ctx_default()), None);
     }
 
@@ -321,7 +360,7 @@ mod tests {
         // FALLBACK + OP_BLOCK + u32(7) + RETURN_DONE
         // Fallback should soft-skip, then OP_BLOCK fires.
         let bc: &[u8] = &[OP_FALLBACK, OP_BLOCK, 7, 0, 0, 0, OP_RETURN_DONE];
-        let tree = CompiledTree { bytecode: bc, biome_set_table: &[], blockstate_count: 10 };
+        let tree = CompiledTree { bytecode: bc, biome_set_table: &[], blockstate_count: 10, random_factory_seeds: None };
         assert_eq!(evaluate(&tree, &ctx_default()), Some(7));
     }
 
@@ -361,7 +400,7 @@ mod tests {
         let else_bytes = (else_target as u32).to_le_bytes();
         bc[then_slot..then_slot + 4].copy_from_slice(&then_bytes);
         bc[else_slot..else_slot + 4].copy_from_slice(&else_bytes);
-        let tree = CompiledTree { bytecode: &bc, biome_set_table: &[], blockstate_count: 100 };
+        let tree = CompiledTree { bytecode: &bc, biome_set_table: &[], blockstate_count: 100, random_factory_seeds: None };
         let mut ctx = ctx_default();
         ctx.run_depth = 0;
         assert_eq!(evaluate(&tree, &ctx), Some(99));
@@ -390,7 +429,7 @@ mod tests {
         let end_bytes = (end as u32).to_le_bytes();
         bc[off1..off1 + 4].copy_from_slice(&end_bytes);
         bc[off2..off2 + 4].copy_from_slice(&end_bytes);
-        let tree = CompiledTree { bytecode: &bc, biome_set_table: &[], blockstate_count: 100 };
+        let tree = CompiledTree { bytecode: &bc, biome_set_table: &[], blockstate_count: 100, random_factory_seeds: None };
         // First BLOCK sets value; SEQUENCE_NEXT short-circuits past the second.
         assert_eq!(evaluate(&tree, &ctx_default()), Some(1));
     }
@@ -419,6 +458,7 @@ mod tests {
             bytecode: &bc,
             biome_set_table: &[set],
             blockstate_count: 100,
+            random_factory_seeds: None,
         };
         let mut ctx = ctx_default();
         ctx.biome_id = 20;
@@ -437,7 +477,7 @@ mod tests {
             0,           // addStoneDepth=false
             OP_RETURN_DONE,
         ];
-        let tree = CompiledTree { bytecode: bc, biome_set_table: &[], blockstate_count: 0 };
+        let tree = CompiledTree { bytecode: bc, biome_set_table: &[], blockstate_count: 0, random_factory_seeds: None };
         let ctx = ctx_default();
         // Just runs the condition, doesn't emit; value stays None.
         // This test only verifies the dispatch doesn't crash on the operand.
@@ -454,7 +494,7 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, // 0
             OP_RETURN_DONE,
         ];
-        let tree = CompiledTree { bytecode: bc, biome_set_table: &[], blockstate_count: 0 };
+        let tree = CompiledTree { bytecode: bc, biome_set_table: &[], blockstate_count: 0, random_factory_seeds: None };
         let mut ctx = ctx_default();
         ctx.block_y = -30;
         // Condition fires but no BLOCK opcode — eval returns None.
@@ -465,7 +505,7 @@ mod tests {
     #[test]
     fn eval_unknown_opcode_returns_none() {
         let bc: &[u8] = &[0xEE, OP_RETURN_DONE]; // unknown opcode 0xEE
-        let tree = CompiledTree { bytecode: bc, biome_set_table: &[], blockstate_count: 0 };
+        let tree = CompiledTree { bytecode: bc, biome_set_table: &[], blockstate_count: 0, random_factory_seeds: None };
         assert_eq!(evaluate(&tree, &ctx_default()), None);
     }
 }

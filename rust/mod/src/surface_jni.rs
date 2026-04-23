@@ -33,7 +33,9 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRule<'
     bytecode_len: jint,
     biome_bits_buf: JByteBuffer<'local>,
     biome_bits_len: jint,
+    block_x: jint,
     block_y: jint,
+    block_z: jint,
     run_depth: jint,
     stone_depth_above: jint,
     stone_depth_below: jint,
@@ -44,6 +46,8 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRule<'
     secondary_depth: jdouble,
     noise_buf: JByteBuffer<'local>,
     noise_count: jint,
+    factory_seeds_buf: JByteBuffer<'local>,
+    factory_seed_count: jint,
 ) -> jint {
     let bytecode = match get_byte_slice(&env, &bytecode_buf, bytecode_len) {
         Some(s) => s,
@@ -75,16 +79,36 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRule<'
         }
     };
 
+    // Random factory seeds: 2 i64 per factory (seed_lo, seed_hi).
+    // Optional — when 0-count, OP_VERT_GRADIENT falls back to midpoint.
+    let factory_byte_count = (factory_seed_count.max(0) as usize) * 16;
+    let factory_seeds: &[i64] = if factory_byte_count == 0 {
+        &[]
+    } else {
+        match get_byte_slice(&env, &factory_seeds_buf, factory_byte_count as jint) {
+            Some(bytes) => unsafe {
+                slice::from_raw_parts(
+                    bytes.as_ptr() as *const i64,
+                    (factory_seed_count.max(0) as usize) * 2,
+                )
+            },
+            None => &[],
+        }
+    };
+
     let tree = CompiledTree {
         bytecode,
         // Empty inline biome_set_table — JNI path uses biome_match_bits.
         biome_set_table: &[],
         blockstate_count: u32::MAX,
+        random_factory_seeds: if factory_seeds.is_empty() { None } else { Some(factory_seeds) },
     };
 
     let ctx = ColumnContext {
         biome_id: 0, // unused on JNI path; biome match comes from bits
+        block_x,
         block_y,
+        block_z,
         run_depth,
         stone_depth_above,
         stone_depth_below,
@@ -144,6 +168,10 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRuleBa
     flags_buf: JByteBuffer<'local>,
     secondary_depths_buf: JByteBuffer<'local>,
     noise_values_buf: JByteBuffer<'local>,
+    xs_buf: JByteBuffer<'local>,
+    zs_buf: JByteBuffer<'local>,
+    factory_seeds_buf: JByteBuffer<'local>,
+    factory_seed_count: jint,
     results_buf: JByteBuffer<'local>,
     column_count: jint,
 ) {
@@ -194,6 +222,29 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRuleBa
             Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
         }
     };
+    let xs = match get_i32_slice(&env, &xs_buf, n) {
+        Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+    };
+    let zs = match get_i32_slice(&env, &zs_buf, n) {
+        Some(s) => s, None => return fill_results_null(&env, &results_buf, n),
+    };
+
+    // Random factory seeds — same layout as per-call. Optional.
+    let factory_byte_count = (factory_seed_count.max(0) as usize) * 16;
+    let factory_seeds: &[i64] = if factory_byte_count == 0 {
+        &[]
+    } else {
+        match get_byte_slice(&env, &factory_seeds_buf, factory_byte_count as jint) {
+            Some(bytes) => unsafe {
+                slice::from_raw_parts(
+                    bytes.as_ptr() as *const i64,
+                    (factory_seed_count.max(0) as usize) * 2,
+                )
+            },
+            None => &[],
+        }
+    };
+
     let results = match get_i32_slice_mut(&env, &results_buf, n) {
         Some(s) => s, None => return,
     };
@@ -202,6 +253,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRuleBa
         bytecode,
         biome_set_table: &[],
         blockstate_count: u32::MAX,
+        random_factory_seeds: if factory_seeds.is_empty() { None } else { Some(factory_seeds) },
     };
 
     // Per-column eval, parallelised across columns. Each closure reads
@@ -211,7 +263,9 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRuleBa
         let noise_start = col * ncc;
         let ctx = ColumnContext {
             biome_id: 0,
+            block_x: xs[col],
             block_y: block_ys[col],
+            block_z: zs[col],
             run_depth: run_depths[col],
             stone_depth_above: stone_above[col],
             stone_depth_below: stone_below[col],

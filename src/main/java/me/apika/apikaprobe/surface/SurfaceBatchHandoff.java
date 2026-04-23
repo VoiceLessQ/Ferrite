@@ -50,6 +50,11 @@ public final class SurfaceBatchHandoff {
 	private ByteBuffer biomeMatchBits;
 	private ByteBuffer noiseValues;
 
+	// Per-column world-space (x, z). Required by Rust OP_VERT_GRADIENT
+	// for the per-block PRNG roll. Sized to columnCount * 4.
+	private ByteBuffer xs;
+	private ByteBuffer zs;
+
 	// Output: i32 × columnCount.
 	private ByteBuffer results;
 
@@ -92,6 +97,8 @@ public final class SurfaceBatchHandoff {
 		secondaryDepths= ensureCapacity(secondaryDepths,columnCount * 8);
 		biomeMatchBits = ensureCapacity(biomeMatchBits, columnCount * Math.max(1, biomeSetCount));
 		noiseValues    = ensureCapacity(noiseValues,    columnCount * Math.max(1, noiseChannelCount) * 8);
+		xs             = ensureCapacity(xs,             columnCount * 4);
+		zs             = ensureCapacity(zs,             columnCount * 4);
 		results        = ensureCapacity(results,        columnCount * 4);
 
 		blockYs.clear();
@@ -104,7 +111,22 @@ public final class SurfaceBatchHandoff {
 		secondaryDepths.clear();
 		biomeMatchBits.clear();
 		noiseValues.clear();
+		xs.clear();
+		zs.clear();
 		results.clear();
+	}
+
+	/**
+	 * Set this column's world-space (x, z). Required alongside
+	 * {@link #packColumn} for batches that contain VerticalGradient
+	 * rules — Rust's OP_VERT_GRADIENT calls
+	 * {@code XoroshiroPositionalRandomFactory.at(x, y, z).nextFloat()}
+	 * which needs the (x, y, z) triple. The y comes from the column's
+	 * blockY (already packed by packColumn).
+	 */
+	public void packColumnXZ(int col, int x, int z) {
+		xs.putInt(col * 4, x);
+		zs.putInt(col * 4, z);
 	}
 
 	/**
@@ -149,13 +171,22 @@ public final class SurfaceBatchHandoff {
 			}
 			return;
 		}
+		// Per-tree factory seeds buffer, set on the validator side from
+		// the splitter cache. Null/0-count → Rust falls back to midpoint
+		// for OP_VERT_GRADIENT (legacy path; matches the spike behavior
+		// for trees without VerticalGradient rules).
+		java.nio.ByteBuffer factorySeedsBuf = SurfaceValidator.cachedFactorySeedsBuf();
+		int factorySeedCount = SurfaceValidator.cachedFactorySeedCount();
+
 		RustBridge.evaluateSurfaceRuleBatch(
 				bytecodeBuf, tree.bytecode().length,
 				biomeSetCount, noiseChannelCount,
 				biomeMatchBits, blockYs, runDepths,
 				stoneAbove, stoneBelow, fluidHeights,
 				surfaceHeights, flags, secondaryDepths,
-				noiseValues, results, currentColumnCount);
+				noiseValues, xs, zs,
+				factorySeedsBuf, factorySeedCount,
+				results, currentColumnCount);
 	}
 
 	/**

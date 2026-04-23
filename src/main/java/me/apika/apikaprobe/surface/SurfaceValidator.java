@@ -61,6 +61,15 @@ public final class SurfaceValidator {
 	 *  channel that failed to resolve (sample reads 0.0, logged once). */
 	private static volatile Object[] cachedSamplers = null;
 
+	/** Direct ByteBuffer of (seedLo, seedHi) pairs extracted from each
+	 *  cached splitter, parallel to {@link CompiledRuleTree#randomNameTable()}.
+	 *  Built once at first dispatch flush; passed to Rust per JNI call so
+	 *  the Rust evaluator can build {@code XoroshiroPositionalRandomFactory}
+	 *  without per-call seed marshalling. Layout: 2 × N i64 little-endian
+	 *  = 16N bytes. */
+	private static volatile java.nio.ByteBuffer cachedFactorySeedsBuf = null;
+	private static volatile int cachedFactorySeedCount = 0;
+
 	/** Cache of {@code RandomSplitter} references aligned with
 	 *  {@link CompiledRuleTree#randomNameTable()}. Same lifecycle and
 	 *  reset semantics as {@link #cachedSamplers}. Drives the per-block
@@ -448,6 +457,8 @@ public final class SurfaceValidator {
 		cachedSamplerClosure = null;
 		splitterSplitMethod = null;
 		randomNextFloatMethod = null;
+		cachedFactorySeedsBuf = null; // invalidate Rust-side factory seeds buffer
+		cachedFactorySeedCount = 0;
 		ExampleMod.LOGGER.info("[surface-validate] installed compiled tree (bytecode={} bytes, hasFallback={})",
 				tree.bytecode().length, tree.hasFallback());
 	}
@@ -567,7 +578,10 @@ public final class SurfaceValidator {
 		// Three-way diff: also run the Rust evaluator if native is loaded.
 		// Java is the spec — Rust must agree. Vanilla diff stays the
 		// source of truth for "are our condition formulas right?"
-		Object rustResult = SurfaceRuleEvaluator.evaluateViaRust(tree, ctx);
+		// Pass real (x, z) so Rust's OP_VERT_GRADIENT can do the per-block
+		// PRNG roll matching Java. Without this, Rust falls back to (0, 0)
+		// and produces deterministic mismatches inside vert-gradient zones.
+		Object rustResult = SurfaceRuleEvaluator.evaluateViaRust(tree, ctx, x, z);
 		if (rustResult != null || me.apika.apikaprobe.RustBridge.NATIVE_AVAILABLE) {
 			rustSamples.incrementAndGet();
 			String javaName = stringify(ourResult);
@@ -763,6 +777,61 @@ public final class SurfaceValidator {
 			}
 		}
 		return out;
+	}
+
+	/**
+	 * Lazy builder for the (seedLo, seedHi) buffer Rust uses to construct
+	 * {@code XoroshiroPositionalRandomFactory} for OP_VERT_GRADIENT.
+	 * Returns null if no splitter cache yet (first dispatch hasn't fired
+	 * to populate it). Reused across all per-call evaluations on this
+	 * tree — built once per install.
+	 *
+	 * <p>Layout: little-endian i64 pairs, one per random_name in
+	 * {@link CompiledRuleTree#randomNameTable()}. Slot N at byte offset
+	 * 16N is seedLo; offset 16N+8 is seedHi.
+	 *
+	 * <p>Yarn 1.21.11: vanilla's RandomSplitter impl is
+	 * {@code Xoroshiro128PlusPlusRandom$Splitter} with public-field
+	 * {@code seedLo}/{@code seedHi}. Reflective read is direct.
+	 */
+	public static java.nio.ByteBuffer cachedFactorySeedsBuf() {
+		java.nio.ByteBuffer buf = cachedFactorySeedsBuf;
+		if (buf != null) return buf;
+		Object[] splitters = cachedSplitters;
+		if (splitters == null) return null; // no splitter cache yet
+		buf = java.nio.ByteBuffer.allocateDirect(splitters.length * 16)
+				.order(java.nio.ByteOrder.LITTLE_ENDIAN);
+		for (int i = 0; i < splitters.length; i++) {
+			Object splitter = splitters[i];
+			long seedLo = 0L, seedHi = 0L;
+			if (splitter != null) {
+				try {
+					java.lang.reflect.Field flo = findFieldDeep(splitter.getClass(), "seedLo");
+					java.lang.reflect.Field fhi = findFieldDeep(splitter.getClass(), "seedHi");
+					if (flo != null && fhi != null) {
+						flo.setAccessible(true);
+						fhi.setAccessible(true);
+						seedLo = flo.getLong(splitter);
+						seedHi = fhi.getLong(splitter);
+					}
+				} catch (ReflectiveOperationException ignored) {
+					// leave zero — Rust's Xoroshiro will substitute golden+silver
+				}
+			}
+			buf.putLong(i * 16, seedLo);
+			buf.putLong(i * 16 + 8, seedHi);
+		}
+		cachedFactorySeedsBuf = buf;
+		cachedFactorySeedCount = splitters.length;
+		return buf;
+	}
+
+	/** Number of factory seed pairs in {@link #cachedFactorySeedsBuf}.
+	 *  Returns 0 before the buffer is built. */
+	public static int cachedFactorySeedCount() {
+		// Building the buffer also sets the count, so trigger if unset.
+		if (cachedFactorySeedsBuf == null) cachedFactorySeedsBuf();
+		return cachedFactorySeedCount;
 	}
 
 	/**

@@ -94,6 +94,14 @@ public final class SurfaceRuleEvaluator {
 	 * the next optimization.
 	 */
 	public static Object evaluateViaRust(CompiledRuleTree tree, ColumnContext ctx) {
+		// Default to (0, 0) when the caller doesn't have real x/z. Synthetic
+		// callers (FerriteCommand.surfaceBatchTest) hit this path; their
+		// OP_VERT_GRADIENT inside-the-zone sampling will be deterministic
+		// at origin which is fine for parity tests.
+		return evaluateViaRust(tree, ctx, 0, 0);
+	}
+
+	public static Object evaluateViaRust(CompiledRuleTree tree, ColumnContext ctx, int blockX, int blockZ) {
 		if (!me.apika.apikaprobe.RustBridge.NATIVE_AVAILABLE) return null;
 
 		// Pack bytecode into a direct buffer.
@@ -121,16 +129,24 @@ public final class SurfaceRuleEvaluator {
 		}
 		noiseBuf.flip();
 
+		// Per-tree factory seeds buffer (populated lazily by the validator
+		// from cachedSplitters on first dispatch). Null = no VerticalGradient
+		// rules in this tree, or splitter cache not yet built — Rust falls
+		// back to midpoint when factorySeedCount == 0.
+		java.nio.ByteBuffer factorySeedsBuf = SurfaceValidator.cachedFactorySeedsBuf();
+		int factorySeedCount = SurfaceValidator.cachedFactorySeedCount();
+
 		int id;
 		try {
 			id = me.apika.apikaprobe.RustBridge.evaluateSurfaceRule(
 					bcBuf, tree.bytecode().length,
 					bitsBuf, biomeSetCount,
-					ctx.blockY(), ctx.runDepth(),
+					blockX, ctx.blockY(), blockZ, ctx.runDepth(),
 					ctx.stoneDepthAbove(), ctx.stoneDepthBelow(),
 					ctx.fluidHeight(), ctx.isCold(), ctx.isSteep(),
 					ctx.surfaceHeight(), ctx.secondaryDepth(),
-					noiseBuf, noiseCount);
+					noiseBuf, noiseCount,
+					factorySeedsBuf, factorySeedCount);
 		} catch (UnsatisfiedLinkError | RuntimeException e) {
 			return null;
 		}

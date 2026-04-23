@@ -111,12 +111,23 @@ public class RustBridge {
    * <p>{@code noiseValues} is a direct byte buffer of {@code noiseCount}
    * f64s in little-endian order — pre-sampled by Java per column.
    */
+  /**
+   * Per-call evaluator. {@code factorySeeds} is a direct buffer of
+   * {@code factorySeedCount × 2} i64 little-endian values (seedLo,
+   * seedHi pairs aligned with the tree's randomNameTable). Used by
+   * Rust to construct {@code XoroshiroPositionalRandomFactory} for
+   * OP_VERT_GRADIENT per-block PRNG. May be null/0-count for trees
+   * without VerticalGradient rules — Rust falls back to midpoint
+   * approximation in that case.
+   */
   public static native int evaluateSurfaceRule(
       java.nio.ByteBuffer bytecode,
       int bytecodeLen,
       java.nio.ByteBuffer biomeMatchBits,
       int biomeMatchCount,
+      int blockX,
       int blockY,
+      int blockZ,
       int runDepth,
       int stoneDepthAbove,
       int stoneDepthBelow,
@@ -126,7 +137,9 @@ public class RustBridge {
       int surfaceHeight,
       double secondaryDepth,
       java.nio.ByteBuffer noiseValues,
-      int noiseCount);
+      int noiseCount,
+      java.nio.ByteBuffer factorySeeds,
+      int factorySeedCount);
 
   /**
    * Batch evaluation: one JNI call per chunk. Replaces ~1k–60k single-
@@ -170,6 +183,10 @@ public class RustBridge {
       java.nio.ByteBuffer flags,
       java.nio.ByteBuffer secondaryDepths,
       java.nio.ByteBuffer noiseValues,
+      java.nio.ByteBuffer xs,
+      java.nio.ByteBuffer zs,
+      java.nio.ByteBuffer factorySeeds,
+      int factorySeedCount,
       java.nio.ByteBuffer results,
       int columnCount);
 }
