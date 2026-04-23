@@ -352,6 +352,60 @@ before we wire Phase 2 into the controller at all.
 
 ---
 
+## Lessons from the Phase 1 through 2c arc
+
+Six takeaways, extracted for future port attempts so we do not re-learn
+them the expensive way. See `JOURNEY.md` for the broader cross-port
+framing.
+
+1. **The gate rule needs a sanity check before it fires.** Phase 2's
+   -78% result would have stopped shipping if taken at face value. The
+   activation counter (commit `68c059d`) revealed that the lag-machine
+   rerun was measuring Rust-never-ran, not Rust-lost. A valid-looking
+   stop rule can fire on an invalid measurement. Before accepting "the
+   gate says stop," confirm the measurement captured what the gate was
+   meant to gate on.
+
+2. **Micro-benches do not measure infrastructure.** Phase 1's 17x was
+   real for pure compute and misleading for end-to-end cost. The
+   `HashMap<Long,Integer>`, lambda capture, and boxed keys in the naive
+   Phase 2 glue were invisible to Phase 1 by design. Every future port
+   needs one infrastructure-inclusive measurement before shipping, not
+   just kernel-isolated benchmarks.
+
+3. **Default thresholds should be measured, not guessed.** Phase 2
+   shipped with `MIN_NODES=32` as a round number derived from Phase 1
+   queue-bench data. The sweep in Phase 2c revealed the production
+   cascade distribution on the lag machine topped out at 32 nodes, so
+   the "safe" default gated out 100% of candidate cascades. For future
+   batched ports with a minimum-size cutoff, measure the workload's
+   actual size distribution first, then set the threshold from that
+   curve.
+
+4. **Workload shape beats cascade size.** The same 1-4 node bucket
+   produced a 1.43x Rust win on the lag machine and a 1.77x loss on
+   the repeater clock. JIT warmup state (millions of invocations vs
+   ~300) and per-wire Java-side work density (repeater clocks do more
+   `findExternalPower` per wire) shift the verdict. Benchmarks need
+   at least two workloads, sustained-high-throughput and cold-bursty,
+   before the default shipping decision.
+
+5. **Oracle validation is non-negotiable.** The `[redstone-oracle]`
+   counter ran through every phase and reported 0 mismatches across
+   every sample window. That is what let us ship aggressive defaults
+   in 0.4.0-alpha without user-facing risk. No oracle, no default-on.
+
+6. **The Java glue matters as much as the Rust kernel.** Phase 2b's
+   refactor (per-node `rustIndex` field instead of HashMap, hoisted
+   scratch buffers onto `WireHandler`, direct linked-list walk via
+   `WireConnectionManager.head()`, removed lambda captures) recovered
+   a large fraction of the Phase 2 deficit without touching Rust at
+   all. For future ports, assume the first-draft Java glue is the
+   bottleneck and budget time to rewrite it in a data-oriented style
+   before declaring the Rust path unviable.
+
+---
+
 ## Out of scope
 
 - **Batch-all-redstone-per-tick.** Semantically broken for Java
