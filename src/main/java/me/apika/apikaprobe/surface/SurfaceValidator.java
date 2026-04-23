@@ -105,6 +105,255 @@ public final class SurfaceValidator {
 		return cachedTree != null;
 	}
 
+	/** Accessor for the dispatcher — returns the installed compiled tree
+	 *  or null if no /ferrite surface validate has been issued. */
+	public static CompiledRuleTree cachedTreeOrNull() {
+		return cachedTree;
+	}
+
+	/** Returns the per-thread MaterialRuleContext captured by the
+	 *  initVerticalContext redirect at the start of this Y iteration.
+	 *  Null if no capture has happened on this thread yet. Used by
+	 *  the dispatcher to read context fields. */
+	public static Object capturedLiveCtx() {
+		return threadCtxRef.get();
+	}
+
+	// ============================================================
+	// Fast-path context extraction for the batched dispatcher.
+	// Per-call cost: 5 reflective invokes against pre-cached handles
+	// (~50ns each on warm JIT) instead of 8 find-then-invoke chains
+	// (~10us each — what killed the simple-per-call dispatch).
+	// ============================================================
+	private static volatile java.lang.reflect.Field fldRunDepth = null;
+	private static volatile java.lang.reflect.Field fldBiomeSupplier = null;
+	private static volatile java.lang.reflect.Method mGetSecondaryDepth = null;
+	private static volatile java.lang.reflect.Method mEstimateSurfaceHeight = null;
+	private static volatile java.lang.reflect.Method mGetSeaLevel = null;
+	private static volatile java.lang.reflect.Method mBiomeColdEnoughToSnow = null;
+	private static volatile java.lang.reflect.Method mEntryValue = null;
+	private static volatile java.lang.reflect.Constructor<?> ctorBlockPos = null;
+	private static volatile java.lang.reflect.Method mGetKey = null;
+
+	private static void ensureFastReaderHandles(Object liveCtx) {
+		if (fldRunDepth != null) return; // already resolved
+		try {
+			Class<?> ctxClass = liveCtx.getClass();
+			java.lang.reflect.Field rd = findFieldDeep(ctxClass, "runDepth");
+			if (rd != null) { rd.setAccessible(true); fldRunDepth = rd; }
+			java.lang.reflect.Field bs = findSupplierFieldClass(ctxClass);
+			if (bs != null) { bs.setAccessible(true); fldBiomeSupplier = bs; }
+			mGetSecondaryDepth = ctxClass.getMethod("getSecondaryDepth");
+			mEstimateSurfaceHeight = ctxClass.getMethod("estimateSurfaceHeight");
+			mGetSeaLevel = ctxClass.getMethod("getSeaLevel");
+			mEntryValue = Class.forName("net.minecraft.registry.entry.RegistryEntry").getMethod("value");
+			ctorBlockPos = Class.forName("net.minecraft.util.math.BlockPos")
+					.getConstructor(int.class, int.class, int.class);
+		} catch (ReflectiveOperationException e) {
+			ExampleMod.LOGGER.warn("[surface-dispatch] fast reader resolve failed: {}", e.toString());
+		}
+	}
+
+	/** Walk superclass chain looking for a Supplier-typed field. Caches
+	 *  the Field object the same way readBiomeName's findSupplierField
+	 *  does, but returns the field rather than the value. */
+	private static java.lang.reflect.Field findSupplierFieldClass(Class<?> c) {
+		while (c != null && c != Object.class) {
+			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+				if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+				if (java.util.function.Supplier.class.isAssignableFrom(f.getType())) {
+					return f;
+				}
+			}
+			c = c.getSuperclass();
+		}
+		return null;
+	}
+
+	private static java.lang.reflect.Field findFieldDeep(Class<?> c, String name) {
+		while (c != null && c != Object.class) {
+			for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+				if (f.getName().equals(name)) return f;
+			}
+			c = c.getSuperclass();
+		}
+		return null;
+	}
+
+	/**
+	 * Per-position fast read for the batched dispatcher. Reads everything
+	 * needed off the live MaterialRuleContext using cached handles, packs
+	 * it into the dispatcher's per-thread arrays. Caller (the tryApply
+	 * redirect) hands in the (x, y, z) and the captured stoneAbove/Below/
+	 * fluidHeight from the initVerticalContext args.
+	 *
+	 * @return true if successfully enqueued; false if dispatcher overflowed
+	 *         or we couldn't read context (caller should fall through to
+	 *         vanilla tryApply for this one position).
+	 */
+	public static boolean dispatchEnqueue(Object liveCtx, int x, int y, int z) {
+		if (liveCtx == null) return false;
+		int[] vert = threadVertState.get();
+		if (vert == null) return false;
+		ensureFastReaderHandles(liveCtx);
+
+		// Vert args, decoded order from initVerticalContext (verified by the
+		// existing validator buildContext): vert[0]=stoneAbove,
+		// vert[1]=stoneBelow, vert[2]=fluidHeight, vert[3..5]=blockX/Y/Z.
+		int stoneAbove   = vert[0];
+		int stoneBelow   = vert[1];
+		int fluidHeight  = vert[2];
+
+		int runDepth     = fastReadInt(liveCtx, fldRunDepth);
+		double secondary = fastReadDouble(liveCtx, mGetSecondaryDepth);
+		int surfaceH     = fastReadInt(liveCtx, mEstimateSurfaceHeight, y);
+		String biome     = fastReadBiomeName(liveCtx);
+		boolean isCold   = fastReadIsCold(liveCtx, x, y, z, biome);
+
+		double[] noise = fastSampleNoise(x, z);
+
+		return SurfaceDispatcher.enqueue(
+				x, y, z,
+				biome, runDepth, stoneAbove, stoneBelow,
+				fluidHeight, isCold, surfaceH, secondary, noise);
+	}
+
+	private static int fastReadInt(Object o, java.lang.reflect.Field f) {
+		if (f == null) return 0;
+		try { return f.getInt(o); } catch (ReflectiveOperationException e) { return 0; }
+	}
+
+	private static int fastReadInt(Object o, java.lang.reflect.Method m, int dflt) {
+		if (m == null) return dflt;
+		try {
+			Object v = m.invoke(o);
+			return v instanceof Integer i ? i : dflt;
+		} catch (ReflectiveOperationException e) { return dflt; }
+	}
+
+	private static double fastReadDouble(Object o, java.lang.reflect.Method m) {
+		if (m == null) return 0.0;
+		try {
+			Object v = m.invoke(o);
+			return v instanceof Double d ? d : 0.0;
+		} catch (ReflectiveOperationException e) { return 0.0; }
+	}
+
+	private static String fastReadBiomeName(Object liveCtx) {
+		java.lang.reflect.Field f = fldBiomeSupplier;
+		if (f == null) return "unknown";
+		try {
+			Object supplier = f.get(liveCtx);
+			if (!(supplier instanceof java.util.function.Supplier<?> s)) return "unknown";
+			Object entry = s.get();
+			if (entry == null) return "unknown";
+			java.lang.reflect.Method getKey = mGetKey;
+			if (getKey == null) {
+				getKey = entry.getClass().getMethod("getKey");
+				mGetKey = getKey;
+			}
+			Object keyResult = getKey.invoke(entry);
+			if (keyResult instanceof java.util.Optional<?> opt) {
+				if (!opt.isPresent()) return "unknown";
+				return registryKeyValueString(opt.get());
+			}
+			return keyResult == null ? "unknown" : registryKeyValueString(keyResult);
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return "unknown";
+		}
+	}
+
+	private static boolean fastReadIsCold(Object liveCtx, int x, int y, int z, String biomeName) {
+		java.lang.reflect.Field f = fldBiomeSupplier;
+		if (f == null) return false;
+		try {
+			Object supplier = f.get(liveCtx);
+			if (!(supplier instanceof java.util.function.Supplier<?> s)) return false;
+			Object entry = s.get();
+			if (entry == null) return false;
+			Object biomeValue = mEntryValue.invoke(entry);
+			if (biomeValue == null) return false;
+			java.lang.reflect.Method cold = mBiomeColdEnoughToSnow;
+			if (cold == null) {
+				for (java.lang.reflect.Method m : biomeValue.getClass().getMethods()) {
+					if (m.getName().equals("coldEnoughToSnow") && m.getParameterCount() == 2) {
+						cold = m;
+						mBiomeColdEnoughToSnow = m;
+						break;
+					}
+				}
+				if (cold == null) return false;
+			}
+			Object pos = ctorBlockPos.newInstance(x, y, z);
+			int seaLevel = (Integer) mGetSeaLevel.invoke(liveCtx);
+			Object out = cold.invoke(biomeValue, pos, seaLevel);
+			return out instanceof Boolean b && b;
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return false;
+		}
+	}
+
+	/** Reuse the existing validator noise-sampler cache — already aligned
+	 *  with the tree's noiseChannelTable, populated lazily. Returns the
+	 *  per-channel sample array (caller must copy if it needs to retain). */
+	private static double[] fastSampleNoise(int x, int z) {
+		Object liveCtx = threadCtxRef.get();
+		if (liveCtx == null) return new double[0];
+		// sampleNoiseChannels is the existing helper; reuses cachedSamplers.
+		return sampleNoiseChannels(liveCtx, x, z);
+	}
+
+	/** Cached reflective handle for chunk.setBlockState. Vanilla's
+	 *  BlockColumn wrapper inside SurfaceSystem.buildSurface uses the
+	 *  2-arg form ({@code protoChunk.setBlockState(BlockPos, BlockState)}),
+	 *  so we mirror that. ProtoChunk also has a 3-arg flags overload but
+	 *  the 2-arg one is what vanilla itself uses on this code path. */
+	private static volatile java.lang.reflect.Method cachedSetBlockStateMethod = null;
+	private static volatile boolean cachedSetBlockStateExtraArg = false; // false=2-arg, true=3-arg int flags
+
+	public static java.lang.reflect.Method cachedSetBlockStateMethod(Object protoChunk) {
+		java.lang.reflect.Method m = cachedSetBlockStateMethod;
+		if (m != null) return m;
+
+		// First pass: 2-arg (BlockPos, BlockState) — matches vanilla's
+		// BlockColumn write. Walk inherited methods via getMethods().
+		for (java.lang.reflect.Method candidate : protoChunk.getClass().getMethods()) {
+			if (!candidate.getName().equals("setBlockState")) continue;
+			Class<?>[] params = candidate.getParameterTypes();
+			if (params.length != 2) continue;
+			if (!params[0].getName().endsWith("BlockPos")) continue;
+			if (!params[1].getName().endsWith("BlockState")) continue;
+			candidate.setAccessible(true);
+			cachedSetBlockStateExtraArg = false;
+			cachedSetBlockStateMethod = candidate;
+			return candidate;
+		}
+
+		// Fallback: 3-arg with int flags — Block.NOTIFY_ALL semantics not
+		// needed during chunkgen, just pass 0.
+		for (java.lang.reflect.Method candidate : protoChunk.getClass().getMethods()) {
+			if (!candidate.getName().equals("setBlockState")) continue;
+			Class<?>[] params = candidate.getParameterTypes();
+			if (params.length != 3) continue;
+			if (!params[0].getName().endsWith("BlockPos")) continue;
+			if (!params[1].getName().endsWith("BlockState")) continue;
+			if (params[2] != int.class && params[2] != boolean.class) continue;
+			candidate.setAccessible(true);
+			cachedSetBlockStateExtraArg = true;
+			cachedSetBlockStateMethod = candidate;
+			return candidate;
+		}
+
+		throw new IllegalStateException(
+			"setBlockState(BlockPos, BlockState[, int|boolean]) not found on " + protoChunk.getClass());
+	}
+
+	/** True if the cached setBlockState method needs a third arg (int flags
+	 *  or boolean moved). Caller passes 0 / false. */
+	public static boolean cachedSetBlockStateNeedsExtraArg() {
+		return cachedSetBlockStateExtraArg;
+	}
+
 	public static void install(CompiledRuleTree tree) {
 		cachedTree = tree;
 		resetStats();

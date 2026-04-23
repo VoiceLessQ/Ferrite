@@ -3,7 +3,18 @@ package me.apika.apikaprobe.mixin;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Coerce;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.gen.HeightContext;
+import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
+import net.minecraft.world.gen.noise.NoiseConfig;
+import net.minecraft.world.gen.surfacebuilder.MaterialRules;
+import net.minecraft.world.biome.source.BiomeAccess;
+import net.minecraft.registry.Registry;
+import net.minecraft.world.biome.Biome;
 
 import me.apika.apikaprobe.surface.SurfaceDispatcher;
 import me.apika.apikaprobe.surface.SurfaceValidator;
@@ -32,6 +43,44 @@ import net.minecraft.world.gen.surfacebuilder.SurfaceBuilder;
 @Mixin(SurfaceBuilder.class)
 public abstract class SurfaceValidatorMixin {
 
+	/**
+	 * Arm the per-thread batched dispatcher at the start of buildSurface.
+	 * The actual chunk reference comes from a local variable (protoChunk
+	 * is the 6th argument in the yarn signature); we capture it via the
+	 * dispatcher's beginChunk hook. Subsequent tryApply redirect calls on
+	 * this thread will route through SurfaceDispatcher.enqueue.
+	 *
+	 * <p>The chunk argument is bound positionally — Mixin matches @Inject
+	 * parameters to the target method's parameters in order. Letting the
+	 * unused ones be Object keeps us decoupled from yarn signature drift
+	 * across MC versions.
+	 */
+	@Inject(method = "buildSurface", at = @At("HEAD"))
+	private void ferrite$dispatchBegin(
+			NoiseConfig noiseConfig, BiomeAccess biomeAccess, Registry<Biome> biomeRegistry,
+			boolean useLegacyRandom, HeightContext heightContext,
+			Chunk protoChunk, ChunkNoiseSampler chunkNoiseSampler,
+			MaterialRules.MaterialRule ruleSource,
+			CallbackInfo ci) {
+		SurfaceDispatcher.beginChunk(protoChunk);
+	}
+
+	/**
+	 * Flush the per-thread batched dispatcher at the end of buildSurface.
+	 * One JNI call evaluates every captured (x, y, z); results write back
+	 * via Chunk.setBlockState. No-op if dispatch wasn't active for this
+	 * chunk (toggle off, no tree installed, or beginChunk failed).
+	 */
+	@Inject(method = "buildSurface", at = @At("RETURN"))
+	private void ferrite$dispatchEnd(
+			NoiseConfig noiseConfig, BiomeAccess biomeAccess, Registry<Biome> biomeRegistry,
+			boolean useLegacyRandom, HeightContext heightContext,
+			Chunk protoChunk, ChunkNoiseSampler chunkNoiseSampler,
+			MaterialRules.MaterialRule ruleSource,
+			CallbackInfo ci) {
+		SurfaceDispatcher.flushChunk();
+	}
+
 	@Redirect(
 		method = "buildSurface",
 		at = @At(
@@ -46,14 +95,29 @@ public abstract class SurfaceValidatorMixin {
 		// to vanilla (matches "no rule matched" semantics + safety net
 		// for any residual evaluator gap, e.g. an unrecognized node type
 		// the compiler emitted as OP_FALLBACK).
+		// Batched dispatch path: per-thread state armed by the buildSurface
+		// HEAD inject. If active, capture the per-position context via
+		// cached reflective handles into the dispatcher's primitive arrays
+		// and return null — vanilla's "if (state != null) setBlock" check
+		// then skips its own write. The dispatcher flushes after the loop
+		// (one JNI call, all writes).
+		if (SurfaceDispatcher.batchActive()) {
+			boolean enqueued = SurfaceValidator.dispatchEnqueue(
+					SurfaceValidator.capturedLiveCtx(), x, y, z);
+			if (enqueued) {
+				return null;
+			}
+			// Dispatcher overflowed → fall through to vanilla as a safety net.
+			return invokeTryApply(rule, x, y, z);
+		}
+
+		// Legacy simple per-call swap (kept for diagnostic A/B; the
+		// 15× regression is documented and known).
 		if (SurfaceDispatcher.ENABLED) {
 			Object dispatched = SurfaceValidator.tryDispatchEvaluator(this, x, y, z);
 			if (dispatched instanceof BlockState bs) {
 				return bs;
 			}
-			// dispatched == null: eval said "no rule matched" — let
-			// vanilla decide. We still call vanilla and skip validation
-			// (no point diffing against ourselves).
 			return invokeTryApply(rule, x, y, z);
 		}
 
