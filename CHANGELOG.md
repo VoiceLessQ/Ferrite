@@ -7,6 +7,12 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+_(no changes pending)_
+
+---
+
+## [0.5.0-alpha] — 2026-04-23
+
 ### Added
 
 - `/ferrite cramming on | off | status` — runtime toggle for the
