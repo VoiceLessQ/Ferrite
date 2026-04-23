@@ -120,6 +120,57 @@ public final class SurfaceValidator {
 	}
 
 	// ============================================================
+	// Per-column cache for the batched dispatcher (Opt B).
+	//
+	// In vanilla SurfaceRules.Context, several fields are set in
+	// updateXZ() (per-column) and stay constant across all Ys in that
+	// column — runDepth (yarn name; mojmap surfaceDepth), secondaryDepth
+	// (mojmap getSurfaceSecondary), and minSurfaceLevel (mojmap, lazy
+	// per-XZ memoized). Vanilla's NoiseThresholdConditionSource also
+	// hardcodes y=0 for noise sampling, so noise channels are
+	// effectively 2D and per-(x, z) only.
+	//
+	// Without this cache, the dispatch fast path re-reads all of these
+	// per Y — ~70K redundant reflective calls per chunk on a typical
+	// overworld walk. With the cache, each column does ~4 reflective
+	// reads + 7 noise samples once on its first Y, then every
+	// subsequent Y reads from primitive arrays.
+	//
+	// Reset by SurfaceDispatcher.beginChunk via resetColumnCache.
+	// 16×16 = 256 column slots per chunk.
+	// ============================================================
+	static final class ColumnCache {
+		final boolean[] valid             = new boolean[256];
+		final int[]     runDepths         = new int[256];
+		final double[]  secondaryDepths   = new double[256];
+		final int[]     surfaceHeights    = new int[256];
+		double[]        noiseSlab         = null; // 256 × channelCount; sized lazily
+		int             channelCount      = 0;
+
+		void reset(int channels) {
+			java.util.Arrays.fill(valid, false);
+			if (noiseSlab == null || channelCount != channels) {
+				noiseSlab = new double[256 * Math.max(1, channels)];
+				channelCount = channels;
+			}
+		}
+	}
+
+	private static final ThreadLocal<ColumnCache> columnCache =
+			ThreadLocal.withInitial(ColumnCache::new);
+
+	/** Per-thread scratch noise array reused across enqueue calls so
+	 *  the dispatch path doesn't allocate a fresh double[] per (x, y, z). */
+	private static final ThreadLocal<double[]> noiseScratch =
+			ThreadLocal.withInitial(() -> new double[16]);
+
+	/** Called from {@link SurfaceDispatcher#beginChunk} so each chunk
+	 *  starts with a clean per-thread cache. */
+	public static void resetColumnCache(int channelCount) {
+		columnCache.get().reset(channelCount);
+	}
+
+	// ============================================================
 	// Fast-path context extraction for the batched dispatcher.
 	// Per-call cost: 5 reflective invokes against pre-cached handles
 	// (~50ns each on warm JIT) instead of 8 find-then-invoke chains
@@ -197,20 +248,59 @@ public final class SurfaceValidator {
 		if (vert == null) return false;
 		ensureFastReaderHandles(liveCtx);
 
-		// Vert args, decoded order from initVerticalContext (verified by the
-		// existing validator buildContext): vert[0]=stoneAbove,
+		// Vert args, decoded order from initVerticalContext: vert[0]=stoneAbove,
 		// vert[1]=stoneBelow, vert[2]=fluidHeight, vert[3..5]=blockX/Y/Z.
 		int stoneAbove   = vert[0];
 		int stoneBelow   = vert[1];
 		int fluidHeight  = vert[2];
 
-		int runDepth     = fastReadInt(liveCtx, fldRunDepth);
-		double secondary = fastReadDouble(liveCtx, mGetSecondaryDepth);
-		int surfaceH     = fastReadInt(liveCtx, mEstimateSurfaceHeight, y);
-		String biome     = fastReadBiomeName(liveCtx);
-		boolean isCold   = fastReadIsCold(liveCtx, x, y, z, biome);
+		// Per-column cache lookup. First Y in a column does the
+		// reflective read + noise sample; subsequent Ys read primitives.
+		ColumnCache cc = columnCache.get();
+		int cellIdx = ((x & 15) << 4) | (z & 15);
+		int channels = cc.channelCount;
 
-		double[] noise = fastSampleNoise(x, z);
+		int runDepth;
+		double secondary;
+		int surfaceH;
+		if (cc.valid[cellIdx]) {
+			runDepth  = cc.runDepths[cellIdx];
+			secondary = cc.secondaryDepths[cellIdx];
+			surfaceH  = cc.surfaceHeights[cellIdx];
+		} else {
+			runDepth  = fastReadInt(liveCtx, fldRunDepth);
+			secondary = fastReadDouble(liveCtx, mGetSecondaryDepth);
+			surfaceH  = fastReadInt(liveCtx, mEstimateSurfaceHeight, y);
+
+			// Sample noise channels into the cache slab. Vanilla samples
+			// at y=0 → identical for every Y in this column.
+			if (channels > 0) {
+				double[] sampled = sampleNoiseChannels(liveCtx, x, z);
+				int copy = Math.min(sampled.length, channels);
+				System.arraycopy(sampled, 0, cc.noiseSlab, cellIdx * channels, copy);
+			}
+
+			cc.runDepths[cellIdx]       = runDepth;
+			cc.secondaryDepths[cellIdx] = secondary;
+			cc.surfaceHeights[cellIdx]  = surfaceH;
+			cc.valid[cellIdx]           = true;
+		}
+
+		// Copy this column's noise slice into the per-thread scratch
+		// (dispatcher will copy from here into its own slab anyway).
+		double[] noise = noiseScratch.get();
+		if (channels > 0 && (noise.length < channels)) {
+			noise = new double[channels];
+			noiseScratch.set(noise);
+		}
+		if (channels > 0) {
+			System.arraycopy(cc.noiseSlab, cellIdx * channels, noise, 0, channels);
+		}
+
+		// Per-Y reads (biome supplier is set in vanilla's updateY, so it can
+		// vary by Y for cave-biome boundaries — keep these per-Y for safety).
+		String biome   = fastReadBiomeName(liveCtx);
+		boolean isCold = fastReadIsCold(liveCtx, x, y, z, biome);
 
 		return SurfaceDispatcher.enqueue(
 				x, y, z,
@@ -293,15 +383,10 @@ public final class SurfaceValidator {
 		}
 	}
 
-	/** Reuse the existing validator noise-sampler cache — already aligned
-	 *  with the tree's noiseChannelTable, populated lazily. Returns the
-	 *  per-channel sample array (caller must copy if it needs to retain). */
-	private static double[] fastSampleNoise(int x, int z) {
-		Object liveCtx = threadCtxRef.get();
-		if (liveCtx == null) return new double[0];
-		// sampleNoiseChannels is the existing helper; reuses cachedSamplers.
-		return sampleNoiseChannels(liveCtx, x, z);
-	}
+	// fastSampleNoise removed — Opt B replaced its single caller with a
+	// per-column-cached read. sampleNoiseChannels (the helper it wrapped)
+	// is still called directly by dispatchEnqueue on first-Y-per-column
+	// to populate the cache slab.
 
 	/** Cached reflective handle for chunk.setBlockState. Vanilla's
 	 *  BlockColumn wrapper inside SurfaceSystem.buildSurface uses the

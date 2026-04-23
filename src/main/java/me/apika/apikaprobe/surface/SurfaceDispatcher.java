@@ -105,6 +105,10 @@ public final class SurfaceDispatcher {
 		if (tree == null) return;
 		DispatchState st = STATE.get();
 		st.resetForChunk(protoChunk, tree);
+		// Reset the per-column cache so this chunk starts clean.
+		// Validator's column cache is what eliminates the per-Y reflective
+		// re-reads — see SurfaceValidator.ColumnCache for rationale.
+		SurfaceValidator.resetColumnCache(tree.noiseChannelTable().length);
 		st.active = true;
 	}
 
