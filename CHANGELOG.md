@@ -7,7 +7,75 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
-_(no changes pending)_
+### Added
+
+- **Surface rule dispatcher** (`/ferrite surface dispatch on|off|status`).
+  Batched JNI architecture: vanilla's `tryApply` calls are deferred,
+  packed into one batch per chunk, evaluated by the Rust bytecode
+  evaluator, then written back. Default OFF. Requires
+  `/ferrite surface validate` first (uses the installed compiled tree).
+
+  Correctness is solid (vanilla-equivalent terrain at 99.8% match
+  vs vanilla per the validator). Performance is the open work item:
+  currently ~2.5× chunkgen cost (~25 ms vs vanilla ~10 ms). Default
+  flips ON when the seed-driven Track B architecture closes the gap.
+
+- **Xoroshiro128++ Rust port** (`rust/mod/src/xoroshiro.rs`).
+  Bit-exact port of vanilla's `Xoroshiro128PlusPlus`,
+  `XoroshiroRandomSource`, and `XoroshiroPositionalRandomFactory`.
+  11/11 unit tests pass including a hand-traced first-call value
+  that matches the Java algorithm exactly. Now drives Rust's
+  `OP_VERT_GRADIENT` per-block PRNG (closed the previous Java=Rust
+  97.5% gap to **100%**). Foundation for Track B (seed-driven Rust
+  dispatcher).
+
+### Changed
+
+- **Surface validator parity: 95.3% → 99.8%** vs vanilla. Four
+  reflection / evaluator fixes against the unobfuscated 1.21.11
+  source: `getMinSurfaceLevel` → `estimateSurfaceHeight` (yarn
+  rename), per-block PRNG for `OP_VERT_GRADIENT` (was midpoint
+  placeholder), record-component accessor for vanilla's record-
+  typed condition nodes (`Method.invoke` on declared component
+  rather than direct field reflection), and live noise sampling
+  via cached `DoublePerlinNoiseSampler` references (was zero-vector
+  placeholder).
+
+- **Bytecode operand for `OP_VERT_GRADIENT`** grew from 9 → 11 bytes
+  (added `u16 randomNameIdx` for per-block PRNG factory lookup).
+  `CompiledRuleTree` gained `String[] randomNameTable` to map index
+  → registry-name string; resolved at install via reflection on
+  vanilla's cached `RandomSplitter` instances.
+
+### Performance
+
+Surface dispatcher A/B (overworld walk-to-load, 4-core CPU
+affinity, same methodology as the cramming and redstone
+benchmarks). All values are warm averages.
+
+| Architecture | Surface ms/chunk | Δ vs vanilla |
+|---|---:|---:|
+| Vanilla baseline | ~10-11 ms | — |
+| Simple per-call dispatch | ~150-170 ms | 15× regression (captured experiment) |
+| Batched JNI | ~70-80 ms | 8× regression |
+| + Per-column cache (Opt B) | ~32-37 ms | 3.5× regression |
+| + MethodHandle + direct typed Java (Opt A) | ~24-27 ms | **2.5× regression** |
+
+Each iteration documented in `docs/SURFACE_RULE_STATUS.md` under
+"Dispatcher swap arc". The remaining regression is dispatch-pipeline
+overhead (per-position record allocation, ByteBuffer packing, JNI
+hop); the structural fix is Track B.
+
+### Track B (next session)
+
+Seed-driven Rust dispatcher: at world load, push the seed once;
+Rust holds its own `NoiseConfig` + `RandomSplitter` stack derived
+from that seed. Per chunk Java sends only `(chunk_pos,
+position_array)`; Rust computes biome / runDepth / noise / random
+from its initialized state and runs the bytecode in one batch.
+Foundation (Xoroshiro) is in place. Remaining ports:
+`DoublePerlinNoiseSampler`, `NoiseConfig.getOrCreateNoise`,
+`MultiNoiseBiomeSource`. Multi-session work.
 
 ---
 

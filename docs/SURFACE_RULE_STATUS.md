@@ -1,26 +1,112 @@
 # Surface rule port — status
 
-Snapshot as of commit `649edfc`. Companion to the forward-looking
+Snapshot as of commit `8822605`. Companion to the forward-looking
 `SURFACE_RULE_BATCH_PLAN.md` and `SURFACE_RULE_BUFFER_SPEC.md` — this
 doc captures what's actually built and runnable today.
 
-## Headline
+## Headline (current)
 
-- **Rust = Java 100%** across 110,975 sampled columns (`java=rust=100.0%
-  divergences=0` from the live three-way validator). The Rust port is
-  provably correct — identical output to the Java evaluator across all
-  biomes and conditions tested.
-- **95.3% match** between the bytecode evaluator and vanilla
-  `buildSurface` (live diff sampler, 1-in-1000 columns; up from 92.4%
-  via parity-pass fixes against Mojang's unobfuscated 1.21.11 source).
-- **Java reference evaluator** (`SurfaceRuleEvaluator.java`) is the
-  spec — Rust port (`rust/mod/src/surface.rs`) mirrors it byte-for-byte.
-- **JNI binding shipped** (`rust/mod/src/surface_jni.rs`,
-  `RustBridge.evaluateSurfaceRule`). Single-column per-call surface;
-  per-chunk batching is the next optimization.
-- **Remaining 8% is concentrated in specific biome rules** (desert
-  sandstone Y-bound, dirt placement near surface in forest biomes,
-  bedrock floor edge cases).
+- **99.8% match** between the bytecode evaluator and vanilla
+  `buildSurface` (live diff sampler, 1-in-1000 columns). Up from
+  95.3% via four reflection / evaluator fixes against Mojang's
+  unobfuscated 1.21.11 source: `estimateSurfaceHeight` yarn rename,
+  per-block PRNG for `OP_VERT_GRADIENT`, record-component accessor
+  for vanilla's record-typed condition nodes, plus real noise sampling.
+  Residual 0.2% is `isSteep=false` placeholder + a handful of
+  corner cases.
+- **Java = Rust 100%** across the same sample (`divergences=0`).
+  The Rust port is provably bit-exact to the Java reference,
+  including `OP_VERT_GRADIENT`'s per-block PRNG (Xoroshiro128++
+  port matches vanilla's `RandomSplitter` byte-for-byte).
+- **Batched JNI dispatcher shipped, behind a runtime toggle**
+  (`/ferrite surface dispatch on|off`). Default OFF. Routes vanilla's
+  `tryApply` calls through one JNI batch per chunk instead of
+  per-call. Correctness is solid (vanilla-equivalent terrain at
+  99.8%); performance is the open work item — currently ~2.5×
+  vanilla, gated off until competitive.
+- **Track B foundation in place:** Xoroshiro128++ Rust port
+  (`rust/mod/src/xoroshiro.rs`, 11/11 tests). Unblocks the
+  seed-driven Rust dispatcher where Rust holds noise/biome/random
+  state and Java sends position arrays only. Multi-session work
+  ahead: `DoublePerlinNoiseSampler`, `NoiseConfig.getOrCreateNoise`,
+  `MultiNoiseBiomeSource` ports.
+
+## Headline (historical, for reference)
+
+- 95.3% match (commit `649edfc`) — the previous baseline before
+  tonight's reflection / evaluator fix arc.
+- 89.8% match (early validator) — first runnable evaluator after
+  initial parity-pass fixes.
+
+## Dispatcher swap arc (session of `c90ad8f` → `8822605`)
+
+The validator path proves the bytecode evaluator is correct; the
+dispatcher path attempts to use it as the production replacement
+for vanilla's `tryApply`. Six commits, three architectural shapes,
+honest per-shape measurements gating each step.
+
+| Commit | Architecture | Surface ms/chunk | Δ vs vanilla |
+|---|---|---:|---:|
+| `c90ad8f` | Simple per-call dispatch | ~150-170 ms | **15× regression** |
+| `6925a3f` | Batched JNI (defer + flush) | ~70-80 ms | 8× regression |
+| `92ac06b` | + Opt B per-column cache | ~32-37 ms | 3.5× regression |
+| `297f053` | + Xoroshiro Rust PRNG (correctness) | ~33-37 ms | 3.5× (no perf delta — correctness fix) |
+| `8822605` | + Opt A `MethodHandle.invokeExact` + direct typed Java | ~24-27 ms | **2.5× regression** |
+| Vanilla (warm baseline) | — | ~9-11 ms | — |
+
+**What each iteration taught:**
+
+1. **Simple per-call (15×)** — proved that per-call reflective context
+   build is too expensive to ship. Reflection cost dominates the
+   bytecode evaluator's compute by 10×.
+2. **Batched JNI (8×)** — proved the defer-and-flush pipeline is
+   correct (writes match vanilla output) and the JNI hop itself is
+   cheap. Eliminated the per-call eval cost; per-position context
+   build became the new bottleneck.
+3. **Opt B per-column cache (3.5×)** — `runDepth`,
+   `secondaryDepth`, `surfaceHeight`, and 7 noise channels are
+   per-column-stable in vanilla source (memoized via
+   `lastUpdateXZ` / `lastMinSurfaceLevelUpdate`). Cached at (x, z)
+   granularity → ~50K reflective calls per chunk eliminated.
+4. **Xoroshiro Rust PRNG (no perf delta)** — closed the known
+   Java=Rust 97.5% gap by porting vanilla's
+   `XoroshiroPositionalRandomFactory` to Rust bit-exact. Correctness
+   fix only; performance unchanged (Rust's eval was already a tiny
+   fraction of total). This is also the **first brick of Track B**:
+   the seed-driven Rust dispatcher needs Xoroshiro as its
+   foundation for the eventual `RandomSplitter`-based per-block
+   randomness.
+5. **Opt A MethodHandle + direct Java (2.5×)** — replaced the
+   per-Y `Method.invoke` chains with `MethodHandle.invokeExact`
+   for package-private `MaterialRuleContext` methods, and direct
+   typed virtual calls for the public yarn chain (Supplier →
+   RegistryEntry → Biome.isCold). Smaller delta than projected
+   (~25% rather than predicted 5-10×) — the residual cost is
+   pipeline overhead (record allocation, ByteBuffer packing, JNI
+   dispatch, result writeback), not method-call latency.
+
+**Where the remaining ~15ms residual lives** (after Opt A):
+
+- ColumnContext record + noiseValues `double[]` allocation in
+  `flushChunk` — 17K allocations per chunk, GC-friendly but not
+  free.
+- `packColumn` ByteBuffer offset writes — ~10 putInt + array fill
+  per column.
+- JNI dispatch + Rust evaluator + per-result reflective
+  `setBlockState` writeback.
+
+The structural fix is **Track B** (seed-driven Rust dispatcher).
+Java sends only `(seed, chunk_pos, position_array)` once per
+chunk; Rust computes biome / runDepth / noise / random from the
+seed-initialized state and runs the bytecode in a single batch.
+Per-position Java work disappears entirely. Multi-session port,
+foundation (Xoroshiro) is in place.
+
+**Current shipping state:** dispatcher works, produces vanilla-
+correct terrain (99.8% match), defaults OFF. Power users who
+want to test it can `/ferrite surface dispatch on` and accept
+the ~2.5× chunkgen cost. Default flips ON when Track B brings
+it under vanilla.
 
 ## What's built
 
@@ -58,6 +144,13 @@ doc captures what's actually built and runnable today.
 | `/ferrite surface validate` | Compile + install tree as the validator's active tree; mixin starts diffing. |
 | `/ferrite surface validate-off` | Clear active tree, log final stats. |
 | `/ferrite surface validate-stats` | Print current diff stats line. |
+| `/ferrite surface dispatch on` | Route vanilla `tryApply` calls through the batched Rust evaluator. Requires `validate` first (uses the installed tree). Default OFF. |
+| `/ferrite surface dispatch off` | Restore vanilla path. |
+| `/ferrite surface dispatch status` | Report toggle state + tree presence. |
+| `/ferrite surface trace-next` | Arm a one-shot full opcode trace for the next mismatch the validator sees. |
+| `/ferrite surface dump` | Disassemble the active world's bytecode to `run/surface-dump.txt`. |
+| `/ferrite surface dump-biomes` | Dump the per-tree biome-set pool entries. |
+| `/ferrite surface batch-test` | Synthetic 256-column round-trip comparing per-call vs batched JNI agreement. |
 
 ### Rust side (`rust/mod/src/surface.rs` + `surface_jni.rs`)
 
@@ -84,7 +177,7 @@ Total: 17 opcodes in `RuleBytecode.java`.
 |---|---|---|---|---|
 | `OP_ABOVE_Y` | 0x01 | i32 anchorY, i32 surfaceDepthMul, u8 addStoneDepth | 10 | exact vanilla formula |
 | `OP_NOISE_THRESH` | 0x02 | u16 channelId, f64 minThreshold, f64 maxThreshold | 19 | layout + dispatch ✓; semantics rely on noise pre-sample (currently zero in validator) |
-| `OP_VERT_GRADIENT` | 0x03 | i32 trueAtAndBelow, i32 falseAtAndAbove | 9 | midpoint approximation (vanilla uses per-position random) |
+| `OP_VERT_GRADIENT` | 0x03 | u16 randomNameIdx, i32 trueAtAndBelow, i32 falseAtAndAbove | 11 | exact vanilla per-block PRNG via `XoroshiroPositionalRandomFactory.at(x,y,z).nextFloat()` (Rust port `xoroshiro.rs` matches vanilla bit-exact). Falls back to midpoint only when factory seeds are absent. |
 | `OP_STONE_DEPTH` | 0x04 | i32 offset, u8 addSurfaceDepth, i32 secondaryDepthRange, u8 surfaceType | 11 | exact vanilla formula |
 | `OP_WATER` | 0x05 | i32 offset, i32 surfaceDepthMul, u8 addStoneDepthBelow | 10 | spike formula (`blockY < fluidHeight + offset`); needs vanilla check |
 | `OP_HOLE` | 0x06 | (none) | 1 | exact (`runDepth <= 0`) |

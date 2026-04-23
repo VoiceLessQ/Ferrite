@@ -132,17 +132,32 @@ on the way in. Shelved, framework retained for diagnostic use.
 
 ### Surface rule dispatcher
 
-This one is still open but stuck. The Java bytecode evaluator reaches
-Rust=Java 100% across 110,975 sampled columns (the Rust port is
-provably correct) but 95.3% match against vanilla's live
-`buildSurface`. The remaining 4.7% concentrates in specific biome
-rules that suggest either evaluator bugs or measurement artifacts in
-the validator's context capture timing.
+Open but no longer stuck. The validator path is at **99.8%** vs vanilla
+(up from 95.3% via four reflection / evaluator fixes against the
+unobfuscated 1.21.11 source — `estimateSurfaceHeight` yarn rename,
+per-block PRNG for `OP_VERT_GRADIENT`, record-component accessor for
+vanilla's record-typed nodes, real noise sampling from cached
+`DoublePerlinNoiseSampler` references). **Java=Rust now 100%** after
+porting `Xoroshiro128++` to Rust bit-exact (closed the previous 97.5%
+PRNG-divergence gap).
 
-Next investigation is the validator, not the evaluator. If the
-validator captures context state from a different moment than
-vanilla's `tryApply` call, what looks like a parity gap might be a
-measurement gap. That changes the work entirely.
+The dispatcher swap (production replacement of vanilla's per-call
+`tryApply` with a batched Rust evaluator) ships behind a runtime toggle
+(`/ferrite surface dispatch on`). Correctness is solid; performance is
+~2.5× vanilla — too slow for default-on. Six-commit arc documented in
+`docs/SURFACE_RULE_STATUS.md` "Dispatcher swap arc" with per-iteration
+measurements: 15× → 8× → 3.5× → 2.5×, each step gated by an A/B that
+proved which optimization moved the needle.
+
+What the arc taught: per-call reflection cost dominates everything when
+called per-(x,y,z) at chunkgen scale. Even MethodHandle.invokeExact +
+direct typed Java only got us to 2.5×. The structural fix is **Track B**
+— at world load Java pushes the seed once; Rust holds its own
+NoiseConfig + RandomSplitter stack derived from that seed; per-chunk
+Java sends only position arrays. Per-position Java work disappears
+entirely. The Xoroshiro port is the first brick of that foundation.
+Multi-session work ahead: `DoublePerlinNoiseSampler`,
+`NoiseConfig.getOrCreateNoise`, `MultiNoiseBiomeSource`.
 
 ### Lighting palette reads
 
