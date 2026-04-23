@@ -81,17 +81,29 @@ different measurement technique.
 
 ### Rust bulk handoff compute is 7× faster than vanilla equivalent
 
-> **Retroactive status note (added after 0.3.0-alpha's redstone port):**
-> the 7× figure below is accurate as an isolation benchmark but did not
-> survive integration with vanilla's chunk-gen pipeline — capturing
-> density-function state to feed the Rust kernel turns out to cost more
-> than the kernel saves. The same "per-call JNI overhead exceeds per-call
-> compute saving" pattern that shelved the per-cascade redstone Rust BFS
-> in 0.3.0-alpha would recur here at the density-sample level. Ferrite
-> no longer advertises a 7× chunk-gen speedup as a forward-looking
-> claim; the measurement framework is retained in the jar for diagnostic
-> value, output gated off. See the README and CurseForge description for
-> the current "shelved, pivoting to surface rules" framing.
+> **Retroactive status note (updated after 0.4.0-alpha's redstone BFS
+> shipped).** The 7× figure below is accurate as an isolation benchmark
+> but did not survive integration with vanilla's chunk-gen pipeline.
+> Capturing density-function state to feed the Rust kernel costs more
+> than the kernel saves, because vanilla's interpolator state machine
+> does not expose the corner grid as a flat buffer we can snapshot
+> cheaply (see "What blocked completion" below).
+>
+> The contrast with redstone is instructive. The 0.3.0-alpha redstone
+> Rust BFS was initially shelved on the same "per-call JNI cost exceeds
+> compute saving" reasoning. It was un-shelved after Phase 1 (commit
+> `0cfac8c`) measured the actual JNI cost for the redstone call shape at
+> single-digit nanoseconds, two orders of magnitude below the worldgen
+> figure. The BFS port shipped default-on in 0.4.0-alpha because its
+> inputs marshal cleanly into direct ByteBuffers. The worldgen density
+> tree does not, because Mojang's interpolator design holds state across
+> calls. Same project, same JNI library, two different regimes. See
+> "JNI cost regimes" below for the full recalibration.
+>
+> Ferrite still does not advertise a 7× chunk-gen speedup as a
+> forward-looking claim. The measurement framework is retained in the
+> jar for diagnostic value, output gated off. See the README and
+> CurseForge description for current scope.
 
 `TerrainBulkHandoff` + `terrain.rs` implemented a bulk pipeline: Java
 samples finalDensity at 1225 cell corners, hands them to Rust, Rust
@@ -112,6 +124,54 @@ faster, even though the function itself runs faster in Rust.
 
 **Architectural conclusion:** only bulk handoff (one JNI call per chunk,
 amortising boundary cost across 98K blocks) can win on this workload.
+
+### JNI cost regimes (recalibrated after redstone Phase 1)
+
+The 200-500 ns figure above is accurate for the JNI call shape used in
+this worldgen investigation: each crossing materializes a snapshot
+object (boxed primitive wrappers, registry lookups, small arrays built
+per call). That cost structure applies to any port target that needs
+to carry more than primitives across the boundary.
+
+It is not a universal JNI number. Redstone Phase 1 (live bench in
+`docs/REDSTONE_PORT_PLAN.md`, commit `0cfac8c`) measured a different
+regime: pass two direct ByteBuffers and an int, receive an int back.
+That call shape clocks in at single-digit nanoseconds amortized,
+roughly two orders of magnitude below the worldgen estimate.
+
+How to tell which regime a port sits in:
+
+- **Snapshot regime (200-500 ns per call).** The JNI call builds
+  per-call Java objects: wrapper types, registry lookups, array
+  allocations, string interning. Crossing cost is dominated by
+  object construction and downstream GC pressure, not the native
+  call itself. Per-call rate above ~5K per chunk is unviable.
+  Covers: aquifer.apply, density samples, any path that needs a
+  live JVM object graph on the other side.
+
+- **Direct-buffer regime (single-digit ns per call).** Inputs and
+  outputs are pre-allocated direct ByteBuffers plus small scalar
+  args. No per-call allocation, no per-call object lookup. Crossing
+  cost is the native-call instruction plus buffer address handoff.
+  Per-call rate above 100K per tick is viable. Covers: the cramming
+  tick dispatch, the redstone BFS per-cascade call, any port whose
+  inputs can be marshalled once at subsystem entry and drained once
+  at exit.
+
+The boundary between the two is object allocation per crossing. If
+you cannot remove it, you are in the snapshot regime and your
+per-call budget is small. If you can pass everything as flat
+pre-allocated buffers, per-call JNI cost effectively disappears.
+
+**Consequence for port selection:** the original 200-500 ns figure
+ruled out some targets that are actually viable in the direct-buffer
+regime. Before shelving a port on per-call cost, verify which regime
+the call shape actually sits in. The redstone BFS port shipped
+default-on in 0.4.0-alpha because Phase 1 measured its crossing at
+the cheap end, not the worldgen snapshot end. The worldgen
+conclusion is unchanged (the density-function case legitimately
+needs snapshot-style state to cross) but the reasoning no longer
+generalizes to every candidate port.
 
 ## What blocked completion
 
