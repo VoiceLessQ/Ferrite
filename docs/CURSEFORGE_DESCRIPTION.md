@@ -21,6 +21,8 @@ Every 5 seconds the mod also logs where your game is spending time, so the next 
 
 TPS held at 20 under the same load that was costing vanilla 60 ms/tick of entity work.
 
+> **Isolated cramming-math sub-budget:** ~0.06 ms with Ferrite vs ~18.81 ms vanilla on the same pile — roughly **310× reduction in the cramming calculation itself**, stripped of all other entity costs. The 65% total entity-tick reduction is the user-facing number; 310× is what Rust is actually doing to the specific bottleneck.
+
 ### Redstone (lag-machine benchmark, AC algorithm enabled)
 
 | metric                 | vanilla default     | Ferrite (AC)         | change                |
