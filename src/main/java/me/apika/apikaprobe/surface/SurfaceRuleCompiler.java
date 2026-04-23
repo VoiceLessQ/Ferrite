@@ -240,6 +240,18 @@ public final class SurfaceRuleCompiler {
 	 * Used for operand extraction across vanilla and synthetic test nodes.
 	 */
 	private static int readIntField(Object node, String name, int dflt) {
+		// Try record-component accessor first — see readBoolField for why.
+		try {
+			java.lang.reflect.Method m = node.getClass().getMethod(name);
+			if (m.getReturnType() == int.class || m.getReturnType() == Integer.class) {
+				Object v = m.invoke(node);
+				if (v instanceof Integer i) return i;
+			}
+		} catch (NoSuchMethodException ignored) {
+			// fall through to field lookup
+		} catch (ReflectiveOperationException | RuntimeException ignored) {
+			// fall through
+		}
 		try {
 			java.lang.reflect.Field f = findField(node.getClass(), name);
 			if (f == null) return dflt;
@@ -319,6 +331,18 @@ public final class SurfaceRuleCompiler {
 	}
 
 	private static double readDoubleField(Object node, String name, double dflt) {
+		// Try record-component accessor first — see readBoolField for why.
+		try {
+			java.lang.reflect.Method m = node.getClass().getMethod(name);
+			if (m.getReturnType() == double.class || m.getReturnType() == Double.class) {
+				Object v = m.invoke(node);
+				if (v instanceof Double d) return d;
+			}
+		} catch (NoSuchMethodException ignored) {
+			// fall through to field lookup
+		} catch (ReflectiveOperationException | RuntimeException ignored) {
+			// fall through
+		}
 		try {
 			java.lang.reflect.Field f = findField(node.getClass(), name);
 			if (f == null) return dflt;
@@ -330,6 +354,24 @@ public final class SurfaceRuleCompiler {
 	}
 
 	private static boolean readBoolField(Object node, String name, boolean dflt) {
+		// Try the record-component accessor first. Vanilla MaterialRules
+		// nodes are private static records (e.g. StoneDepthCheck); yarn
+		// renames the auto-generated zero-arg accessor methods (`addSurfaceDepth()`)
+		// even when the underlying record-component field stays at its
+		// short obfuscated name (`c`). Field-only reflection silently
+		// returned the default before this change → addSurface=0 in
+		// every emitted OP_STONE_DEPTH.
+		try {
+			java.lang.reflect.Method m = node.getClass().getMethod(name);
+			if (m.getReturnType() == boolean.class || m.getReturnType() == Boolean.class) {
+				Object v = m.invoke(node);
+				if (v instanceof Boolean b) return b;
+			}
+		} catch (NoSuchMethodException ignored) {
+			// fall through to field lookup
+		} catch (ReflectiveOperationException | RuntimeException ignored) {
+			// method exists but call failed — fall through
+		}
 		try {
 			java.lang.reflect.Field f = findField(node.getClass(), name);
 			if (f == null) return dflt;
