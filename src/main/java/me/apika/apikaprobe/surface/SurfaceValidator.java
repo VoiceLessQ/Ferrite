@@ -46,6 +46,21 @@ public final class SurfaceValidator {
 	 *  itself. Set via /ferrite surface trace-next. */
 	public static volatile boolean traceNextMismatch = false;
 
+	/** One-shot diagnostic flag — fires on the first sample after install
+	 *  to verify reflective field/method access against the live
+	 *  MaterialRuleContext. Logs whether each read succeeded and what
+	 *  value it returned. Resets on uninstall/install. */
+	private static final java.util.concurrent.atomic.AtomicBoolean diagDumped =
+			new java.util.concurrent.atomic.AtomicBoolean(false);
+
+	/** Cache of {@code DoublePerlinNoiseSampler} references aligned with
+	 *  {@link CompiledRuleTree#noiseChannelTable()}. Populated lazily on
+	 *  the first sample after install — needs the live MaterialRuleContext
+	 *  to walk to NoiseConfig.getOrCreateSampler. Stored as Object[] so
+	 *  this file doesn't need yarn type imports. Null entries indicate a
+	 *  channel that failed to resolve (sample reads 0.0, logged once). */
+	private static volatile Object[] cachedSamplers = null;
+
 	/** Captured per-thread MaterialRuleContext receiver, set by the
 	 *  initVerticalContext redirect just before tryApply fires. */
 	private static final ThreadLocal<Object> threadCtxRef = new ThreadLocal<>();
@@ -79,6 +94,8 @@ public final class SurfaceValidator {
 	public static void install(CompiledRuleTree tree) {
 		cachedTree = tree;
 		resetStats();
+		diagDumped.set(false); // re-arm the one-shot diagnostic dump
+		cachedSamplers = null; // invalidate noise-sampler cache (new tree may have different channels)
 		ExampleMod.LOGGER.info("[surface-validate] installed compiled tree (bytecode={} bytes, hasFallback={})",
 				tree.bytecode().length, tree.hasFallback());
 	}
@@ -144,6 +161,13 @@ public final class SurfaceValidator {
 		if (ctx == null) {
 			contextBuildFails.incrementAndGet();
 			return;
+		}
+
+		// One-shot reflection diagnostic — fires on the first sample after
+		// install so we can confirm whether reads against the live
+		// MaterialRuleContext are returning real values or silently zeroing.
+		if (diagDumped.compareAndSet(false, true)) {
+			dumpDiagnostic(ctx, x, y, z);
 		}
 
 		Object ourResult;
@@ -293,12 +317,144 @@ public final class SurfaceValidator {
 		// SteepMaterialCondition occurrences in tree — accept as residual.
 		boolean isSteep = false;
 
+		// Real noise channel values via the live NoiseConfig (path 2 fix —
+		// previously passed all-zero placeholder, which caused
+		// OP_NOISE_THRESH conditions to flip in surface-rule cases gated
+		// on bedrock floor noise / deep-stone gradient noise).
+		double[] noiseChannels = sampleNoiseChannels(ruleContext, blockX, blockZ);
+
 		return new ColumnContext(
 				biome, blockY,
 				runDepth, stoneDepthAbove, stoneDepthBelow,
 				fluidHeight, isCold, isSteep, surfaceHeight,
 				secondaryDepth,
-				new double[16]); // 16 noise channels — all zero, NoiseThresh will mismatch
+				noiseChannels);
+	}
+
+	// --- Noise sampling --------------------------------------------------
+
+	/**
+	 * Sample every noise channel in the active compiled tree at the given
+	 * (x, z) position. Vanilla's NoiseThresholdConditionSource calls
+	 * {@code noise.getValue(blockX, 0.0, blockZ)} — y is hardcoded to 0
+	 * because surface-rule noise is effectively 2D — so we mirror that.
+	 *
+	 * <p>The first call after {@link #install} populates {@link
+	 * #cachedSamplers} from the live {@code MaterialRuleContext.noiseConfig}.
+	 * Subsequent calls are array reads + {@code sample(x, 0, z)} per channel.
+	 *
+	 * <p>If a sampler can't be resolved (registry miss, mismatched name,
+	 * yarn rename), its slot stays null and produces 0.0 — better than
+	 * crashing the validator.
+	 */
+	private static double[] sampleNoiseChannels(Object ruleContext, int blockX, int blockZ) {
+		CompiledRuleTree tree = cachedTree;
+		if (tree == null) return new double[0];
+		String[] channelNames = tree.noiseChannelTable();
+		int n = channelNames.length;
+		double[] out = new double[n];
+
+		Object[] samplers = cachedSamplers;
+		if (samplers == null || samplers.length != n) {
+			samplers = buildSamplerCache(ruleContext, channelNames);
+			cachedSamplers = samplers;
+		}
+
+		double bx = (double) blockX;
+		double bz = (double) blockZ;
+		for (int i = 0; i < n; i++) {
+			Object sampler = samplers[i];
+			if (sampler == null) {
+				out[i] = 0.0;
+				continue;
+			}
+			try {
+				java.lang.reflect.Method m = sampler.getClass().getMethod("sample",
+						double.class, double.class, double.class);
+				Object v = m.invoke(sampler, bx, 0.0, bz);
+				if (v instanceof Double d) out[i] = d;
+			} catch (ReflectiveOperationException | RuntimeException ignored) {
+				out[i] = 0.0;
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * One-time cache build. For each registry-name string in the tree's
+	 * noise channel table, parse it as an {@code Identifier}, wrap it as
+	 * a {@code RegistryKey<DoublePerlinNoiseSampler.NoiseParameters>},
+	 * then call {@code noiseConfig.getOrCreateSampler(key)}. Failures
+	 * (unparseable name, missing registry entry, yarn rename) leave a
+	 * null slot and log once per channel.
+	 */
+	private static Object[] buildSamplerCache(Object ruleContext, String[] channelNames) {
+		Object[] samplers = new Object[channelNames.length];
+
+		// Read the noiseConfig field off the live MaterialRuleContext.
+		Object noiseConfig = readField(ruleContext, "noiseConfig");
+		if (noiseConfig == null) {
+			ExampleMod.LOGGER.warn(
+				"[surface-validate] noiseConfig field not found on {} — all noise channels will read 0.0",
+				ruleContext.getClass().getName());
+			return samplers;
+		}
+
+		Class<?> identifierClass;
+		Class<?> registryKeyClass;
+		Class<?> registryKeysClass;
+		Object noiseParamsRegistryKey;
+		try {
+			identifierClass = Class.forName("net.minecraft.util.Identifier");
+			registryKeyClass = Class.forName("net.minecraft.registry.RegistryKey");
+			registryKeysClass = Class.forName("net.minecraft.registry.RegistryKeys");
+			noiseParamsRegistryKey = registryKeysClass.getField("NOISE_PARAMETERS").get(null);
+		} catch (ReflectiveOperationException e) {
+			ExampleMod.LOGGER.warn(
+				"[surface-validate] could not resolve registry-key plumbing ({}) — all noise channels will read 0.0",
+				e.getClass().getSimpleName());
+			return samplers;
+		}
+
+		java.lang.reflect.Method getOrCreateSampler;
+		java.lang.reflect.Method registryKeyOf;
+		java.lang.reflect.Method identifierOf;
+		try {
+			// Identifier.of(String) — parses "minecraft:foo" or "namespace:path"
+			identifierOf = identifierClass.getMethod("of", String.class);
+			// RegistryKey.of(RegistryKey<? extends Registry<E>>, Identifier) → RegistryKey<E>
+			registryKeyOf = registryKeyClass.getMethod("of", registryKeyClass, identifierClass);
+			// NoiseConfig.getOrCreateSampler(RegistryKey) → DoublePerlinNoiseSampler
+			getOrCreateSampler = noiseConfig.getClass().getMethod("getOrCreateSampler", registryKeyClass);
+		} catch (ReflectiveOperationException e) {
+			ExampleMod.LOGGER.warn(
+				"[surface-validate] could not resolve noise sampler API ({}) — all channels read 0.0",
+				e.getClass().getSimpleName());
+			return samplers;
+		}
+
+		int resolved = 0;
+		for (int i = 0; i < channelNames.length; i++) {
+			String name = channelNames[i];
+			try {
+				Object identifier = identifierOf.invoke(null, name);
+				Object key = registryKeyOf.invoke(null, noiseParamsRegistryKey, identifier);
+				Object sampler = getOrCreateSampler.invoke(noiseConfig, key);
+				if (sampler != null) {
+					samplers[i] = sampler;
+					resolved++;
+				} else {
+					ExampleMod.LOGGER.warn("[surface-validate] noise channel '{}' resolved to null sampler", name);
+				}
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				ExampleMod.LOGGER.warn("[surface-validate] noise channel '{}' failed: {}",
+					name, e.getCause() == null ? e.getMessage() : e.getCause().getMessage());
+			}
+		}
+		ExampleMod.LOGGER.info(
+			"[surface-validate] noise sampler cache built: {}/{} channels resolved",
+			resolved, channelNames.length);
+		return samplers;
 	}
 
 	/**
@@ -353,15 +509,21 @@ public final class SurfaceValidator {
 	}
 
 	/**
-	 * Calls {@code ruleContext.getMinSurfaceLevel()} via reflection.
-	 * Vanilla AbovePreliminarySurfaceCondition tests
-	 * {@code blockY >= getMinSurfaceLevel()} (Mojang's source line 394).
-	 * Falls back to {@code blockY} if the method isn't found —
-	 * placeholder behaviour was the same.
+	 * Calls {@code ruleContext.estimateSurfaceHeight()} via reflection.
+	 * Vanilla {@code AbovePreliminarySurfaceCondition} tests
+	 * {@code blockY >= getMinSurfaceLevel()} in Mojmap (source line 394);
+	 * Yarn 1.21.11 renamed the accessor to {@code estimateSurfaceHeight}
+	 * (yarn 1.21.11+build.4 mapping for {@code method_39551}).
+	 *
+	 * <p><b>Bug history:</b> previously called {@code getMinSurfaceLevel}
+	 * which doesn't exist in Yarn → silently fell back to {@code defaultY = blockY},
+	 * making {@code OP_SURFACE} always true and causing surface rules
+	 * (grass, sand) to fire at deep-stone altitudes. That mis-fire
+	 * accounted for the bulk of the 4.7% validator mismatches.
 	 */
 	private static int readMinSurfaceLevel(Object ruleContext, int defaultY) {
 		try {
-			java.lang.reflect.Method m = ruleContext.getClass().getMethod("getMinSurfaceLevel");
+			java.lang.reflect.Method m = ruleContext.getClass().getMethod("estimateSurfaceHeight");
 			Object v = m.invoke(ruleContext);
 			if (v instanceof Integer i) return i;
 		} catch (ReflectiveOperationException | RuntimeException ignored) {
@@ -459,6 +621,97 @@ public final class SurfaceValidator {
 			c = c.getSuperclass();
 		}
 		return null;
+	}
+
+	/**
+	 * One-shot diagnostic. Probes the live {@link
+	 * net.minecraft.world.gen.surfacebuilder.MaterialRules.MaterialRuleContext}
+	 * (captured per-thread by the initVerticalContext redirect) and reports
+	 * whether each reflective read found its target or silently zeroed.
+	 *
+	 * <p>Decision tree (from the runbook):
+	 * <ul>
+	 *   <li>If found=false on either runDepth/secondaryDepth → reflection
+	 *       is the bug, fix the field/method access.</li>
+	 *   <li>If found=true but values look wrong → reads work but something
+	 *       else is zeroing them (capture timing, wrong ctx instance).</li>
+	 *   <li>If all values look reasonable → reflection is healthy, look
+	 *       elsewhere (compiled bytecode, biome-set table, etc.).</li>
+	 * </ul>
+	 */
+	private static void dumpDiagnostic(ColumnContext ctx, int x, int y, int z) {
+		Object liveCtx = threadCtxRef.get();
+
+		// Probe runDepth field directly.
+		boolean runDepthFound = false;
+		int runDepthLive = 0;
+		if (liveCtx != null) {
+			Class<?> c = liveCtx.getClass();
+			outer:
+			while (c != null && c != Object.class) {
+				for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+					if (!f.getName().equals("runDepth")) continue;
+					try {
+						f.setAccessible(true);
+						runDepthLive = f.getInt(liveCtx);
+						runDepthFound = true;
+					} catch (ReflectiveOperationException ignored) {
+						// fall through, leave found=false
+					}
+					break outer;
+				}
+				c = c.getSuperclass();
+			}
+		}
+
+		// Probe getSecondaryDepth() method directly.
+		boolean secondaryDepthFound = false;
+		double secondaryDepthLive = 0.0;
+		if (liveCtx != null) {
+			try {
+				java.lang.reflect.Method m = liveCtx.getClass().getMethod("getSecondaryDepth");
+				Object v = m.invoke(liveCtx);
+				if (v instanceof Double d) {
+					secondaryDepthLive = d;
+					secondaryDepthFound = true;
+				}
+			} catch (ReflectiveOperationException | RuntimeException ignored) {
+				// leave found=false
+			}
+		}
+
+		// Probe estimateSurfaceHeight() — the previously-buggy lookup.
+		// Vanilla returns preliminarySurfaceLevel + surfaceDepth - 8;
+		// expect a sensible terrain-surface Y, NOT == blockY (which
+		// indicates the silent fallback fired).
+		boolean surfaceHeightFound = false;
+		int surfaceHeightLive = 0;
+		if (liveCtx != null) {
+			try {
+				java.lang.reflect.Method m = liveCtx.getClass().getMethod("estimateSurfaceHeight");
+				Object v = m.invoke(liveCtx);
+				if (v instanceof Integer i) {
+					surfaceHeightLive = i;
+					surfaceHeightFound = true;
+				}
+			} catch (ReflectiveOperationException | RuntimeException ignored) {
+				// leave found=false
+			}
+		}
+
+		ExampleMod.LOGGER.info(
+			"[surface-diag] runDepth={} found={}  secondaryDepth={} found={}  "
+			+ "estimateSurfaceHeight={} found={}  "
+			+ "biome={} blockY={} stoneAbove={} stoneBelow={} fluidHeight={} "
+			+ "isCold={} isSteep={} ctxSurfaceHeight={} ctxClass={} sampleAt=({},{},{})",
+			runDepthLive, runDepthFound,
+			secondaryDepthLive, secondaryDepthFound,
+			surfaceHeightLive, surfaceHeightFound,
+			ctx.biomeName(), ctx.blockY(), ctx.stoneDepthAbove(),
+			ctx.stoneDepthBelow(), ctx.fluidHeight(),
+			ctx.isCold(), ctx.isSteep(), ctx.surfaceHeight(),
+			liveCtx == null ? "null" : liveCtx.getClass().getName(),
+			x, y, z);
 	}
 
 	private static int readIntField(Object o, String name) {
