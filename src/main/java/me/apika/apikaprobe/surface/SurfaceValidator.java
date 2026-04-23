@@ -166,6 +166,33 @@ public final class SurfaceValidator {
 	}
 
 	/**
+	 * Dispatch-mode entry point. When {@link SurfaceDispatcher#ENABLED} is
+	 * true, the {@code tryApply} mixin calls this first to get the eval
+	 * result; only on null does it fall through to vanilla. This is the
+	 * "simple" dispatch swap — eval per call, no batching, no JNI per
+	 * chunk. Returns null on any setup failure (no tree, no captured
+	 * context, evaluator threw) so the caller can safely cascade to
+	 * vanilla.
+	 *
+	 * <p>Re-uses the validator's reflective context build and noise/PRNG
+	 * caches. Skips validation overhead (no diff, no stats, no Rust
+	 * side-call).
+	 */
+	public static Object tryDispatchEvaluator(Object surfaceBuilder, int x, int y, int z) {
+		CompiledRuleTree tree = cachedTree;
+		if (tree == null) return null;
+		ColumnContext ctx = buildContext(surfaceBuilder, x, y, z);
+		if (ctx == null) return null;
+		SurfaceRuleEvaluator.VerticalGradientSampler sampler = ensureGradientSampler(tree);
+		try {
+			SurfaceRuleEvaluator.setCurrentXZ(x, z);
+			return SurfaceRuleEvaluator.evaluate(tree, ctx, sampler);
+		} catch (RuntimeException e) {
+			return null;
+		}
+	}
+
+	/**
 	 * Called from the mixin redirect on every {@code tryApply} call.
 	 * Sampling decision happens here to keep the redirect hot-path tiny.
 	 */

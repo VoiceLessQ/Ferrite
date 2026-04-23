@@ -5,6 +5,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
+import me.apika.apikaprobe.surface.SurfaceDispatcher;
 import me.apika.apikaprobe.surface.SurfaceValidator;
 
 import net.minecraft.block.BlockState;
@@ -39,6 +40,23 @@ public abstract class SurfaceValidatorMixin {
 		)
 	)
 	private BlockState ferrite$validateTryApply(@Coerce Object rule, int x, int y, int z) {
+		// Dispatch swap: when /ferrite surface dispatch on AND a tree is
+		// installed, run Ferrite's bytecode evaluator and return its
+		// result instead of vanilla's. Eval-returns-null falls through
+		// to vanilla (matches "no rule matched" semantics + safety net
+		// for any residual evaluator gap, e.g. an unrecognized node type
+		// the compiler emitted as OP_FALLBACK).
+		if (SurfaceDispatcher.ENABLED) {
+			Object dispatched = SurfaceValidator.tryDispatchEvaluator(this, x, y, z);
+			if (dispatched instanceof BlockState bs) {
+				return bs;
+			}
+			// dispatched == null: eval said "no rule matched" — let
+			// vanilla decide. We still call vanilla and skip validation
+			// (no point diffing against ourselves).
+			return invokeTryApply(rule, x, y, z);
+		}
+
 		// rule is MaterialRules$BlockStateRule (package-private interface).
 		// Invoke tryApply via reflection — single virtual dispatch is cheap
 		// and avoids needing an access widener for a one-off mixin.

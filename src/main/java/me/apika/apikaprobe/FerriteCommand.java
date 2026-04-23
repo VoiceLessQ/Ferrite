@@ -9,6 +9,7 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import me.apika.apikaprobe.redstone.FerriteWireConfig;
 import me.apika.apikaprobe.redstone.RedstoneQueueBench;
 import me.apika.apikaprobe.surface.CompiledRuleTree;
+import me.apika.apikaprobe.surface.SurfaceDispatcher;
 import me.apika.apikaprobe.surface.SurfaceRuleAccess;
 import me.apika.apikaprobe.surface.SurfaceRuleCompiler;
 import me.apika.apikaprobe.surface.SurfaceBatchHandoff;
@@ -86,7 +87,11 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("batch-test").executes(FerriteCommand::surfaceBatchTest))
 						.then(CommandManager.literal("trace-next").executes(FerriteCommand::surfaceTraceNext))
 						.then(CommandManager.literal("dump-biomes").executes(FerriteCommand::surfaceDumpBiomes))
-						.then(CommandManager.literal("dump").executes(FerriteCommand::surfaceDump))));
+						.then(CommandManager.literal("dump").executes(FerriteCommand::surfaceDump))
+						.then(CommandManager.literal("dispatch")
+								.then(CommandManager.literal("on").executes(FerriteCommand::enableSurfaceDispatch))
+								.then(CommandManager.literal("off").executes(FerriteCommand::disableSurfaceDispatch))
+								.then(CommandManager.literal("status").executes(FerriteCommand::statusSurfaceDispatch)))));
 	}
 
 	/**
@@ -346,6 +351,45 @@ public final class FerriteCommand {
 	 * picks up subsequent tryApply calls and diffs against vanilla.
 	 * Mismatches log to [surface-validate]; rate-limited to first 50.
 	 */
+	/**
+	 * Toggle the surface-rule dispatch swap. When ON, the validator
+	 * mixin's tryApply redirect routes through Ferrite's bytecode
+	 * evaluator instead of vanilla's MaterialRule tree walk; eval-
+	 * returns-null falls through to vanilla as a safety net. Requires
+	 * a compiled tree installed first via /ferrite surface validate.
+	 *
+	 * <p>Watch [surface-phase] in latest.log for the per-phase timing
+	 * delta (the tryApply slot specifically) when toggling on/off.
+	 * That's the perf signal for whether the bytecode evaluator beats
+	 * vanilla's tree walk on the same workload.
+	 */
+	private static int enableSurfaceDispatch(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		SurfaceDispatcher.ENABLED = true;
+		String msg = SurfaceValidator.isEnabled()
+				? "[surface-dispatch] enabled — tryApply now routes through bytecode evaluator (validator tree present)"
+				: "[surface-dispatch] enabled BUT no tree installed — run /ferrite surface validate first or all calls fall through to vanilla";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int disableSurfaceDispatch(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		SurfaceDispatcher.ENABLED = false;
+		String msg = "[surface-dispatch] disabled — tryApply runs vanilla (validator behavior restored if /ferrite surface validate is on)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int statusSurfaceDispatch(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		String msg = String.format(
+			"[surface-dispatch] ENABLED=%s treeInstalled=%s  (watch [surface-phase] tryApply slot for perf delta)",
+			SurfaceDispatcher.ENABLED, SurfaceValidator.isEnabled());
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
 	private static int surfaceValidate(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
 		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
 		if (!extracted.ok()) {
