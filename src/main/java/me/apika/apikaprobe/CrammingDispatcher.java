@@ -17,17 +17,23 @@ import net.minecraft.server.world.ServerWorld;
  * First LivingEntity.tickCramming() call within a given server tick
  * triggers the batch:
  *   1. Collect every MobEntity in the world.
- *   2. Fill CrammingHandoff.REQUEST_BUF with positions + AABBs + flags.
- *   3. Native call → Rust runs the spatial hash push accumulator.
- *   4. Read accumulated (dx, dz) + neighborCount per mob.
+ *   2. Fill CrammingHandoff.REQUEST_BUF with positions, AABBs, flags,
+ *      and root vehicle ids.
+ *   3. Native call → Rust runs the spatial hash push accumulator,
+ *      skipping pairs of same-vehicle passengers, and counts pushable
+ *      non-passenger overlaps per entity (`crowdedCount`).
+ *   4. Read accumulated (dx, dz) + neighborCount + crowdedCount.
  *   5. Apply each mob's velocity delta via entity.addVelocity(dx,0,dz).
- *   6. Apply cramming damage where neighborCount > maxEntityCramming − 1
- *      (vanilla's 1-in-4 random still honoured).
+ *   6. Apply cramming damage when crowdedCount &gt; maxEntityCramming − 1
+ *      AND the per-entity Random fires the vanilla 1-in-4 check
+ *      (entity.getRandom().nextInt(4) == 0). Mirrors vanilla
+ *      LivingEntity.pushEntities (Yarn: tickCramming) bit-for-bit.
  *
  * Subsequent tickCramming calls in the same server tick are cancelled
  * by the Mixin without re-triggering — the tick guard is `world.getTime()`.
  *
- * ENABLED=false by default. Mixin falls back to vanilla in that case.
+ * ENABLED=true by default. /ferrite cramming off lets users fall back
+ * to vanilla without restart for A/B verification.
  */
 public final class CrammingDispatcher {
 
@@ -47,12 +53,14 @@ public final class CrammingDispatcher {
 	private static final double[] ACCUM_DX = new double[CrammingHandoff.MAX_ENTITIES];
 	private static final double[] ACCUM_DZ = new double[CrammingHandoff.MAX_ENTITIES];
 	private static final int[] NEIGHBOR_COUNT = new int[CrammingHandoff.MAX_ENTITIES];
+	private static final int[] CROWDED_COUNT = new int[CrammingHandoff.MAX_ENTITIES];
 
 	// --- Diagnostics -------------------------------------------------------
 	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
 	private static long diagBatches  = 0;
 	private static long diagMobs     = 0;
 	private static long diagPushed   = 0;
+	private static long diagDamaged  = 0;
 	private static long diagLastLogNs = System.nanoTime();
 
 	private CrammingDispatcher() {}
@@ -105,14 +113,26 @@ public final class CrammingDispatcher {
 			CrammingHandoff.RESULT_BUF,
 			count
 		);
-		CrammingHandoff.readResults(count, ACCUM_DX, ACCUM_DZ, NEIGHBOR_COUNT);
+		CrammingHandoff.readResults(count, ACCUM_DX, ACCUM_DZ, NEIGHBOR_COUNT, CROWDED_COUNT);
 
-		// 5. Apply pushes. (Cramming damage deferred to v2 — 1.21.11's
-		//    GameRules API moved to getValue(rule)→Object and we're not
-		//    wiring up reflection just for the damage-threshold lookup.
-		//    The 14ms target from instrumentation is entirely push cost,
-		//    not damage cost, so v1 ships push-only.)
+		// 5. Apply pushes + cramming damage. Damage gate mirrors vanilla
+		//    LivingEntity.pushEntities (Yarn: tickCramming):
+		//      if (maxCramming > 0
+		//          && pushableEntities.size() > maxCramming - 1
+		//          && entity.random.nextInt(4) == 0) {
+		//          int count = non-passenger pushable entities;
+		//          if (count > maxCramming - 1) hurt(cramming, 6.0F);
+		//      }
+		//    Rust returns crowdedCount = the inner `count`. Per-entity
+		//    Random and the threshold check stay in Java so semantics are
+		//    bit-for-bit identical to vanilla (per-entity RNG state).
+		// Yarn 1.21.11: GameRules moved to net.minecraft.world.rule.GameRules
+		// and the typed getInt accessor is gone — only getValue(rule)→Object
+		// remains. Cast Integer for the int rule.
+		int maxCramming = (Integer) world.getGameRules().getValue(
+				net.minecraft.world.rule.GameRules.MAX_ENTITY_CRAMMING);
 		int pushedThisBatch = 0;
+		int damagedThisBatch = 0;
 		for (int i = 0; i < count; i++) {
 			LivingEntity e = MOB_SCRATCH.get(i);
 			double dx = ACCUM_DX[i];
@@ -121,11 +141,19 @@ public final class CrammingDispatcher {
 				e.addVelocity(dx, 0.0, dz);
 				pushedThisBatch++;
 			}
+
+			if (maxCramming > 0
+					&& CROWDED_COUNT[i] > maxCramming - 1
+					&& e.getRandom().nextInt(4) == 0) {
+				e.damage(world, world.getDamageSources().cramming(), 6.0F);
+				damagedThisBatch++;
+			}
 		}
 
 		diagBatches++;
 		diagMobs += count;
 		diagPushed += pushedThisBatch;
+		diagDamaged += damagedThisBatch;
 	}
 
 	private static void maybeLogOverflow(int count) {
@@ -141,11 +169,12 @@ public final class CrammingDispatcher {
 		if (now - diagLastLogNs < 5_000_000_000L) return;
 		diagLastLogNs = now;
 		LOGGER.info(
-			"[cramming-dispatch] batches={} mobsTotal={}  pushed={}",
-			diagBatches, diagMobs, diagPushed
+			"[cramming-dispatch] batches={} mobsTotal={}  pushed={}  damaged={}",
+			diagBatches, diagMobs, diagPushed, diagDamaged
 		);
 		diagBatches = 0;
 		diagMobs = 0;
 		diagPushed = 0;
+		diagDamaged = 0;
 	}
 }

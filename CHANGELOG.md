@@ -14,17 +14,23 @@ marks pre-release research builds.
   their own world without restart. Default ON (matches prior
   behavior).
 
-### Documentation
+### Changed
 
-- Clarified that Ferrite's cramming path does **not** apply vanilla
-  cramming damage. Previously documented only in the source comment
-  at [`CrammingDispatcher.java:110-114`](src/main/java/me/apika/apikaprobe/CrammingDispatcher.java#L110-L114);
-  now surfaced in README. The omission is a deliberate trade-off, not
-  a missed feature: combined with `/gamerule maxEntityCramming 0` it
-  enables huge stable mob farms that vanilla physically can't reach
-  (cramming damage thins the herd before the perf bottleneck shows).
-  Users who want vanilla cramming damage back can run
-  `/ferrite cramming off`.
+- **Cramming is now full vanilla 1:1 parity.** Fixed the two
+  outstanding gaps that previously made Ferrite cramming a
+  "with-caveat" feature:
+  - **Cramming damage is now applied.** Rust returns a per-entity
+    `crowdedCount` (overlapping pushable non-passenger pairs);
+    Java applies 6.0 cramming damage when
+    `crowdedCount > maxEntityCramming - 1` and the per-entity
+    `Random.nextInt(4) == 0` fires — bit-for-bit matching vanilla
+    `LivingEntity.pushEntities`. Closes the v2 deferral.
+  - **`isPassengerOfSameVehicle` skip implemented.** Two mobs sharing
+    a root vehicle no longer push each other. Mirrors vanilla
+    `Entity.push` line 1822. Schema-friendly (4-byte slot in input
+    buffer was unused; no buffer resize).
+- Mob → non-mob pushing (items, boats) remains the only documented
+  vanilla gap. Edge-case in practice; deferred for a follow-up.
 
 ---
 

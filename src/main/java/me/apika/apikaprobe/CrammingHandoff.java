@@ -22,15 +22,16 @@ import net.minecraft.util.math.Box;
  *   +24  f32   aabbHalfWidth
  *   +28  f32   aabbMinY
  *   +32  f32   aabbMaxY
- *   +36  u32   pad
+ *   +36  i32   rootVehicleId  (-1 if not riding anything)
  *
  * CrammingResult (stride = 32 B):
  *   +0   u32   entityId (echo)
  *   +4   u32   pad
  *   +8   f64   accumDx
  *   +16  f64   accumDz
- *   +24  u32   neighborCount
- *   +28  u32   pad
+ *   +24  u32   neighborCount  (all overlapping pairs, debug-only)
+ *   +28  u32   crowdedCount   (overlapping pushable non-passenger
+ *                             pairs — vanilla's cramming-damage count)
  */
 public final class CrammingHandoff {
 
@@ -74,6 +75,16 @@ public final class CrammingHandoff {
 
 			float halfWidth = (float) ((aabb.maxX - aabb.minX) * 0.5);
 
+			// Root vehicle id — vanilla's isPassengerOfSameVehicle uses
+			// getRootVehicle() == other.getRootVehicle(). -1 sentinel for
+			// "not riding anything," so two -1s never compare equal in Rust
+			// (sentinel-equal pairs are explicitly skipped on Rust side).
+			int rootVehicleId = -1;
+			if (e.hasVehicle()) {
+				net.minecraft.entity.Entity root = e.getRootVehicle();
+				if (root != null) rootVehicleId = root.getId();
+			}
+
 			REQUEST_BUF.putInt(e.getId());          // +0
 			REQUEST_BUF.put(flags);                 // +4
 			REQUEST_BUF.put((byte) 0);              // +5 pad
@@ -84,7 +95,7 @@ public final class CrammingHandoff {
 			REQUEST_BUF.putFloat(halfWidth);        // +24
 			REQUEST_BUF.putFloat((float) aabb.minY);// +28
 			REQUEST_BUF.putFloat((float) aabb.maxY);// +32
-			REQUEST_BUF.putInt(0);                  // +36 pad
+			REQUEST_BUF.putInt(rootVehicleId);      // +36
 		}
 		REQUEST_BUF.flip();
 	}
@@ -94,7 +105,8 @@ public final class CrammingHandoff {
 	 * arrays. Zero per-call allocation. Array indices align with the
 	 * input-order index of each mob in the list passed to buildRequests.
 	 */
-	public static void readResults(int count, double[] outDx, double[] outDz, int[] outNeighborCount) {
+	public static void readResults(int count, double[] outDx, double[] outDz,
+			int[] outNeighborCount, int[] outCrowdedCount) {
 		if (count > MAX_ENTITIES) {
 			throw new IllegalStateException("cramming count exceeds MAX_ENTITIES");
 		}
@@ -105,6 +117,7 @@ public final class CrammingHandoff {
 			outDx[i] = RESULT_BUF.getDouble(base + 8);
 			outDz[i] = RESULT_BUF.getDouble(base + 16);
 			outNeighborCount[i] = RESULT_BUF.getInt(base + 24);
+			outCrowdedCount[i] = RESULT_BUF.getInt(base + 28);
 		}
 	}
 }

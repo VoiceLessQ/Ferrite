@@ -54,7 +54,10 @@ pub struct CrammingInput {
     pub aabb_half_width: f32,   // 24  half-extent on X (and Z — mob bbox is square in plan)
     pub aabb_min_y:      f32,   // 28
     pub aabb_max_y:      f32,   // 32
-    pub _pad1:           u32,   // 36  stride = 40
+    /// Vanilla isPassengerOfSameVehicle uses this comparison (root vehicle id).
+    /// -1 sentinel = not riding anything; pairs with both -1 still skip the
+    /// same-vehicle check (sentinel is not equal-equal in spirit).
+    pub root_vehicle_id: i32,   // 36  stride = 40
 }
 const _: [(); 40] = [(); std::mem::size_of::<CrammingInput>()];
 
@@ -65,8 +68,12 @@ pub struct CrammingResult {
     pub _pad0:          u32,   // 4  align f64
     pub accum_dx:       f64,   // 8
     pub accum_dz:       f64,   // 16
-    pub neighbor_count: u32,   // 24
-    pub _pad1:          u32,   // 28  stride = 32
+    pub neighbor_count: u32,   // 24  all overlapping pairs (debug)
+    /// Overlapping pushable non-passenger pairs. Mirrors vanilla
+    /// pushEntities's `count` value used for the cramming-damage gate
+    /// (`if count > maxCramming - 1`). Threshold check + 1-in-4 random
+    /// stays on the Java side (entity.random.nextInt(4) is per-entity).
+    pub crowded_count:  u32,   // 28  stride = 32
 }
 const _: [(); 32] = [(); std::mem::size_of::<CrammingResult>()];
 
@@ -112,7 +119,7 @@ pub fn compute_cramming(inputs: &[CrammingInput], results: &mut [CrammingResult]
             accum_dx: 0.0,
             accum_dz: 0.0,
             neighbor_count: 0,
-            _pad1: 0,
+            crowded_count: 0,
         };
     }
 
@@ -168,6 +175,14 @@ fn process_pair(
         return;
     }
 
+    // Vanilla isPassengerOfSameVehicle: skip the entire push if both
+    // entities share a root vehicle. -1 sentinel means "not riding,"
+    // and two -1s must NOT match (they're not in any vehicle, let alone
+    // the same one).
+    if a.root_vehicle_id != -1 && a.root_vehicle_id == b.root_vehicle_id {
+        return;
+    }
+
     let dx = b.x - a.x;
     let dz = b.z - a.z;
 
@@ -212,10 +227,18 @@ fn process_pair(
         res_b.accum_dx += push_dx;
         res_b.accum_dz += push_dz;
     }
-    // Neighbor count is for the cramming-damage rule on the Java side.
-    // Vanilla increments on pair visit regardless of push eligibility.
+    // Neighbor count: every overlapping pair visit (debug). Crowded count:
+    // mirrors vanilla's pushEntities `count` — only pushable non-passenger
+    // overlaps qualify, since vanilla's getPushableEntities pre-filters to
+    // pushable and the inner loop excludes passengers.
     res_a.neighbor_count += 1;
     res_b.neighbor_count += 1;
+    if (b.flags & FLAG_PUSHABLE) != 0 && (b.flags & FLAG_PASSENGER) == 0 {
+        res_a.crowded_count += 1;
+    }
+    if (a.flags & FLAG_PUSHABLE) != 0 && (a.flags & FLAG_PASSENGER) == 0 {
+        res_b.crowded_count += 1;
+    }
 }
 
 // ============================================================================
@@ -236,7 +259,7 @@ mod tests {
             aabb_half_width: 0.3, // zombie-ish
             aabb_min_y: min_y,
             aabb_max_y: max_y,
-            _pad1: 0,
+            root_vehicle_id: -1,
         }
     }
 
@@ -279,6 +302,7 @@ mod tests {
             assert_eq!(r.accum_dx, 0.0);
             assert_eq!(r.accum_dz, 0.0);
             assert_eq!(r.neighbor_count, 0);
+            assert_eq!(r.crowded_count, 0);
         }
     }
 
@@ -329,6 +353,77 @@ mod tests {
         assert_eq!(results[1].accum_dx, 0.0, "B is not pushable → no accum");
         assert_eq!(results[0].neighbor_count, 1);
         assert_eq!(results[1].neighbor_count, 1);
+    }
+
+    #[test]
+    fn same_root_vehicle_skips_pair() {
+        // Two mobs riding the same vehicle (root_vehicle_id == 100). Vanilla
+        // isPassengerOfSameVehicle skips the entire push. Two -1s must NOT
+        // count as same vehicle (they're not riding anything).
+        let mut a = make_mob(1, 0.0, 0.0, 64.0, 66.0);
+        let mut b = make_mob(2, 0.5, 0.0, 64.0, 66.0);
+        a.root_vehicle_id = 100;
+        b.root_vehicle_id = 100;
+        let inputs = [a, b];
+        let mut results = [CrammingResult::default(); 2];
+        compute_cramming(&inputs, &mut results);
+
+        assert_eq!(results[0].accum_dx, 0.0, "A should not be pushed");
+        assert_eq!(results[1].accum_dx, 0.0, "B should not be pushed");
+        assert_eq!(results[0].neighbor_count, 0);
+        assert_eq!(results[1].neighbor_count, 0);
+    }
+
+    #[test]
+    fn different_vehicle_or_no_vehicle_pushes_normally() {
+        // Different root vehicles → push normally.
+        let mut a = make_mob(1, 0.0, 0.0, 64.0, 66.0);
+        let mut b = make_mob(2, 0.5, 0.0, 64.0, 66.0);
+        a.root_vehicle_id = 100;
+        b.root_vehicle_id = 200;
+        let inputs = [a, b];
+        let mut results = [CrammingResult::default(); 2];
+        compute_cramming(&inputs, &mut results);
+        assert!(results[0].accum_dx < 0.0);
+        assert!(results[1].accum_dx > 0.0);
+
+        // Both -1 (no vehicle) → push normally.
+        let inputs2 = [make_mob(1, 0.0, 0.0, 64.0, 66.0), make_mob(2, 0.5, 0.0, 64.0, 66.0)];
+        let mut results2 = [CrammingResult::default(); 2];
+        compute_cramming(&inputs2, &mut results2);
+        assert!(results2[0].accum_dx < 0.0);
+    }
+
+    #[test]
+    fn crowded_count_only_counts_pushable_non_passenger() {
+        // A overlaps B (pushable, passenger) and C (non-pushable, not
+        // passenger). Vanilla pushEntities counts only pushable entities
+        // and then only non-passenger ones — so A's crowded_count is 0.
+        let a = make_mob(1, 0.0, 0.0, 64.0, 66.0);
+        let mut b = make_mob(2, 0.4, 0.0, 64.0, 66.0);
+        b.flags |= FLAG_PASSENGER;
+        let mut c = make_mob(3, 0.0, 0.4, 64.0, 66.0);
+        c.flags = 0; // not pushable, not passenger
+        let inputs = [a, b, c];
+        let mut results = [CrammingResult::default(); 3];
+        compute_cramming(&inputs, &mut results);
+
+        assert_eq!(results[0].neighbor_count, 2, "A overlaps both B and C");
+        assert_eq!(results[0].crowded_count, 0,
+                   "A's crowded_count excludes passengers (B) and non-pushables (C)");
+    }
+
+    #[test]
+    fn crowded_count_counts_normal_pushable_neighbor() {
+        // Two normal mobs overlapping → each sees crowded_count = 1.
+        let inputs = [
+            make_mob(1, 0.0, 0.0, 64.0, 66.0),
+            make_mob(2, 0.5, 0.0, 64.0, 66.0),
+        ];
+        let mut results = [CrammingResult::default(); 2];
+        compute_cramming(&inputs, &mut results);
+        assert_eq!(results[0].crowded_count, 1);
+        assert_eq!(results[1].crowded_count, 1);
     }
 
     #[test]
