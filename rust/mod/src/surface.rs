@@ -214,6 +214,17 @@ pub fn evaluate(tree: &CompiledTree, ctx: &ColumnContext) -> Option<u32> {
                 if negate_next { cond = !cond; negate_next = false; }
             }
             OP_VERT_GRADIENT => {
+                // Operand: u16 random_name_idx + i32 true_at_and_below
+                // + i32 false_at_and_above. The name index lets the Java
+                // validator look up a per-block PRNG splitter; this Rust
+                // path doesn't yet implement Xoroshiro-based positional
+                // random, so it reads-and-ignores the index and falls
+                // back to the midpoint cutoff. TODO: port vanilla's
+                // RandomSplitter (Xoroshiro128++) so the Rust path can
+                // also produce vanilla-identical results inside the
+                // gradient zone.
+                let _name_idx = read_u16_le(bc, ip) as usize;
+                ip += 2;
                 let true_at_and_below = read_i32_le(bc, ip);
                 ip += 4;
                 let false_at_and_above = read_i32_le(bc, ip);
@@ -224,7 +235,6 @@ pub fn evaluate(tree: &CompiledTree, ctx: &ColumnContext) -> Option<u32> {
                 } else if y >= false_at_and_above {
                     false
                 } else {
-                    // Spike: midpoint cutoff (vanilla uses per-position random).
                     y <= (true_at_and_below + false_at_and_above) / 2
                 };
                 if negate_next { cond = !cond; negate_next = false; }
@@ -436,9 +446,10 @@ mod tests {
 
     #[test]
     fn eval_vert_gradient_outside_range() {
-        // OP_VERT_GRADIENT trueAt=-8 falseAt=0 — with blockY=-30, cond=true
+        // OP_VERT_GRADIENT randomNameIdx=0 trueAt=-8 falseAt=0 — with blockY=-30, cond=true
         let bc: &[u8] = &[
             OP_VERT_GRADIENT,
+            0x00, 0x00,             // randomNameIdx=0 (added in the per-block PRNG plumbing)
             0xF8, 0xFF, 0xFF, 0xFF, // -8
             0x00, 0x00, 0x00, 0x00, // 0
             OP_RETURN_DONE,

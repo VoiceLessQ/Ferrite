@@ -100,10 +100,15 @@ public final class SurfaceRuleDisassembler {
 							String.format("offset=%d sdMul=%d addStone=%d", offset, sdMul, addStone)));
 				}
 				case RuleBytecode.OP_VERT_GRADIENT -> {
+					int nameIdx = readU16LE(bc, ip); ip += 2;
 					int trueB = readIntLE(bc, ip); ip += 4;
 					int falseA = readIntLE(bc, ip); ip += 4;
+					String name = nameIdx < tree.randomNameTable().length
+							? tree.randomNameTable()[nameIdx]
+							: "?";
 					out.add(line(opIp, "OP_VERT_GRADIENT",
-							String.format("trueAtBelow=%d falseAtAbove=%d", trueB, falseA)));
+							String.format("randomName='%s'(idx=%d) trueAtBelow=%d falseAtAbove=%d",
+									name, nameIdx, trueB, falseA)));
 				}
 
 				default -> out.add(line(opIp, "??", String.format("opcode=0x%02x", op & 0xFF)));

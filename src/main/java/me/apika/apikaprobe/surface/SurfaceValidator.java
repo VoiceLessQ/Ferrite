@@ -61,6 +61,20 @@ public final class SurfaceValidator {
 	 *  channel that failed to resolve (sample reads 0.0, logged once). */
 	private static volatile Object[] cachedSamplers = null;
 
+	/** Cache of {@code RandomSplitter} references aligned with
+	 *  {@link CompiledRuleTree#randomNameTable()}. Same lifecycle and
+	 *  reset semantics as {@link #cachedSamplers}. Drives the per-block
+	 *  PRNG inside OP_VERT_GRADIENT (bedrock floor + deepslate transition).
+	 *  Null entries fall back to the evaluator's midpoint approximation
+	 *  for that one rule. */
+	private static volatile Object[] cachedSplitters = null;
+	/** Cached reflective Method handles, set together with cachedSplitters
+	 *  so the per-sample call only does two virtual dispatches. */
+	private static volatile java.lang.reflect.Method splitterSplitMethod = null;
+	private static volatile java.lang.reflect.Method randomNextFloatMethod = null;
+	/** Closure passed to the evaluator. Built once per install. */
+	private static volatile SurfaceRuleEvaluator.VerticalGradientSampler cachedSamplerClosure = null;
+
 	/** Captured per-thread MaterialRuleContext receiver, set by the
 	 *  initVerticalContext redirect just before tryApply fires. */
 	private static final ThreadLocal<Object> threadCtxRef = new ThreadLocal<>();
@@ -96,6 +110,10 @@ public final class SurfaceValidator {
 		resetStats();
 		diagDumped.set(false); // re-arm the one-shot diagnostic dump
 		cachedSamplers = null; // invalidate noise-sampler cache (new tree may have different channels)
+		cachedSplitters = null; // invalidate gradient-PRNG cache (parallel to samplers)
+		cachedSamplerClosure = null;
+		splitterSplitMethod = null;
+		randomNextFloatMethod = null;
 		ExampleMod.LOGGER.info("[surface-validate] installed compiled tree (bytecode={} bytes, hasFallback={})",
 				tree.bytecode().length, tree.hasFallback());
 	}
@@ -170,9 +188,15 @@ public final class SurfaceValidator {
 			dumpDiagnostic(ctx, x, y, z);
 		}
 
+		// Per-block PRNG sampler — built lazily from the live MaterialRuleContext.
+		// Without this, OP_VERT_GRADIENT falls back to midpoint approx and bedrock-floor /
+		// deepslate-transition rules produce ~50% wrong answers inside their gradient zones.
+		SurfaceRuleEvaluator.VerticalGradientSampler sampler = ensureGradientSampler(tree);
+
 		Object ourResult;
 		try {
-			ourResult = SurfaceRuleEvaluator.evaluate(tree, ctx);
+			SurfaceRuleEvaluator.setCurrentXZ(x, z);
+			ourResult = SurfaceRuleEvaluator.evaluate(tree, ctx, sampler);
 		} catch (RuntimeException e) {
 			ExampleMod.LOGGER.warn("[surface-validate] evaluator threw at ({},{},{}): {}",
 					x, y, z, e.toString());
@@ -378,6 +402,132 @@ public final class SurfaceValidator {
 			}
 		}
 		return out;
+	}
+
+	/**
+	 * Build (or return cached) the {@link SurfaceRuleEvaluator.VerticalGradientSampler}
+	 * closure for this tree. First call after install resolves every
+	 * random_name in {@link CompiledRuleTree#randomNameTable()} via
+	 * {@code NoiseConfig.getOrCreateRandomDeriver(Identifier)} and caches
+	 * the resulting {@code RandomSplitter} array plus the reflective
+	 * Method handles for {@code split(int,int,int)} and {@code nextFloat()}.
+	 * Subsequent calls return the cached closure with no allocation.
+	 *
+	 * <p>If random_name resolution fails for a channel (yarn rename, missing
+	 * registry entry, etc.), the slot stays null and the closure returns
+	 * 0.5f for that index — keeps the per-block-PRNG branch deterministic
+	 * but flagged in mismatches.
+	 */
+	private static SurfaceRuleEvaluator.VerticalGradientSampler ensureGradientSampler(CompiledRuleTree tree) {
+		SurfaceRuleEvaluator.VerticalGradientSampler existing = cachedSamplerClosure;
+		if (existing != null) return existing;
+
+		Object liveCtx = threadCtxRef.get();
+		if (liveCtx == null) return null; // first sample hasn't captured ctx yet
+		String[] names = tree.randomNameTable();
+		Object[] splitters = buildSplitterCache(liveCtx, names);
+		if (splitters == null) return null;
+
+		// Resolve the per-call reflective methods once, off the first
+		// non-null splitter we find. All splitters are RandomSplitter; all
+		// Random instances are class_5819. Method handles are stable.
+		java.lang.reflect.Method splitMethod = null;
+		java.lang.reflect.Method nextFloatMethod = null;
+		for (Object s : splitters) {
+			if (s == null) continue;
+			try {
+				splitMethod = s.getClass().getMethod("split", int.class, int.class, int.class);
+				Object dummy = splitMethod.invoke(s, 0, 0, 0);
+				if (dummy != null) {
+					nextFloatMethod = dummy.getClass().getMethod("nextFloat");
+				}
+				break;
+			} catch (ReflectiveOperationException | RuntimeException ignored) {
+				// try next slot
+			}
+		}
+		if (splitMethod == null || nextFloatMethod == null) {
+			ExampleMod.LOGGER.warn("[surface-validate] could not resolve RandomSplitter.split / Random.nextFloat — gradient sampler disabled");
+			return null;
+		}
+
+		cachedSplitters = splitters;
+		splitterSplitMethod = splitMethod;
+		randomNextFloatMethod = nextFloatMethod;
+
+		final java.lang.reflect.Method splitM = splitMethod;
+		final java.lang.reflect.Method nextFloatM = nextFloatMethod;
+		final Object[] cap = splitters;
+		SurfaceRuleEvaluator.VerticalGradientSampler closure = (idx, x, y, z) -> {
+			if (idx < 0 || idx >= cap.length) return 0.5f;
+			Object splitter = cap[idx];
+			if (splitter == null) return 0.5f;
+			try {
+				Object random = splitM.invoke(splitter, x, y, z);
+				Object v = nextFloatM.invoke(random);
+				return v instanceof Float f ? f : 0.5f;
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				return 0.5f;
+			}
+		};
+		cachedSamplerClosure = closure;
+		return closure;
+	}
+
+	/**
+	 * One-time splitter-array build. Parallel to {@link #buildSamplerCache}
+	 * but for {@code RandomSplitter} via {@code NoiseConfig.getOrCreateRandomDeriver}.
+	 * Returns null on a structural failure (no noiseConfig, missing registry
+	 * plumbing); returns an array with null slots for individual unresolved
+	 * names.
+	 */
+	private static Object[] buildSplitterCache(Object ruleContext, String[] randomNames) {
+		Object[] splitters = new Object[randomNames.length];
+		if (randomNames.length == 0) return splitters;
+
+		Object noiseConfig = readField(ruleContext, "noiseConfig");
+		if (noiseConfig == null) {
+			ExampleMod.LOGGER.warn(
+				"[surface-validate] noiseConfig field not found on {} — vert-gradient PRNG disabled",
+				ruleContext.getClass().getName());
+			return splitters;
+		}
+
+		Class<?> identifierClass;
+		java.lang.reflect.Method identifierOf;
+		java.lang.reflect.Method getOrCreateRandomDeriver;
+		try {
+			identifierClass = Class.forName("net.minecraft.util.Identifier");
+			identifierOf = identifierClass.getMethod("of", String.class);
+			getOrCreateRandomDeriver = noiseConfig.getClass().getMethod("getOrCreateRandomDeriver", identifierClass);
+		} catch (ReflectiveOperationException e) {
+			ExampleMod.LOGGER.warn(
+				"[surface-validate] could not resolve random-deriver API ({}) — vert-gradient PRNG disabled",
+				e.getClass().getSimpleName());
+			return splitters;
+		}
+
+		int resolved = 0;
+		for (int i = 0; i < randomNames.length; i++) {
+			String name = randomNames[i];
+			try {
+				Object identifier = identifierOf.invoke(null, name);
+				Object splitter = getOrCreateRandomDeriver.invoke(noiseConfig, identifier);
+				if (splitter != null) {
+					splitters[i] = splitter;
+					resolved++;
+				} else {
+					ExampleMod.LOGGER.warn("[surface-validate] random_name '{}' resolved to null splitter", name);
+				}
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				ExampleMod.LOGGER.warn("[surface-validate] random_name '{}' failed: {}",
+					name, e.getCause() == null ? e.getMessage() : e.getCause().getMessage());
+			}
+		}
+		ExampleMod.LOGGER.info(
+			"[surface-validate] gradient PRNG cache built: {}/{} random factories resolved",
+			resolved, randomNames.length);
+		return splitters;
 	}
 
 	/**

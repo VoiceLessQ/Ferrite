@@ -15,13 +15,18 @@ public record CompiledRuleTree(
 		int opcodeCount,
 		Object[] blockstateTable,
 		java.util.List<String>[] biomeSetTable,
-		String[] noiseChannelTable) {
+		String[] noiseChannelTable,
+		/** Identifier strings for each VerticalGradient rule's random_name (e.g.
+		 * "minecraft:bedrock_floor", "minecraft:deepslate"). OP_VERT_GRADIENT
+		 * indexes into this table to look up the per-block PRNG splitter at
+		 * runtime. */
+		String[] randomNameTable) {
 
 	public static CompiledRuleTree fallbackOnly() {
 		@SuppressWarnings("unchecked")
 		java.util.List<String>[] empty = new java.util.List[0];
 		return new CompiledRuleTree(
 				new byte[]{RuleBytecode.OP_FALLBACK}, true, 1,
-				new Object[0], empty, new String[0]);
+				new Object[0], empty, new String[0], new String[0]);
 	}
 }

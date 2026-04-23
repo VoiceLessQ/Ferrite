@@ -476,14 +476,17 @@ public final class SurfaceRuleCompilerSelfTest {
 	}
 
 	private static void opVertGradientFallback() {
-		// VertGradient now emits real opcodes (spike-grade midpoint
-		// approximation of vanilla's per-position random gradient).
-		// Synthetic node has no anchor fields → resolveYOffset returns 0.
-		// Layout: OP(1) + i32 trueAtAndBelow(4) + i32 falseAtAndAbove(4) + RETURN_DONE(1) = 10
+		// VertGradient now emits real opcodes with per-block PRNG support
+		// (random_name index for the validator's RandomSplitter cache).
+		// Synthetic node has no anchor fields → resolveYOffset returns 0,
+		// no randomName field → readRandomName returns "" (interned at idx 0).
+		// Layout: OP(1) + u16 randomNameIdx(2) + i32 trueAtAndBelow(4) +
+		//         i32 falseAtAndAbove(4) + RETURN_DONE(1) = 12
 		CompiledRuleTree t = SurfaceRuleCompiler.compile(new VerticalGradientMaterialCondition());
 		assertFalse("hasFallback (no longer fallback)", t.hasFallback());
-		assertEq("bytecode length", 10, t.bytecode().length);
+		assertEq("bytecode length", 12, t.bytecode().length);
 		assertEq("opcode", RuleBytecode.OP_VERT_GRADIENT, t.bytecode()[0]);
+		assertEq("randomNameTable length", 1, t.randomNameTable().length);
 	}
 
 	private static void opIfElseJumpTargets() {

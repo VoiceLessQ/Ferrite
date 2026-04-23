@@ -38,6 +38,10 @@ public final class SurfaceRuleCompiler {
 	private final java.util.List<Integer> blockIdOffsets = new java.util.ArrayList<>();
 	private final java.util.List<Integer> biomeIdOffsets = new java.util.ArrayList<>();
 	private final java.util.List<Integer> noiseIdOffsets = new java.util.ArrayList<>();
+	/** Random-name pool: insertion-order map of random_name string → id.
+	 *  Populated by VerticalGradient nodes; consumed by the validator and
+	 *  Rust port to look up per-block PRNG factories at runtime. */
+	private final java.util.LinkedHashMap<String, Integer> randomNamePool = new java.util.LinkedHashMap<>();
 	/** [offset_in_bytecode, target_position] pairs for forward jumps. */
 	private final java.util.List<int[]> controlFlowPatches = new java.util.ArrayList<>();
 	private boolean hasFallback = false;
@@ -80,9 +84,24 @@ public final class SurfaceRuleCompiler {
 		for (int[] patch : c.controlFlowPatches) {
 			writeIntLE(bytecode, patch[0], patch[1]);
 		}
+		String[] randomNames = c.randomNamePool.keySet().toArray(new String[0]);
 		return new CompiledRuleTree(
 				bytecode, c.hasFallback, c.opcodeCount,
-				table.idToState(), biomePool.idToSet(), noisePool.idToChannel());
+				table.idToState(), biomePool.idToSet(), noisePool.idToChannel(),
+				randomNames);
+	}
+
+	/**
+	 * Intern a random_name Identifier (or its string form) into the pool.
+	 * Returns the stable index used by OP_VERT_GRADIENT operands.
+	 * Idempotent — repeated names get the same id.
+	 */
+	private int internRandomName(String name) {
+		Integer existing = randomNamePool.get(name);
+		if (existing != null) return existing;
+		int id = randomNamePool.size();
+		randomNamePool.put(name, id);
+		return id;
 	}
 
 	private static int readIntLE(byte[] b, int off) {
@@ -260,6 +279,21 @@ public final class SurfaceRuleCompiler {
 		} catch (ReflectiveOperationException e) {
 			return null;
 		}
+	}
+
+	/**
+	 * Read the {@code randomName} field from a VerticalGradientMaterialCondition
+	 * node and stringify the resulting Identifier. Falls back to the empty
+	 * string if the field can't be read; the validator's splitter cache will
+	 * then produce a null sampler for that index and the evaluator falls back
+	 * to the midpoint behavior for that one rule.
+	 */
+	private static String readRandomName(Object node) {
+		Object id = readField(node, "randomName");
+		if (id == null) return "";
+		// Identifier.toString() returns "namespace:path" — same format the
+		// validator passes to Identifier.of() at runtime.
+		return id.toString();
 	}
 
 	/**
@@ -597,12 +631,15 @@ public final class SurfaceRuleCompiler {
 				// Vanilla formula:
 				//   if (blockY <= trueAtAndBelow) return true;
 				//   if (blockY >= falseAtAndAbove) return false;
-				//   else: per-position random (RandomSplitter) with linearly
-				//         mapped probability — spike approximates with
-				//         midpoint cutoff (correct outside gradient zone,
-				//         ~50% wrong inside it).
-				// Operand: i32 trueAtAndBelow + i32 falseAtAndAbove = 9 bytes.
+				//   else: probability = Mth.map(blockY, trueAtAndBelow,
+				//         falseAtAndAbove, 1.0, 0.0);
+				//         RandomSource r = factory.at(blockX, blockY, blockZ);
+				//         return r.nextFloat() < probability;
+				// Operand: u16 randomNameIdx + i32 trueAtAndBelow + i32
+				// falseAtAndAbove = 11 bytes (was 9 — added the name idx).
 				emit(RuleBytecode.OP_VERT_GRADIENT);
+				String randomName = readRandomName(node);
+				emitU16(internRandomName(randomName));
 				emitInt(resolveYOffset(readField(node, "trueAtAndBelow")));
 				emitInt(resolveYOffset(readField(node, "falseAtAndAbove")));
 			}

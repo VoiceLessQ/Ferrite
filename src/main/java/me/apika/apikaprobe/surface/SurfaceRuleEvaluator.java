@@ -41,6 +41,42 @@ public final class SurfaceRuleEvaluator {
 	private SurfaceRuleEvaluator() {}
 
 	/**
+	 * Per-block PRNG sampler for OP_VERT_GRADIENT. Mirrors vanilla's
+	 * {@code RandomSplitter.split(x, y, z).nextFloat()} call.
+	 *
+	 * <p>The validator builds an instance backed by reflective calls to
+	 * {@code NoiseConfig.getOrCreateRandomDeriver(Identifier)} →
+	 * {@code RandomSplitter.split(x, y, z)} → {@code Random.nextFloat()}.
+	 * Self-tests pass {@code null}, which falls back to the midpoint
+	 * approximation that the spike originally shipped with — preserves
+	 * existing test expectations.
+	 */
+	@FunctionalInterface
+	public interface VerticalGradientSampler {
+		/** @return a value in [0.0, 1.0) for the given (randomNameIdx, x, y, z). */
+		float roll(int randomNameIdx, int x, int y, int z);
+	}
+
+	/** Per-thread (x, z) capture used so {@link #evaluate} call sites that
+	 *  don't have block coordinates (the bytecode itself only carries y)
+	 *  can still feed the sampler. The validator sets these immediately
+	 *  before each evaluate call; the self-tests leave them at 0.
+	 *
+	 *  Static-mutable is ugly but the alternative is threading (x, z)
+	 *  through a 7-place call chain that already exists; defer that to
+	 *  the eventual ctx redesign. */
+	private static final ThreadLocal<int[]> currentXZ = ThreadLocal.withInitial(() -> new int[2]);
+
+	/** Set the per-thread (x, z) used by the next {@link #evaluate} call's
+	 *  OP_VERT_GRADIENT sampler. Validator-only; safe to ignore for
+	 *  unit-test paths that pass null sampler. */
+	public static void setCurrentXZ(int x, int z) {
+		int[] xz = currentXZ.get();
+		xz[0] = x;
+		xz[1] = z;
+	}
+
+	/**
 	 * Evaluates the same {@link CompiledRuleTree} via the native Rust
 	 * implementation. Returns the same Object that the Java
 	 * {@link #evaluate} would return for the same inputs (the entry
@@ -114,6 +150,14 @@ public final class SurfaceRuleEvaluator {
 	 * condition diverged from vanilla on a mismatching position.
 	 */
 	public static Object evaluateWithTrace(CompiledRuleTree tree, ColumnContext ctx, java.util.List<String> trace) {
+		return evaluateWithTrace(tree, ctx, trace, null);
+	}
+
+	/** Sampler-aware overload of {@link #evaluateWithTrace}. Same null
+	 *  semantics as {@link #evaluate} — null sampler keeps the spike's
+	 *  midpoint behavior so trace-next on self-test paths still works. */
+	public static Object evaluateWithTrace(CompiledRuleTree tree, ColumnContext ctx,
+			java.util.List<String> trace, VerticalGradientSampler sampler) {
 		byte[] bc = tree.bytecode();
 		int ip = 0;
 		boolean condResult = false;
@@ -228,15 +272,26 @@ public final class SurfaceRuleEvaluator {
 					if (negateNext) { condResult = !condResult; negateNext = false; }
 				}
 				case RuleBytecode.OP_VERT_GRADIENT -> {
+					int nameIdx = readU16LE(bc, ip); ip += 2;
 					int trueB = readIntLE(bc, ip); ip += 4;
 					int falseA = readIntLE(bc, ip); ip += 4;
 					int y = ctx.blockY();
 					String mode;
 					if (y <= trueB) { condResult = true; mode = "below-true-zone"; }
 					else if (y >= falseA) { condResult = false; mode = "above-false-zone"; }
+					else if (sampler != null) {
+						double prob = 1.0 - ((double)(y - trueB)) / ((double)(falseA - trueB));
+						int[] xz = currentXZ.get();
+						float roll = sampler.roll(nameIdx, xz[0], y, xz[1]);
+						condResult = roll < prob;
+						mode = String.format("prng-roll=%.4f<prob=%.4f", roll, prob);
+					}
 					else { condResult = y <= (trueB + falseA) / 2; mode = "midpoint-approx"; }
 					if (negateNext) { condResult = !condResult; negateNext = false; }
-					trace.add(String.format("[%04d] OP_VERT_GRADIENT trueAtBelow=%d falseAtAbove=%d y=%d %s → cond=%s", opIp, trueB, falseA, y, mode, condResult));
+					String name = nameIdx < tree.randomNameTable().length
+							? tree.randomNameTable()[nameIdx] : "?";
+					trace.add(String.format("[%04d] OP_VERT_GRADIENT name='%s' trueAtBelow=%d falseAtAbove=%d y=%d %s → cond=%s",
+							opIp, name, trueB, falseA, y, mode, condResult));
 				}
 				default -> {
 					trace.add(String.format("[%04d] UNKNOWN opcode=0x%02x → return null", opIp, op & 0xFF));
@@ -269,6 +324,17 @@ public final class SurfaceRuleEvaluator {
 	}
 
 	public static Object evaluate(CompiledRuleTree tree, ColumnContext ctx) {
+		return evaluate(tree, ctx, null);
+	}
+
+	/**
+	 * Sampler-aware overload. Pass a non-null {@link VerticalGradientSampler}
+	 * to get the real per-block PRNG behavior vanilla uses for bedrock floor
+	 * and deepslate transition rules. Pass null to get the spike's midpoint
+	 * approximation (preserved for self-tests and any caller that doesn't
+	 * have access to a {@code NoiseConfig}).
+	 */
+	public static Object evaluate(CompiledRuleTree tree, ColumnContext ctx, VerticalGradientSampler sampler) {
 		// Don't short-circuit on tree.hasFallback() — that flag is for the
 		// dispatcher (tells it "result may be wrong, route to vanilla").
 		// The validator wants to walk the bytecode and only bail when it
@@ -334,6 +400,7 @@ public final class SurfaceRuleEvaluator {
 					if (negateNext) { condResult = !condResult; negateNext = false; }
 				}
 				case RuleBytecode.OP_VERT_GRADIENT -> {
+					int nameIdx = readU16LE(bc, ip); ip += 2;
 					int trueAtAndBelow = readIntLE(bc, ip); ip += 4;
 					int falseAtAndAbove = readIntLE(bc, ip); ip += 4;
 					int y = ctx.blockY();
@@ -341,8 +408,16 @@ public final class SurfaceRuleEvaluator {
 						condResult = true;
 					} else if (y >= falseAtAndAbove) {
 						condResult = false;
+					} else if (sampler != null) {
+						// Vanilla: probability = Mth.map(y, trueAtAndBelow,
+						// falseAtAndAbove, 1.0, 0.0); random.nextFloat() < prob.
+						double probability = 1.0 - ((double)(y - trueAtAndBelow))
+								/ ((double)(falseAtAndAbove - trueAtAndBelow));
+						int[] xz = currentXZ.get();
+						float roll = sampler.roll(nameIdx, xz[0], y, xz[1]);
+						condResult = roll < probability;
 					} else {
-						// Vanilla: random with prob mapped from y. Spike: midpoint cutoff.
+						// Spike fallback: midpoint cutoff (~50% wrong inside zone).
 						condResult = y <= (trueAtAndBelow + falseAtAndAbove) / 2;
 					}
 					if (negateNext) { condResult = !condResult; negateNext = false; }
