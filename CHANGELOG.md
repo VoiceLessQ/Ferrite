@@ -32,6 +32,35 @@ marks pre-release research builds.
 - Mob → non-mob pushing (items, boats) remains the only documented
   vanilla gap. Edge-case in practice; deferred for a follow-up.
 
+### Fixed
+
+- Cramming damage was failing to fire when mobs spawned at identical
+  coordinates (e.g. `/summon zombie ~ ~ ~ ×30`). The push-distance
+  early-return in Rust (`f < 0.01`) was running before the
+  `crowded_count` increment, so same-position piles registered zero
+  overlapping neighbors. Vanilla counts via `getPushableEntities`
+  (pure AABB overlap) separately from the push math; mirrored that
+  ordering. Regression test added for the exact symptom.
+
+### Verified
+
+Live A/B test on 1.21.11 flat creative, default
+`maxEntityCramming = 24`:
+
+- 24 zombies stacked at one block: no damage. ✓ (matches vanilla)
+- 25th zombie added: cramming damage fires, mobs die. ✓
+- `[cramming-dispatch]` log shows `damaged=N` climbing as the pile
+  reaches the threshold and mobs cycle through the 1-in-4 random.
+- Server `[mspt]` held steady at 3.6–4.6 ms/tick at 20 TPS while
+  processing ~8K–10K mob interactions per 5 s window — the same
+  load profile that produces the headline 65% reduction.
+
+For very large mob farms, `/gamerule maxEntityCramming 0` (a vanilla
+gamerule) disables damage; in that mode Ferrite holds 20 TPS at
+mob counts where vanilla would collapse. `/ferrite cramming off`
+falls back to vanilla without restart so users can verify both the
+correctness and the perf claim in their own world.
+
 ---
 
 ## [0.4.0-alpha] — 2026-04-22
