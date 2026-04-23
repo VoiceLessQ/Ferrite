@@ -198,6 +198,27 @@ fn process_pair(
         return;
     }
 
+    // --- Take split borrow once; used for both counting and push application.
+    // i < j by guarantee above, so head[i] and tail[0] are disjoint.
+    let (head, tail) = results.split_at_mut(j);
+    let res_a = &mut head[i];
+    let res_b = &mut tail[0];
+
+    // --- Counting MUST happen before the push-distance early-return.
+    // Vanilla counts entities via `getPushableEntities(bbox)` — pure AABB
+    // overlap — separately from the push math (which has the f<0.01 skip).
+    // If we counted only after the push skip, mobs spawned at identical
+    // coordinates (e.g. /summon zombie ~ ~ ~ ×30) would never accumulate
+    // crowded_count and cramming damage would never fire.
+    res_a.neighbor_count += 1;
+    res_b.neighbor_count += 1;
+    if (b.flags & FLAG_PUSHABLE) != 0 && (b.flags & FLAG_PASSENGER) == 0 {
+        res_a.crowded_count += 1;
+    }
+    if (a.flags & FLAG_PUSHABLE) != 0 && (a.flags & FLAG_PASSENGER) == 0 {
+        res_b.crowded_count += 1;
+    }
+
     // --- Vanilla push math (exact replica) -----------------------------------
     let f = dx.abs().max(dz.abs()); // Chebyshev (Mth.absMax)
     if f < CONTACT_MIN {
@@ -210,12 +231,6 @@ fn process_pair(
     let push_dx = dn * g * PUSH_SCALE;
     let push_dz = en * g * PUSH_SCALE;
 
-    // --- Apply with split_at_mut to satisfy borrow checker -------------------
-    // i < j by guarantee above, so head[i] and tail[0] disjoint.
-    let (head, tail) = results.split_at_mut(j);
-    let res_a = &mut head[i];
-    let res_b = &mut tail[0];
-
     let a_eligible = (a.flags & FLAG_PUSHABLE) != 0 && (a.flags & FLAG_VEHICLE) == 0;
     let b_eligible = (b.flags & FLAG_PUSHABLE) != 0 && (b.flags & FLAG_VEHICLE) == 0;
 
@@ -226,18 +241,6 @@ fn process_pair(
     if b_eligible {
         res_b.accum_dx += push_dx;
         res_b.accum_dz += push_dz;
-    }
-    // Neighbor count: every overlapping pair visit (debug). Crowded count:
-    // mirrors vanilla's pushEntities `count` — only pushable non-passenger
-    // overlaps qualify, since vanilla's getPushableEntities pre-filters to
-    // pushable and the inner loop excludes passengers.
-    res_a.neighbor_count += 1;
-    res_b.neighbor_count += 1;
-    if (b.flags & FLAG_PUSHABLE) != 0 && (b.flags & FLAG_PASSENGER) == 0 {
-        res_a.crowded_count += 1;
-    }
-    if (a.flags & FLAG_PUSHABLE) != 0 && (a.flags & FLAG_PASSENGER) == 0 {
-        res_b.crowded_count += 1;
     }
 }
 
@@ -424,6 +427,34 @@ mod tests {
         compute_cramming(&inputs, &mut results);
         assert_eq!(results[0].crowded_count, 1);
         assert_eq!(results[1].crowded_count, 1);
+    }
+
+    #[test]
+    fn same_position_pile_still_increments_crowded_count() {
+        // Reproduces the bug fixed in this commit: /summon zombie ~ ~ ~ ×N
+        // puts every mob at identical coords. The push math early-returns
+        // (f < 0.01) but vanilla still counts them in pushableEntities, so
+        // cramming damage must still fire. crowded_count needs to count the
+        // overlap regardless of the push-skip.
+        let inputs = [
+            make_mob(1, 0.0, 0.0, 64.0, 66.0),
+            make_mob(2, 0.0, 0.0, 64.0, 66.0), // exact same spot
+            make_mob(3, 0.0, 0.0, 64.0, 66.0),
+        ];
+        let mut results = [CrammingResult::default(); 3];
+        compute_cramming(&inputs, &mut results);
+
+        // Each mob sees the other two as overlapping.
+        assert_eq!(results[0].crowded_count, 2,
+                   "mob 0 should count 2 overlapping pushable non-passenger neighbors");
+        assert_eq!(results[1].crowded_count, 2);
+        assert_eq!(results[2].crowded_count, 2);
+
+        // Push math still skipped at this distance — accumulators stay zero.
+        for r in &results {
+            assert_eq!(r.accum_dx, 0.0);
+            assert_eq!(r.accum_dz, 0.0);
+        }
     }
 
     #[test]
