@@ -321,6 +321,16 @@ Listed so that future us, having forgotten why, does not re-open them:
   single-threaded for anything that touches world state. More cores
   do not help until we have a subsystem that can run off the tick
   thread, which cramming partially does but redstone never can.
+- **Cross-referencing other Rust Minecraft ports.** Mojang's source
+  is the single source of truth for every port in Ferrite's Track B
+  roadmap. Pumpkin, Valence, FerrumC, and any future Rust MC project
+  are working on a different problem (replace vanilla, not accelerate
+  it) and their ports may be pre-parity or approximate. Reading them
+  would anchor our correctness judgments to potentially-drifting
+  reference code and muddy the clean-room story. Port from Mojang
+  source, validate against the live oracle, ship. The Rust ecosystem
+  is small and the temptation to look will be real; the discipline is
+  worth it.
 
 ---
 
