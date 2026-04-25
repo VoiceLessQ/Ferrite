@@ -373,3 +373,51 @@ for this session.
   lower-priority QA.
 - **Lint warnings on volatile flags ignored.** `ENABLED` flags match the
   existing `SurfaceDispatcher.ENABLED` pattern in this codebase.
+
+---
+
+## Shelved: parallel chunkgen dispatch
+
+Investigated whether we should push past the 47-chunks/sec ceiling by
+giving vanilla more chunkgen parallelism. Read the 1.21.11 server
+source under `26.1.2/server/net/minecraft/`:
+
+- **`Util.maxAllowedExecutorThreads()`** (Util.java:188-189) already
+  returns `Mth.clamp(cores - 1, 1, 255)` — the FJP behind chunkgen
+  scales with hardware. Bumping it just adds idle threads; the pool
+  isn't where work is being denied.
+- **`ChunkMap.java:192-194`** wraps that pool in `ConsecutiveExecutor`
+  for both worldgen and light. That's the actual gate — *one* chunkgen
+  task runs at a time per dispatcher. Intra-chunk work fans out via
+  `task.runUntilWait()` cooperative yields, but inter-chunk parallelism
+  is bounded to ~1.
+- The 47 chunks/sec ceiling we hit in Act 6 is exactly consistent with
+  serial dispatch + intra-chunk fan-out at ~21 ms per chunk.
+
+**The lever that would actually move chunks/sec** is replacing
+`ConsecutiveExecutor` with a parallel one — admit N chunk gens at
+once. We chose not to, because:
+
+- **Correctness risk.** Vanilla's serial dispatch enforces chunk-status
+  ordering invariants by construction (no two chunks racing through
+  `BIOME → SURFACE → FEATURES`). A parallel dispatcher has to recreate
+  those invariants explicitly, with all the sync points and edge cases.
+- **Integration cost.** `CompletableFuture` chaining, `ChunkHolder`
+  lifecycle (atomic refcount swaps), and the main-thread-pinned `FULL`
+  conversion all assume the existing serialization model. Touching the
+  dispatcher means touching all of them.
+- **Out of Ferrite's lane.** Parallelism on the JVM scheduler is a
+  problem the broader ecosystem has already invested years in. Our
+  edge is *per-chunk math acceleration via Rust JNI* — DF interpreter,
+  surface dispatch, biome R-tree, predictive prewarm. Each future
+  port (noise sampling, aquifer, decoration) chops the per-chunk
+  wall-clock and compounds with whatever parallel dispatcher exists in
+  the user's stack — vanilla's 1, or higher if the user installs a
+  parallelism mod separately. We don't gain by re-litigating
+  parallelism from Mojang source when the math wins are still on the
+  table.
+
+Anchor stays Mojang source. We don't borrow code or design from other
+Rust MC ports or other chunkgen mods. If/when parallel dispatch matters
+enough to revisit, it gets ported the same way every other Track B item
+gets ported: from Mojang, validated against the live oracle, shipped.
