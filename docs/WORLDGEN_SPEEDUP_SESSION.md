@@ -511,3 +511,56 @@ throughput. Phases 2-3 compound from there.
 After noise: lighting (~33-66 ms combined). Same discipline. Stateful
 port (per-section storages, runtime flood updates), so harder than
 noise — but ranked #2 by the data.
+
+---
+
+## Phase 1A complete: DF interpreter parity 34/35
+
+Before touching the noise hot loop, the DF interpreter had to prove
+bit-exact against vanilla on the full op set (not just the 6 climate
+DFs). Three fixes lifted `/ferrite density validate` from 3/35 to
+34/35:
+
+1. **`BeardifierMarker`** — yarn singleton enum that returns 0.0
+   outside structure-warped regions. Tested as a special case in
+   `DensityFunctionWalker` before the generic `Marker` substring catch
+   (since `"BeardifierMarker"` contains `"Marker"`); folded to
+   `Constant(0.0)` mirroring the `BlendAlpha` / `BlendOffset` shortcuts.
+2. **Validator visitor proxy** — yarn 1.21.11 renamed mojmap
+   `NoiseHolder` to `DensityFunction$Noise`. The old proxy dispatched
+   on `paramType.contains("NoiseHolder")` which never fired, so noise
+   leaves stayed null-bound and `computeVanilla` produced wrong
+   values. Fixed by also matching `paramType.equals("Noise")`.
+3. **`BlendedNoise` (yarn `InterpolatedNoiseSampler`)** — vanilla's
+   main 3D terrain density. Three sub-fixes:
+   - `perlin.rs`: new `BlendedNoise` struct + bit-exact compute (3
+     legacy-Perlin chains: minLimit 16o, maxLimit 16o, main 8o; two-pass
+     blend with clampedLerp / 128).
+   - `density.rs`: new `OP_BLENDED_NOISE` opcode + `LazyBlendedNoise`
+     wrapper (`Arc<OnceLock<BlendedNoise>>` for cheap clone + shared
+     lazy init, seeded from
+     `state.root_factory.from_hash_of("minecraft:terrain")` on first
+     sample).
+   - `DensityFunctionWalker`: detect `InterpolatedNoiseSampler` before
+     the generic `Noise` catch; new `encodeBlendedNoise` reads the 5
+     scalar params via **field reflection** (the class is not a record
+     so there are no no-arg accessors — the original method-based
+     `readDoubleAny` returned null on all five and the bytecode was
+     being written with bogus `1.0` defaults).
+   - `DensityParity`: visitor proxy reseeds registry BlendedNoise
+     instances via `copyWithRandom(splitter.split("minecraft:terrain"))`
+     — registry instances are seeded with `0L` from `createUnseeded`;
+     vanilla's `RandomState.NoiseWiringHelper` re-seeds with
+     terrainRandom internally, and the validator now mirrors that.
+     Yarn renames `fromHashOf`→`split`, `withNewRandom`→`copyWithRandom`.
+
+**Final state:** 34/35 DFs bit-exact against vanilla. Only failure is
+`end/sloped_cheese` with diff ~0.84, inheriting from
+`EndIslandDensityFunction` — End-only, deliberately scoped out per the
+inventory pass. All overworld terrain DFs (`base_3d_noise`, `factor`,
+`offset`, `jaggedness`, `sloped_cheese`, etc.) match.
+
+This unblocks Phase 1B (the actual noise hot-loop port). The math is
+proven; the remaining work is the trilinear `NoiseInterpolator` + the
+mixin wiring on `ChunkNoiseSampler.getInterpolatedDensity` /
+`getInterpolatedState`.
