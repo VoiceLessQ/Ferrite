@@ -81,6 +81,7 @@ public abstract class CacheRouteCaptureMixin {
 				if (inner != null) {
 					String fp = DensityFunctionWalker.fingerprint(inner);
 					CacheRouteStats.dumpCellCacheFingerprintOnce(fp);
+					CacheRouteStats.dumpCellCacheStructureOnce(inner);
 				}
 			}
 		}

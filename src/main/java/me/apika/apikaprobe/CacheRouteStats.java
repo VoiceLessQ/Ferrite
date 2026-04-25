@@ -64,6 +64,52 @@ public final class CacheRouteStats {
 		}
 	}
 
+	private static final java.util.concurrent.atomic.AtomicBoolean cellCacheStructDumped =
+			new java.util.concurrent.atomic.AtomicBoolean(false);
+
+	/** One-shot: walk the unmatched cellCache.wrapped() subtree via reflection
+	 *  and log each node's class name + children. Definitive answer to "what's
+	 *  actually in the runtime tree". */
+	public static void dumpCellCacheStructureOnce(Object root) {
+		if (root == null) return;
+		if (!cellCacheStructDumped.compareAndSet(false, true)) return;
+		StringBuilder sb = new StringBuilder("[cache-route] cellCache STRUCTURE:\n");
+		dumpNode(sb, root, 0, 8);
+		ExampleMod.LOGGER.info(sb.toString());
+	}
+
+	private static void dumpNode(StringBuilder sb, Object node, int depth, int maxDepth) {
+		for (int i = 0; i < depth; i++) sb.append("  ");
+		if (node == null) { sb.append("null\n"); return; }
+		String cls = node.getClass().getSimpleName();
+		sb.append(cls).append("\n");
+		if (depth >= maxDepth) return;
+		// Try common DF child accessors. Print first non-null per axis.
+		String[][] childAccessors = {
+			{"argument1"}, {"argument2"},
+			{"input"}, {"wrapped"}, {"delegate"}, {"function"},
+			{"shiftX"}, {"shiftY"}, {"shiftZ"},
+			{"whenInRange"}, {"whenOutOfRange"},
+		};
+		for (String[] accs : childAccessors) {
+			for (String acc : accs) {
+				try {
+					java.lang.reflect.Method m = node.getClass().getMethod(acc);
+					Object child = m.invoke(node);
+					if (child != null && child != node) {
+						for (int i = 0; i < depth + 1; i++) sb.append("  ");
+						sb.append(".").append(acc).append(" = ");
+						sb.setLength(sb.length() - 2);
+						dumpNode(sb, child, depth + 1, maxDepth);
+					}
+					break;
+				} catch (ReflectiveOperationException ignored) {
+					// next accessor
+				}
+			}
+		}
+	}
+
 	/** Log first-seen unmatched (cacheType, inputClass) pair so we can
 	 *  see what shapes are missing without flooding the log. */
 	public static void recordUnmatchedShape(String cacheTypeSimpleName, String inputClassSimpleName) {

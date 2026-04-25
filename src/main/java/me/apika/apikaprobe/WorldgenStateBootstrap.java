@@ -197,8 +197,10 @@ public final class WorldgenStateBootstrap {
 			{"erosion", "ferrite:climate/erosion"},
 			{"depth", "ferrite:climate/depth"},
 			{"ridges", "ferrite:climate/ridges"},
-			// Terrain density (composed; per-cell-corner sampler).
-			{"initialDensityWithoutJaggedness", "ferrite:terrain/initial_density_without_jaggedness"},
+			// Terrain density. Yarn 1.21.11 has preliminarySurfaceLevel
+			// (used by chunkgen for max surface query) and finalDensity
+			// (per-cell-corner sampler).
+			{"preliminarySurfaceLevel", "ferrite:terrain/preliminary_surface_level"},
 			{"finalDensity", "ferrite:terrain/final_density"},
 			// Aquifer / cave noises.
 			{"barrierNoise", "ferrite:aquifer/barrier"},
