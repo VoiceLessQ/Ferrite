@@ -41,16 +41,28 @@ public abstract class CacheRouteCaptureMixin {
 		if (returned == null || returned == function) return;
 		String cls = returned.getClass().getSimpleName();
 
-		// Fast path: identity. Rare hit because vanilla's mapAll(this::wrap)
-		// re-instantiates Markers, but cheap to try.
+		// Only cache-wrapper return classes are interesting; passthrough
+		// and unwrap returns aren't carrying a fillable buffer anyway.
+		boolean isCacheWrapper = cls.contains("FlatCache")
+				|| cls.contains("Interpolator")
+				|| cls.contains("CacheAllInCell") || cls.contains("CellCache")
+				|| cls.contains("Cache2D") || cls.contains("CacheOnce");
+		if (!isCacheWrapper) {
+			CacheRouteStats.record(cls, null);
+			return;
+		}
+
+		// Fast path: identity on the input Marker. Rare hit (mapAll
+		// re-instantiates), but cheap.
 		String rustName = WorldgenStateBootstrap.identifiedRouterDfs().get(function);
 
-		// Real path: fingerprint the input Marker's wrapped subtree.
-		// DensityFunctionWalker emits the same OP_MARKER bytes for both
-		// Markers and their post-mapAll cache-wrapper equivalents, so the
-		// fingerprint we computed at world load matches what we compute now.
+		// Real path: fingerprint the RETURN VALUE's wrapped() subtree.
+		// Every cache wrapper class implements MarkerOrMarked.wrapped() →
+		// the inner DF it caches. This works regardless of how the input
+		// reached us (Marker, HolderHolder unwrap, recursive call, etc.) —
+		// the wrapped subtree is the same thing the cache will fill from.
 		if (rustName == null) {
-			Object inner = ferrite$callWrapped(function);
+			Object inner = ferrite$callWrapped(returned);
 			if (inner != null) {
 				String fp = DensityFunctionWalker.fingerprint(inner);
 				if (fp != null) {
@@ -59,6 +71,9 @@ public abstract class CacheRouteCaptureMixin {
 			}
 		}
 		CacheRouteStats.record(cls, rustName);
+		if (rustName == null) {
+			CacheRouteStats.recordUnmatchedShape(cls, function.getClass().getSimpleName());
+		}
 	}
 
 	/** Reflectively call {@code wrapped()} on the Marker so we don't

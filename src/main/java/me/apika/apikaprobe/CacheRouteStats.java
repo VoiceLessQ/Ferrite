@@ -39,8 +39,27 @@ public final class CacheRouteStats {
 	private static final ConcurrentHashMap<String, Boolean> firstSeenPair =
 			new ConcurrentHashMap<>();
 
+	/** Per-(cacheType, inputClass) first-seen log for unmatched cases.
+	 *  Lets us see at a glance what input shapes are missing from
+	 *  fingerprintToName so we know whether the gap is unwrappable
+	 *  singletons (BlendAlpha/BlendOffset) or interior Markers we
+	 *  failed to walk into at world load. */
+	private static final ConcurrentHashMap<String, Boolean> firstSeenUnmatched =
+			new ConcurrentHashMap<>();
+
 	private static final AtomicLong totalCaptures = new AtomicLong();
 	private static final long SUMMARY_EVERY = 5000;
+
+	/** Log first-seen unmatched (cacheType, inputClass) pair so we can
+	 *  see what shapes are missing without flooding the log. */
+	public static void recordUnmatchedShape(String cacheTypeSimpleName, String inputClassSimpleName) {
+		String key = cacheTypeSimpleName + ":" + inputClassSimpleName;
+		if (firstSeenUnmatched.putIfAbsent(key, Boolean.TRUE) == null) {
+			ExampleMod.LOGGER.info(
+					"[cache-route] UNMATCHED: cache={} input={}",
+					cacheTypeSimpleName, inputClassSimpleName);
+		}
+	}
 
 	public static void record(String cacheTypeSimpleName, String rustName) {
 		boolean matched = rustName != null;
