@@ -623,6 +623,204 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_sampleDensityRegion3D
     total as jint
 }
 
+/// Phase 2.5 step 2b: bulk slice fill for `ChunkNoiseSampler.sampleDensity`.
+///
+/// Like `sampleDensityRegion3DRust` but with separate X/Y/Z step sizes.
+/// Vanilla's interpolator slice fill samples at the cell-corner grid
+/// where horizontal step (cellWidth=4) differs from vertical step
+/// (cellHeight=8), so the unified `step_blocks` parameter doesn't fit.
+///
+/// Output layout: row-major `(iy, iz, ix)` —
+///   `out_buf[(iy * side_z + iz) * side_x + ix] = f64 density at
+///    (origin_x + ix*step_x, origin_y + iy*step_y, origin_z + iz*step_z)`.
+///
+/// For typical use (per-interpolator slice): side_x=1, side_y=49, side_z=5,
+/// step_x=4, step_y=8, step_z=4 → 245 doubles per call.
+#[no_mangle]
+pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_sampleDensitySlicesRust<'local>(
+    env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    name_buf: JByteBuffer<'local>,
+    name_len: jint,
+    origin_x: jint,
+    origin_y: jint,
+    origin_z: jint,
+    side_x: jint,
+    side_y: jint,
+    side_z: jint,
+    step_x: jint,
+    step_y: jint,
+    step_z: jint,
+    out_buf: JByteBuffer<'local>,
+) -> jint {
+    if side_x <= 0 || side_y <= 0 || side_z <= 0 || step_x <= 0 || step_y <= 0 || step_z <= 0 {
+        return -1;
+    }
+    let Some(state) = worldgen_state() else { return -1; };
+    let name_len_usize = name_len.max(0) as usize;
+    let Some(name_bytes) = read_buffer(&env, &name_buf, name_len_usize) else {
+        return -1;
+    };
+    let Ok(name) = std::str::from_utf8(name_bytes) else { return -1; };
+    let Some(df) = state.density_functions.get(name) else { return -1; };
+
+    let side_x = side_x as usize;
+    let side_y = side_y as usize;
+    let side_z = side_z as usize;
+    let total = side_x.saturating_mul(side_y).saturating_mul(side_z);
+    let needed_bytes = total.saturating_mul(8);
+
+    let Some(out_slice) = write_buffer(&env, &out_buf, needed_bytes) else {
+        return -1;
+    };
+
+    use rayon::prelude::*;
+    let slab_bytes = side_x * side_z * 8;
+    out_slice
+        .par_chunks_mut(slab_bytes)
+        .enumerate()
+        .for_each(|(iy, slab)| {
+            let by = origin_y + (iy as i32) * step_y;
+            for iz in 0..side_z {
+                let bz = origin_z + (iz as i32) * step_z;
+                for ix in 0..side_x {
+                    let bx = origin_x + (ix as i32) * step_x;
+                    let ctx = crate::density::FunctionContext::new(bx, by, bz);
+                    let v = df.compute(&ctx, state);
+                    let off = (iz * side_x + ix) * 8;
+                    slab[off..off + 8].copy_from_slice(&v.to_le_bytes());
+                }
+            }
+        });
+    total as jint
+}
+
+/// Phase 2: bulk per-block density buffer for an overworld chunk.
+///
+/// Computes the named DF (typically `ferrite:terrain/final_density`)
+/// over the chunk's full 16 × 384 × 16 block grid in one JNI call.
+/// Internal flow:
+///   1. Corner sample at the cell grid (5 × 49 × 5 = 1,225 cells, every
+///      `cellWidth=4` blocks X/Z, every `cellHeight=8` blocks Y).
+///      Parallel over Y slabs via Rayon.
+///   2. Per-block trilinear lerp from those corners using the
+///      cellHeight=8 Y spacing — matches vanilla's
+///      `NoiseInterpolator` math exactly.
+///   3. Write 98,304 f64 values into `out_buf`. Layout: row-major
+///      `(by, bz, bx)` — index `(by * 16 + bz) * 16 + bx`.
+///
+/// Output buffer must be at least `16 * 384 * 16 * 8 = 786,432` bytes.
+/// Caller passes the chunk's min-block X/Z; Y origin is fixed at -64
+/// (overworld). Returns total cells written or -1 on error.
+#[no_mangle]
+pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_populateNoiseBufferRust<'local>(
+    env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    name_buf: JByteBuffer<'local>,
+    name_len: jint,
+    chunk_min_block_x: jint,
+    chunk_min_block_z: jint,
+    out_buf: JByteBuffer<'local>,
+) -> jint {
+    const CHUNK: usize = 16;
+    const HEIGHT: usize = 384;
+    const MIN_Y: i32 = -64;
+    const CELL_WIDTH: i32 = 4;
+    const CELL_HEIGHT: i32 = 8;
+    const CORNER_X: usize = 5;
+    const CORNER_Y: usize = 49;
+    const CORNER_Z: usize = 5;
+    const CORNER_TOTAL: usize = CORNER_X * CORNER_Y * CORNER_Z;
+    const BLOCK_TOTAL: usize = CHUNK * HEIGHT * CHUNK;
+    const BLOCK_BYTES: usize = BLOCK_TOTAL * 8;
+
+    let Some(state) = worldgen_state() else { return -1; };
+    let name_len_usize = name_len.max(0) as usize;
+    let Some(name_bytes) = read_buffer(&env, &name_buf, name_len_usize) else { return -1; };
+    let Ok(name) = std::str::from_utf8(name_bytes) else { return -1; };
+    let Some(df) = state.density_functions.get(name) else { return -1; };
+
+    let Some(out_slice) = write_buffer(&env, &out_buf, BLOCK_BYTES) else { return -1; };
+
+    // ---- Step 1: corner sample at vanilla's cell grid ----
+    // Sequential — Rayon over-subscription with 4 concurrent chunkgen
+    // workers each spawning Rayon over all cores pushed JNI cost from
+    // 6.57 ms (single-thread bench) to 34 ms under contention. With
+    // sequential and N callers, each gets one core un-contended →
+    // total CPU usage is N cores, no over-subscription.
+    let mut corners = vec![0.0_f64; CORNER_TOTAL];
+    let corner_slab_len = CORNER_X * CORNER_Z;
+    corners
+        .chunks_mut(corner_slab_len)
+        .enumerate()
+        .for_each(|(iy, slab)| {
+            let by = MIN_Y + (iy as i32) * CELL_HEIGHT;
+            for iz in 0..CORNER_Z {
+                let bz = chunk_min_block_z + (iz as i32) * CELL_WIDTH;
+                for ix in 0..CORNER_X {
+                    let bx = chunk_min_block_x + (ix as i32) * CELL_WIDTH;
+                    let ctx = crate::density::FunctionContext::new(bx, by, bz);
+                    slab[iz * CORNER_X + ix] = df.compute(&ctx, state);
+                }
+            }
+        });
+
+    // ---- Step 2: per-block trilinear lerp into 16×384×16 buffer ----
+    let y_row_bytes = CHUNK * CHUNK * 8;
+    out_slice
+        .chunks_mut(y_row_bytes)
+        .enumerate()
+        .for_each(|(by_idx, y_row)| {
+            // by_idx 0..384 → blockY = MIN_Y + by_idx
+            let cell_y = (by_idx >> 3) as usize;       // 384 / 8 = 48 cells
+            let in_cell_y = by_idx & 7;
+            let fy = (in_cell_y as f64) / (CELL_HEIGHT as f64);
+            let qy_low = cell_y;
+            let qy_high = cell_y + 1;
+
+            for iz in 0..CHUNK {
+                let cell_z = iz >> 2;
+                let in_cell_z = iz & 3;
+                let fz = (in_cell_z as f64) / (CELL_WIDTH as f64);
+                let qz_low = cell_z;
+                let qz_high = cell_z + 1;
+
+                for ix in 0..CHUNK {
+                    let cell_x = ix >> 2;
+                    let in_cell_x = ix & 3;
+                    let fx = (in_cell_x as f64) / (CELL_WIDTH as f64);
+                    let qx_low = cell_x;
+                    let qx_high = cell_x + 1;
+
+                    let idx = |qy: usize, qz: usize, qx: usize| -> f64 {
+                        corners[(qy * CORNER_Z + qz) * CORNER_X + qx]
+                    };
+                    let v000 = idx(qy_low,  qz_low,  qx_low);
+                    let v100 = idx(qy_low,  qz_low,  qx_high);
+                    let v010 = idx(qy_high, qz_low,  qx_low);
+                    let v110 = idx(qy_high, qz_low,  qx_high);
+                    let v001 = idx(qy_low,  qz_high, qx_low);
+                    let v101 = idx(qy_low,  qz_high, qx_high);
+                    let v011 = idx(qy_high, qz_high, qx_low);
+                    let v111 = idx(qy_high, qz_high, qx_high);
+
+                    let l00 = v000 + fx * (v100 - v000);
+                    let l10 = v010 + fx * (v110 - v010);
+                    let l01 = v001 + fx * (v101 - v001);
+                    let l11 = v011 + fx * (v111 - v011);
+                    let l0 = l00 + fy * (l10 - l00);
+                    let l1 = l01 + fy * (l11 - l01);
+                    let v = l0 + fz * (l1 - l0);
+
+                    let off = (iz * CHUNK + ix) * 8;
+                    y_row[off..off + 8].copy_from_slice(&v.to_le_bytes());
+                }
+            }
+        });
+
+    BLOCK_TOTAL as jint
+}
+
 /// Sample biome at a quart-aligned coord. Returns -1 if any climate DF
 /// is missing or no biome matches.
 fn sample_biome_at(state: &crate::worldgen_state::WorldgenState, qx: jint, qy: jint, qz: jint) -> jint {

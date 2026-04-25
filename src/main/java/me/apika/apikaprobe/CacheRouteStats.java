@@ -157,6 +157,7 @@ public final class CacheRouteStats {
 		long n = totalCaptures.incrementAndGet();
 		if (n % SUMMARY_EVERY == 0) {
 			ExampleMod.LOGGER.info(summary());
+			ExampleMod.LOGGER.info(BulkInterpolatorFill.diagSummary());
 		}
 	}
 

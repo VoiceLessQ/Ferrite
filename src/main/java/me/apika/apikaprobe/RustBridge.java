@@ -330,6 +330,50 @@ public class RustBridge {
       int sideX, int sideY, int sideZ, int stepBlocks,
       java.nio.ByteBuffer outBuffer);
 
+  /**
+   * Phase 2.5 step 2b: 3D batch density sampler with separate per-axis
+   * steps (vanilla's interpolator slice fill uses cellWidth=4 horizontal,
+   * cellHeight=8 vertical — the unified {@code stepBlocks} above doesn't fit).
+   *
+   * <p>Output layout matches {@link #sampleDensityRegion3DRust}: row-major
+   * {@code (iy, iz, ix)} — index {@code (iy * sideZ + iz) * sideX + ix}.
+   *
+   * <p>For per-interpolator slice fill: {@code sideX=1, sideY=verticalCellCount+1,
+   * sideZ=horizontalCellCount+1, stepX=cellWidth, stepY=cellHeight, stepZ=cellWidth}.
+   *
+   * <p>Returns total cells written or -1 on error.
+   */
+  public static native int sampleDensitySlicesRust(
+      java.nio.ByteBuffer name, int nameLen,
+      int originX, int originY, int originZ,
+      int sideX, int sideY, int sideZ,
+      int stepX, int stepY, int stepZ,
+      java.nio.ByteBuffer outBuffer);
+
+  /**
+   * Phase 2: Bulk-fill an entire chunk's per-block density buffer in
+   * one JNI call. Internally:
+   * <ol>
+   *   <li>Sample {@code name} at the cell-corner grid
+   *       (5 × 49 × 5 = 1,225 corners; cellWidth=4 X/Z, cellHeight=8 Y).</li>
+   *   <li>Per-block trilinear lerp from those corners into the output
+   *       buffer, matching vanilla's NoiseInterpolator math.</li>
+   * </ol>
+   *
+   * <p>Output layout: row-major {@code (by, bz, bx)} —
+   * index {@code (by * 16 + bz) * 16 + bx} for the f64 density value at
+   * block {@code (chunkMinBlockX + bx, -64 + by, chunkMinBlockZ + bz)}.
+   * Buffer must hold at least {@code 16 * 384 * 16 * 8 = 786,432} bytes.
+   * Y is fixed at -64..319 (overworld).
+   *
+   * <p>Returns total cells written (98,304 for an overworld chunk) or
+   * -1 on error.
+   */
+  public static native int populateNoiseBufferRust(
+      java.nio.ByteBuffer name, int nameLen,
+      int chunkMinBlockX, int chunkMinBlockZ,
+      java.nio.ByteBuffer outBuffer);
+
   /** Count of registered density functions, or -1 if state not finalized. */
   public static native int densityFunctionCount();
 

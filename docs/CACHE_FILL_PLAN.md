@@ -30,6 +30,31 @@ Critical findings:
 2. `fillSlice` walks `this.interpolators` and `selectCellYZ` walks `this.cellCaches` — both are simple lists. We can mixin once into each method to coalesce *all* cache fills into one or two bulk Rust calls per phase.
 3. FlatCache fills eagerly in its constructor with `fill=true` — savings is bounded but cheap to swap.
 
+## Step 2b — infrastructure shipped, perf wall identified
+
+Built and verified end-to-end (commit `663316e` capture, this commit fill mixin):
+- `InterpolatorNameRegistry` — per-instance rustName side map populated by the capture mixin (records grow 1:1 with matched events; 0 fallbacks across 7k+ bulks).
+- `RustBridge.sampleDensitySlicesRust` — Rust JNI with separate per-axis steps (since vanilla overworld uses cellWidth=4 horizontal, cellHeight=8 vertical).
+- `BulkInterpolatorFill.fillAllSlices` — 9 sampleDensity calls/chunk × N interpolators × 1 JNI per interp; ThreadLocal scratch buffers; cached UTF-8 name encodings.
+- `BulkSampleDensityMixin` — `@Inject HEAD cancellable` on `ChunkNoiseSampler.sampleDensity`. Gated by `BulkInterpolatorFill.ENABLED` (default false). Falls back to vanilla wholesale if any interpolator lacks a registered name.
+
+Live measured perf with `-Dferrite.bulkSlice=true`:
+
+| Metric | Value | Vanilla baseline |
+|---|---|---|
+| bulk-slice JNI per call | 1500–2000 µs (~245 doubles) | n/a |
+| bulks per chunk | ~9 | n/a |
+| ms per bulk | 12–18 ms | n/a |
+| noise-sync per chunk | **100–220 ms** | **55–79 ms** |
+
+**Regression: ~1.5–2× slower than vanilla.** The mixin works (0 fallbacks, 100% capture), the parity infrastructure is correct, but the design loses to vanilla on perf. Same wall as Phase 1B.
+
+**Why:** vanilla's per-block compute is ~250 ns because every Marker(CacheOnce, X) inside slopedCheese is wrapped at chunk-wrap time into a CacheOnce wrapper that memoizes `X.compute()` per `interpolationCounter`. The same X gets evaluated once and reused across ~25 Y entries × subsequent updates. Our Rust DF interpreter has no equivalent — it walks the full subtree from scratch on every cell.
+
+For this design to win, the Rust DF interpreter would need its own CacheOnce-equivalent intermediate caching keyed on a per-batch counter. That's a meaningful scope expansion (caching layer in the Rust side, eviction logic, parity verification). Deferred — infrastructure shipped, ENABLED=false.
+
+**What this DOES unlock:** the registry + JNI + mixin scaffolding is production-grade and proven correct. Future work that fills caches via Rust (Track A, or a Rust DF interpreter with caching) plugs in here without re-doing the wiring.
+
 ## Step 2a — DONE (100% match across all three cache types)
 
 After a chain of fixes the observational mixin now sees:

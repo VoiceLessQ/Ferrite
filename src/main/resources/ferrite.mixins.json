@@ -43,7 +43,8 @@
 		"ChunkDecoratorTimingMixin",
 		"LightTimingMixin",
 		"ChunkNoiseSamplerMixin",
-		"CacheRouteCaptureMixin"
+		"CacheRouteCaptureMixin",
+		"BulkSampleDensityMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
