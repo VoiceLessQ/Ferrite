@@ -201,7 +201,7 @@ public final class WorldgenStateBootstrap {
 			// in NoiseChunk — gating Phase 1B of the noise port.
 			{"finalDensity", "ferrite:terrain/final_density"},
 		};
-		int registered = 0;
+		int rootRegistered = 0;
 		List<String> registeredNames = new ArrayList<>();
 		java.util.IdentityHashMap<Object, String> identityMap = new java.util.IdentityHashMap<>();
 		// Top-level router DFs we'll deep-walk after registration.
@@ -217,7 +217,7 @@ public final class WorldgenStateBootstrap {
 				ByteBuffer nameBuf = ByteBuffer.allocateDirect(nameBytes.length).order(ByteOrder.nativeOrder());
 				nameBuf.put(nameBytes); nameBuf.flip();
 				if (RustBridge.registerDensityFunction(nameBuf, nameBytes.length, bytecode, bytecode.limit())) {
-					registered++;
+					rootRegistered++;
 					registeredNames.add(field[1]);
 					// Track the live DF instance → registered name. Phase 2.5
 					// caches use this to identify which DF a wrapping marker
@@ -243,9 +243,6 @@ public final class WorldgenStateBootstrap {
 			totalDeepMarkers += r.markersFound;
 			totalDeepRegistered += r.markersRegistered;
 			totalDeepFailed += r.registrationFailures;
-			if (r.markersRegistered > 0) {
-				registered += r.markersRegistered;
-			}
 		}
 		ExampleMod.LOGGER.info(
 				"[worldgen-init] deep-marker walk: found={} registered={} failed={} mapSize={}",
@@ -260,9 +257,10 @@ public final class WorldgenStateBootstrap {
 			merged.addAll(registeredNames);
 			registeredDensityFunctionNames = Collections.unmodifiableList(merged);
 		}
-		ExampleMod.LOGGER.info("[worldgen-init] climate-router: registered {} of {} synthetic DFs ({})",
-				registered, climateFields.length, registeredNames);
-		return registered;
+		ExampleMod.LOGGER.info(
+				"[worldgen-init] climate-router: {} root DFs + {} deep markers registered ({})",
+				rootRegistered, totalDeepRegistered, registeredNames);
+		return rootRegistered + totalDeepRegistered;
 	}
 
 	/** Names of registered biomes, parallel to Rust's i32 IDs (slot

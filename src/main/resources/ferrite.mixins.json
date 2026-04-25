@@ -42,7 +42,8 @@
 		"MultiNoiseBiomeSourceRouteMixin",
 		"ChunkDecoratorTimingMixin",
 		"LightTimingMixin",
-		"ChunkNoiseSamplerMixin"
+		"ChunkNoiseSamplerMixin",
+		"CacheRouteCaptureMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
