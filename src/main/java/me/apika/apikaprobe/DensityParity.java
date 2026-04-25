@@ -216,7 +216,11 @@ public final class DensityParity {
 						String name = method.getName();
 						if (args != null && args.length == 1) {
 							String paramType = method.getParameterTypes()[0].getSimpleName();
-							if (paramType.contains("NoiseHolder")) {
+							// Yarn 1.21.11 renamed mojmap NoiseHolder to
+							// DensityFunction$Noise — SimpleName is just
+							// "Noise". Older "NoiseHolder" kept as forward
+							// compat fallback.
+							if (paramType.equals("Noise") || paramType.contains("NoiseHolder")) {
 								visitNoiseCalls.incrementAndGet();
 								return resolveNoiseHolder(args[0], noiseConfig, getOrCreateNoise);
 							}

@@ -150,6 +150,15 @@ public final class DensityFunctionWalker {
 			writeNode(out, inner);
 			return;
 		}
+		// BeardifierMarker is a singleton enum that returns 0.0 from
+		// compute() outside structure-warped regions — i.e. the ~99%
+		// case for normal terrain. Fold to constant. Tested before the
+		// generic Marker check below since "BeardifierMarker" contains
+		// "Marker" and would otherwise dispatch to encodeMarker (which
+		// expects a wrapped inner DF this enum doesn't have).
+		if (cls.contains("BeardifierMarker") || cls.equals("BeardifierOrMarker")) {
+			out.write(OP_CONSTANT); writeDouble(out, 0.0); return;
+		}
 
 		if (cls.contains("YClampedGradient") || cls.contains("ClampedYGradient") || cls.contains("YGradient")) {
 			encodeYClampedGradient(out, node); return;
