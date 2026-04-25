@@ -73,6 +73,16 @@ public abstract class CacheRouteCaptureMixin {
 		CacheRouteStats.record(cls, rustName);
 		if (rustName == null) {
 			CacheRouteStats.recordUnmatchedShape(cls, function.getClass().getSimpleName());
+			// One-shot dump of cellCache fingerprint hex prefix so we can
+			// diff against what we registered as the synthetic — only logs
+			// once per JVM via a sentinel inside CacheRouteStats.
+			if (cls.contains("CellCache") || cls.contains("CacheAllInCell")) {
+				Object inner = ferrite$callWrapped(returned);
+				if (inner != null) {
+					String fp = DensityFunctionWalker.fingerprint(inner);
+					CacheRouteStats.dumpCellCacheFingerprintOnce(fp);
+				}
+			}
 		}
 	}
 

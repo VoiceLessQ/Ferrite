@@ -190,16 +190,25 @@ public final class WorldgenStateBootstrap {
 		if (router == null) return 0;
 
 		String[][] climateFields = {
+			// Climate axes (6).
 			{"temperature", "ferrite:climate/temperature"},
 			{"vegetation", "ferrite:climate/vegetation"},
 			{"continents", "ferrite:climate/continents"},
 			{"erosion", "ferrite:climate/erosion"},
 			{"depth", "ferrite:climate/depth"},
 			{"ridges", "ferrite:climate/ridges"},
-			// Terrain DFs from the same router. finalDensity is the
-			// composed terrain density vanilla calls per-cell-corner
-			// in NoiseChunk — gating Phase 1B of the noise port.
+			// Terrain density (composed; per-cell-corner sampler).
+			{"initialDensityWithoutJaggedness", "ferrite:terrain/initial_density_without_jaggedness"},
 			{"finalDensity", "ferrite:terrain/final_density"},
+			// Aquifer / cave noises.
+			{"barrierNoise", "ferrite:aquifer/barrier"},
+			{"fluidLevelFloodednessNoise", "ferrite:aquifer/fluid_level_floodedness"},
+			{"fluidLevelSpreadNoise", "ferrite:aquifer/fluid_level_spread"},
+			{"lavaNoise", "ferrite:aquifer/lava"},
+			// Ore vein triplet.
+			{"veinToggle", "ferrite:vein/toggle"},
+			{"veinRidged", "ferrite:vein/ridged"},
+			{"veinGap", "ferrite:vein/gap"},
 		};
 		int rootRegistered = 0;
 		List<String> registeredNames = new ArrayList<>();

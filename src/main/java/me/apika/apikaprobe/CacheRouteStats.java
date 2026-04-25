@@ -50,6 +50,20 @@ public final class CacheRouteStats {
 	private static final AtomicLong totalCaptures = new AtomicLong();
 	private static final long SUMMARY_EVERY = 5000;
 
+	private static final java.util.concurrent.atomic.AtomicBoolean cellCacheFpDumped =
+			new java.util.concurrent.atomic.AtomicBoolean(false);
+
+	/** Dump the first unmatched cellCache fingerprint hex (truncated) so we
+	 *  can compare against {@code ferrite:synthetic/full_noise_density}. */
+	public static void dumpCellCacheFingerprintOnce(String fpHex) {
+		if (fpHex == null) return;
+		if (cellCacheFpDumped.compareAndSet(false, true)) {
+			String prefix = fpHex.length() > 96 ? fpHex.substring(0, 96) + "..." : fpHex;
+			ExampleMod.LOGGER.info("[cache-route] cellCache UNMATCHED fp={} (len={})",
+					prefix, fpHex.length());
+		}
+	}
+
 	/** Log first-seen unmatched (cacheType, inputClass) pair so we can
 	 *  see what shapes are missing without flooding the log. */
 	public static void recordUnmatchedShape(String cacheTypeSimpleName, String inputClassSimpleName) {
