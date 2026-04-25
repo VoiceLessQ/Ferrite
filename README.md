@@ -43,7 +43,7 @@ Two user-visible effects combine:
 
 > **Your results will vary.** Both tables are single data points on one CPU (Ryzen 9 5900X limited to 4 active cores via affinity) and specific worst-case workloads (concentrated zombie pile for cramming; clock-based lag machine for redstone). Real numbers depend on your hardware, the size and density of your mob farms or contraptions, other mods you run, and the specific redstone patterns you use. On CPU-bound hardware you'll likely see both the cascade-reduction and the TPS improvement; on unconstrained hardware the gate-throughput win (contraptions running visibly faster) persists but the TPS delta can disappear entirely because vanilla wasn't the bottleneck.
 
-Measurement details in [CHANGELOG.md](CHANGELOG.md), the full investigation path in [docs/PROFILING.md](docs/PROFILING.md), and a cross-port retrospective in [JOURNEY.md](JOURNEY.md).
+Measurement details in [CHANGELOG.md](CHANGELOG.md), the full investigation path in [docs/PROFILING.md](docs/PROFILING.md), and a cross-port retrospective in [docs/JOURNEY.md](docs/JOURNEY.md).
 
 ---
 
