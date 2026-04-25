@@ -203,6 +203,9 @@ public final class WorldgenStateBootstrap {
 		};
 		int registered = 0;
 		List<String> registeredNames = new ArrayList<>();
+		java.util.IdentityHashMap<Object, String> identityMap = new java.util.IdentityHashMap<>();
+		// Top-level router DFs we'll deep-walk after registration.
+		List<Object[]> rootDfs = new ArrayList<>();
 		for (String[] field : climateFields) {
 			try {
 				Method m = router.getClass().getMethod(field[0]);
@@ -216,11 +219,39 @@ public final class WorldgenStateBootstrap {
 				if (RustBridge.registerDensityFunction(nameBuf, nameBytes.length, bytecode, bytecode.limit())) {
 					registered++;
 					registeredNames.add(field[1]);
+					// Track the live DF instance → registered name. Phase 2.5
+					// caches use this to identify which DF a wrapping marker
+					// (FlatCache/Interpolated/etc.) is caching.
+					identityMap.put(df, field[1]);
+					rootDfs.add(new Object[]{df, field[1]});
 				}
 			} catch (ReflectiveOperationException ignored) {
 				// router doesn't expose this accessor in current yarn — skip
 			}
 		}
+		// Phase 2.5 step 1 — deep Marker walk. For every Marker reachable
+		// from any router root, register the wrapped subtree under
+		// `ferrite:auto/<root>/<kind>_<i>` and add `marker → name` to
+		// the identity map. Cache mixins use this to bulk-fill via Rust.
+		int totalDeepMarkers = 0;
+		int totalDeepRegistered = 0;
+		int totalDeepFailed = 0;
+		for (Object[] rootEntry : rootDfs) {
+			Object rootDf = rootEntry[0];
+			String rootName = (String) rootEntry[1];
+			DeepMarkerWalker.Result r = DeepMarkerWalker.walk(rootDf, rootName, identityMap);
+			totalDeepMarkers += r.markersFound;
+			totalDeepRegistered += r.markersRegistered;
+			totalDeepFailed += r.registrationFailures;
+			if (r.markersRegistered > 0) {
+				registered += r.markersRegistered;
+			}
+		}
+		ExampleMod.LOGGER.info(
+				"[worldgen-init] deep-marker walk: found={} registered={} failed={} mapSize={}",
+				totalDeepMarkers, totalDeepRegistered, totalDeepFailed, identityMap.size());
+		// Publish the identity map so cache wrappers can look up names.
+		identifiedRouterDfs = java.util.Collections.unmodifiableMap(identityMap);
 		// Merge synthetic names into the validator-visible list. Builder
 		// state was already published by registerDensityFunctions; we
 		// extend it so /ferrite density validate iterates these too.
@@ -381,6 +412,18 @@ public final class WorldgenStateBootstrap {
 	/** Names of density functions successfully pushed to Rust. Parallel
 	 *  to Rust's internal HashMap; used by the parity validator. */
 	private static volatile List<String> registeredDensityFunctionNames = Collections.emptyList();
+
+	/** IdentityHashMap of live DF instances → registered ferrite names.
+	 *  Phase 2.5 cache wrappers (RustFlatCache etc.) use this to identify
+	 *  which registered DF a vanilla `Marker(FlatCache, X)` is caching,
+	 *  so the wrapper can bulk-fill from the right Rust path. Populated
+	 *  by {@link #registerResolvedRouterClimateDfs}. */
+	private static volatile java.util.Map<Object, String> identifiedRouterDfs =
+			java.util.Collections.emptyMap();
+
+	public static java.util.Map<Object, String> identifiedRouterDfs() {
+		return identifiedRouterDfs;
+	}
 
 	public static List<String> registeredDensityFunctionNames() {
 		return registeredDensityFunctionNames;
