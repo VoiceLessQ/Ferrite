@@ -158,6 +158,13 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("on").executes(FerriteCommand::chunkForceOn))
 						.then(CommandManager.literal("off").executes(FerriteCommand::chunkForceOff))
 						.then(CommandManager.literal("status").executes(FerriteCommand::chunkForceStatus)))
+				.then(CommandManager.literal("noise")
+						.then(CommandManager.literal("rust")
+								.then(CommandManager.literal("on").executes(FerriteCommand::noiseRustOn))
+								.then(CommandManager.literal("off").executes(FerriteCommand::noiseRustOff))
+								.then(CommandManager.literal("status").executes(FerriteCommand::noiseRustStatus))
+								.then(CommandManager.literal("diag").executes(FerriteCommand::noiseRustDiag))
+								.then(CommandManager.literal("reset").executes(FerriteCommand::noiseRustReset))))
 				.then(CommandManager.literal("surface")
 						.then(CommandManager.literal("compile").executes(FerriteCommand::surfaceCompile))
 						.then(CommandManager.literal("stats").executes(FerriteCommand::surfaceStats))
@@ -1138,6 +1145,36 @@ public final class FerriteCommand {
 				ChunkForcer.scheduledCount(), ChunkForcer.completedCount(),
 				ChunkForcer.erroredCount());
 		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int noiseRustOn(CommandContext<ServerCommandSource> ctx) {
+		RustBlendedNoiseWrapper.ENABLED = true;
+		sendFeedback(ctx, "[noise-rust] ENABLED — newly-generated chunks substitute BlendedNoise leaves with Rust corner cache. Existing chunks unaffected.", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int noiseRustOff(CommandContext<ServerCommandSource> ctx) {
+		RustBlendedNoiseWrapper.ENABLED = false;
+		sendFeedback(ctx, "[noise-rust] disabled — newly-generated chunks use vanilla BlendedNoise.", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int noiseRustStatus(CommandContext<ServerCommandSource> ctx) {
+		sendFeedback(ctx, "[noise-rust] enabled=" + RustBlendedNoiseWrapper.ENABLED, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int noiseRustDiag(CommandContext<ServerCommandSource> ctx) {
+		String line = RustBlendedNoiseWrapper.diagSummary();
+		ExampleMod.LOGGER.info(line);
+		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int noiseRustReset(CommandContext<ServerCommandSource> ctx) {
+		RustBlendedNoiseWrapper.resetDiag();
+		sendFeedback(ctx, "[noise-rust] diagnostic counters reset", false);
 		return Command.SINGLE_SUCCESS;
 	}
 

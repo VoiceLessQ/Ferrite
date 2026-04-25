@@ -564,3 +564,57 @@ This unblocks Phase 1B (the actual noise hot-loop port). The math is
 proven; the remaining work is the trilinear `NoiseInterpolator` + the
 mixin wiring on `ChunkNoiseSampler.getInterpolatedDensity` /
 `getInterpolatedState`.
+
+---
+
+## Phase 1B attempt: four iterations, one wall
+
+### Step 1 + 2: register `finalDensity`, prove bulk JNI
+
+`ferrite:terrain/final_density` registered, validator at 41/42 pass
+(only `end/sloped_cheese` fails — EndIsland scoped out). Bench:
+`/ferrite density bench-region` returns 1,552 corner samples in 2.5 ms
+single-threaded vs 147 ms Java per-cell vanilla compute → **58× speedup
+in isolation, 0 mismatches at scale**. Rust path proven.
+
+Pushed: `b28165a`.
+
+### Step 3: in-pipeline mixin — four iterations
+
+| Version | Hook | Math | Perf | Status |
+|---|---|---|---|---|
+| v1 | `@Redirect finalDensity()` → wrapper, no `interpolated()` wrap, quart-Y lerp | Quart-Y discretization differs from vanilla's cell-Y | 130-210 ms / chunk | Striping artifacts at every 4-block-Y level |
+| v2 | Same + outer `interpolated()` wrap to delegate lerp to vanilla | Mathematically wrong: lerps full composed expression instead of just `base_3d_noise` | 100-220 ms / chunk | Visible mesa-stairs at high altitude |
+| v3 | `@Redirect`, no `interpolated()`, **cell-Y-aligned lerp** in wrapper | Visually-correct (snowy taiga screenshot looked vanilla) | 130-180 ms / chunk | Render distance shrinks — chunkgen pipeline can't keep up |
+| v4 | `@Inject HEAD on ChunkNoiseSampler.getActualDensityFunctionImpl` + surgical `BlendedNoise`-leaf swap | Bit-exact (corner=100% queries from vanilla `DensityInterpolator`) | 60-65 ms / chunk **= vanilla baseline** | Math right, no regression, no improvement |
+
+### What v4's diagnostic told us
+
+```
+[blended-rust diag]
+  wrappers=8,361 calls=13.5M (1613/chunk)
+  corner=100.0% subBlock=0
+  hits=8.7M fallbacks=4.7M
+  jni=2.70 ms avg
+```
+
+The surgical hypothesis was structurally correct — vanilla's `DensityInterpolator` queries us only at corners (~1,225 per chunk × ~3 dimensions touched per gen pass). JNI dropped to 2.7 ms (down from 58-90 ms in earlier full-finalDensity replacements). 35% fallbacks at chunk-edge corners (qx=4, qz=4, qy=80) — addressable with a bound fix but doesn't change the overall picture.
+
+**The wall:** vanilla's noise-sync isn't dominated by `BlendedNoise` corner sampling. Replacing it with a memory-fast leaf saves only ~5-10 ms per chunk, lost in the noise of vanilla's own variance. Vanilla's per-block `Add(NoiseInterpolator(base_3d_noise), composed_factor_offset_jaggedness)` evaluation, `CacheAllInCell` infrastructure, and block-state placement collectively dominate.
+
+### Lessons learned, ranked
+
+1. **You cannot beat vanilla's hot path by surgically replacing one leaf.** Vanilla's pipeline is heavily-cached and tightly-tuned at every level. Each leaf substitution gives only its own slice's worth of work — and the heaviest single leaf isn't necessarily worth >10 ms / chunk.
+2. **The math is *easy* (proven 100% bit-exact at scale); the hot-path competition is the war we cannot win at this depth.**
+3. **Off-thread prewarm worked for biome lookups because vanilla wasn't already caching biome IDs.** Vanilla's noise pipeline already caches *everything*, so the "move work off-thread" trick has no slack to exploit.
+4. **Phase 2 (full Rust port of `NoiseChunk` cell iteration + interpolation) is the only path that wins** — not because the math is harder, but because we need to own enough of the pipeline that vanilla's optimized infrastructure is *replaced*, not *competed with*.
+
+### Test discipline note
+
+All Phase 1B perf measurements were taken with **only `noise rust` toggled** — `prewarm`, `chunkforce`, and `RustBiomeRouter` were OFF (their defaults). For Phase 2's baseline we should enable the full Ferrite stack so we measure compounded effect, not isolated leaf swap.
+
+### v4 shipped as checkpoint, not as win
+
+v4 stays in tree as a perf-neutral correctness reference. `/ferrite noise rust on/off/diag/reset` lives in `FerriteCommand`. The Rust-side `sampleDensityRegion3DRust` JNI is reused by future Phase 2 work. Re-disabled by default; users who toggle it on get vanilla terrain at vanilla speed (no value, no regression).
+
+Phase 2 starts fresh against the full vanilla `NoiseChunk` constructor + state machine + cell iteration loop. Re-scope from inventory pass; don't try to thread it through vanilla's wrap chain.
