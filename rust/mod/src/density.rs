@@ -168,6 +168,89 @@ pub enum DensityFunction {
     /// over one or more coordinate DFs. Used by the overworld's
     /// `offset` / `factor` / `jaggedness` terrain shape formulas.
     Spline(Box<DfSpline>),
+
+    /// Vanilla `BlendedNoise` (yarn `InterpolatedNoiseSampler`) — main
+    /// 3D terrain density. Wrapped in [`LazyBlendedNoise`] because the
+    /// underlying noise tables need a seeded `XoroshiroRandomSource`
+    /// derived from `state.root_factory`, which isn't available at
+    /// parse time. The cache is shared across enum clones.
+    BlendedNoise(LazyBlendedNoise),
+}
+
+/// Lazy wrapper around [`crate::perlin::BlendedNoise`].
+///
+/// <p>The 5 scalar parameters come from vanilla's
+/// `InterpolatedNoiseSampler` constructor and are written into the DF
+/// bytecode at encode time. The actual noise tables are seeded from
+/// `state.root_factory.from_hash_of("minecraft:terrain")` on first
+/// `sample` call and cached forever after via an internal `OnceLock`.
+///
+/// <p>Cloning is cheap (`Arc` refcount bump) and shares the cache —
+/// so cloning the parent `DensityFunction` enum doesn't reset the
+/// noise initialization.
+#[derive(Debug)]
+pub struct LazyBlendedNoise {
+    pub xz_scale: f64,
+    pub y_scale: f64,
+    pub xz_factor: f64,
+    pub y_factor: f64,
+    pub smear_scale_multiplier: f64,
+    cache: std::sync::Arc<std::sync::OnceLock<crate::perlin::BlendedNoise>>,
+}
+
+impl Clone for LazyBlendedNoise {
+    fn clone(&self) -> Self {
+        Self {
+            xz_scale: self.xz_scale,
+            y_scale: self.y_scale,
+            xz_factor: self.xz_factor,
+            y_factor: self.y_factor,
+            smear_scale_multiplier: self.smear_scale_multiplier,
+            cache: std::sync::Arc::clone(&self.cache),
+        }
+    }
+}
+
+impl LazyBlendedNoise {
+    pub fn new(
+        xz_scale: f64,
+        y_scale: f64,
+        xz_factor: f64,
+        y_factor: f64,
+        smear_scale_multiplier: f64,
+    ) -> Self {
+        Self {
+            xz_scale,
+            y_scale,
+            xz_factor,
+            y_factor,
+            smear_scale_multiplier,
+            cache: std::sync::Arc::new(std::sync::OnceLock::new()),
+        }
+    }
+
+    /// Materialize the underlying `BlendedNoise` if not yet done, then
+    /// sample at integer block coords. Vanilla casts coords to f64
+    /// before its multipliers — we mirror that exactly.
+    pub fn sample(&self, state: &crate::worldgen_state::WorldgenState, x: i32, y: i32, z: i32) -> f64 {
+        let bn = self.cache.get_or_init(|| {
+            // Vanilla `RandomState`: terrainRandom comes from
+            // `random.fromHashOf("minecraft:terrain")`. All BlendedNoise
+            // instances in the same RandomState share this derivation —
+            // their differences are in the static scale params, not the
+            // noise tables.
+            let mut terrain = state.root_factory.from_hash_of("minecraft:terrain");
+            crate::perlin::BlendedNoise::new(
+                &mut terrain,
+                self.xz_scale,
+                self.y_scale,
+                self.xz_factor,
+                self.y_factor,
+                self.smear_scale_multiplier,
+            )
+        });
+        bn.sample(x as f64, y as f64, z as f64)
+    }
 }
 
 /// Vanilla `DensityFunctions.WeirdScaledSampler.RarityValueMapper`.
@@ -465,6 +548,7 @@ pub mod opcode {
     pub const SHIFTED_NOISE: u8 = 0x14;
     pub const WEIRD_SCALED_SAMPLER: u8 = 0x15;
     pub const SPLINE: u8 = 0x16;
+    pub const BLENDED_NOISE: u8 = 0x17;
 
     // Spline sub-opcodes.
     pub const SPLINE_CONSTANT: u8 = 0x00;
@@ -583,6 +667,17 @@ fn parse_node(bytes: &[u8], c: &mut usize) -> Result<DensityFunction, String> {
             })
         }
         opcode::SPLINE => Ok(DensityFunction::Spline(Box::new(parse_spline(bytes, c)?))),
+        opcode::BLENDED_NOISE => {
+            // Five doubles in vanilla's InterpolatedNoiseSampler ctor order.
+            let xz_scale = read_f64(bytes, c)?;
+            let y_scale = read_f64(bytes, c)?;
+            let xz_factor = read_f64(bytes, c)?;
+            let y_factor = read_f64(bytes, c)?;
+            let smear = read_f64(bytes, c)?;
+            Ok(DensityFunction::BlendedNoise(LazyBlendedNoise::new(
+                xz_scale, y_scale, xz_factor, y_factor, smear,
+            )))
+        }
         other => Err(format!("unknown DF opcode: 0x{:02x} at offset {}", other, *c - 1)),
     }
 }
@@ -802,6 +897,10 @@ impl DensityFunction {
             }
 
             DensityFunction::Spline(spline) => spline.apply(ctx, state) as f64,
+
+            DensityFunction::BlendedNoise(lazy) => {
+                lazy.sample(state, ctx.block_x, ctx.block_y, ctx.block_z)
+            }
         }
     }
 
@@ -876,6 +975,13 @@ impl DensityFunction {
             DensityFunction::WeirdScaledSampler { .. } => 0.0,
 
             DensityFunction::Spline(spline) => spline.min_value_of() as f64,
+
+            // Vanilla BlendedNoise.minValue = -maxValue (see vanilla
+            // BlendedNoise.minValue()/maxValue()). Without instantiation
+            // we don't know the precise max — return -INFINITY so Min
+            // short-circuits never falsely trigger; the cost is just a
+            // missed perf optimization on Min(blended, ...) paths.
+            DensityFunction::BlendedNoise(_) => f64::NEG_INFINITY,
         }
     }
 
@@ -932,6 +1038,9 @@ impl DensityFunction {
             } => rarity_value_mapper.max_rarity() * Self::noise_max_default(noise_name),
 
             DensityFunction::Spline(spline) => spline.max_value_of() as f64,
+
+            // See min_value() — INFINITY for the same reason.
+            DensityFunction::BlendedNoise(_) => f64::INFINITY,
         }
     }
 

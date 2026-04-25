@@ -224,7 +224,27 @@ public final class DensityParity {
 								visitNoiseCalls.incrementAndGet();
 								return resolveNoiseHolder(args[0], noiseConfig, getOrCreateNoise);
 							}
-							// Otherwise treat as structural apply.
+							// Structural apply. BlendedNoise / InterpolatedNoiseSampler
+							// instances in the registry are seeded with 0L
+							// (createUnseeded). Vanilla's RandomState re-seeds them
+							// via `noise.withNewRandom(terrainRandom)` where
+							// terrainRandom = `random.fromHashOf("minecraft:terrain")`.
+							// Mirror that here so the vanilla-side reference matches
+							// the world's actual seeded noise.
+							Object child = args[0];
+							if (child != null) {
+								String childCls = child.getClass().getSimpleName();
+								if (childCls.equals("InterpolatedNoiseSampler")
+										|| childCls.equals("BlendedNoise")
+										|| childCls.contains("InterpolatedNoiseSampler")
+										|| childCls.contains("BlendedNoise")) {
+									Object reseeded = reseedBlendedNoise(child, noiseConfig);
+									if (reseeded != null) {
+										applyCalls.incrementAndGet();
+										return reseeded;
+									}
+								}
+							}
 							applyCalls.incrementAndGet();
 							return args[0];
 						}
@@ -257,6 +277,134 @@ public final class DensityParity {
 			ExampleMod.LOGGER.info("[df-parity] resolver on {}: apply={} visitNoise={}",
 					dfClass, applyCalls, visitNoiseCalls);
 		}
+	}
+
+	/**
+	 * Re-seed a registry BlendedNoise / InterpolatedNoiseSampler with
+	 * the world's terrain random — same as RandomState's NoiseWiringHelper
+	 * does internally via `noise.withNewRandom(terrainRandom)`.
+	 *
+	 * <p>Yarn 1.21.11 renames:
+	 * - {@code PositionalRandomFactory} → {@code RandomSplitter}
+	 * - {@code fromHashOf(String)} → {@code split(String)}
+	 * - {@code withNewRandom(RandomSource)} → {@code copyWithRandom(Random)}
+	 *
+	 * <p>Returns the re-seeded instance or null on any reflection failure
+	 * (caller falls through to the unresolved instance).
+	 */
+	private static final java.util.concurrent.atomic.AtomicBoolean reseedLogged =
+			new java.util.concurrent.atomic.AtomicBoolean(false);
+
+	private static Object reseedBlendedNoise(Object blendedNoise, Object noiseConfig) {
+		boolean log = reseedLogged.compareAndSet(false, true);
+		try {
+			Object splitter = findFieldByTypeContains(noiseConfig,
+					new String[]{"RandomSplitter", "RandomDeriver", "PositionalRandomFactory", "RandomFactory"});
+			if (splitter == null) {
+				if (log) ExampleMod.LOGGER.warn("[df-parity] reseed: no splitter on noiseConfig {}", noiseConfig.getClass().getName());
+				return null;
+			}
+			if (log) ExampleMod.LOGGER.info("[df-parity] reseed: splitter type {}", splitter.getClass().getName());
+
+			Method splitMethod = findStringMethod(splitter,
+					new String[]{"split", "fromHashOf", "fromHashOfString"});
+			if (splitMethod == null) {
+				if (log) ExampleMod.LOGGER.warn("[df-parity] reseed: no split(String) on splitter");
+				return null;
+			}
+			if (log) ExampleMod.LOGGER.info("[df-parity] reseed: split method = {}", splitMethod.getName());
+			Object terrainRandom = splitMethod.invoke(splitter, "minecraft:terrain");
+			if (terrainRandom == null) {
+				if (log) ExampleMod.LOGGER.warn("[df-parity] reseed: terrainRandom null");
+				return null;
+			}
+			if (log) ExampleMod.LOGGER.info("[df-parity] reseed: terrainRandom type {}", terrainRandom.getClass().getName());
+
+			Method copyWith = findSingleArgMethod(blendedNoise,
+					new String[]{"copyWithRandom", "withNewRandom"},
+					terrainRandom.getClass());
+			if (copyWith == null) {
+				if (log) ExampleMod.LOGGER.warn("[df-parity] reseed: no copyWithRandom on {} matching arg {}",
+						blendedNoise.getClass().getName(), terrainRandom.getClass().getName());
+				return null;
+			}
+			if (log) ExampleMod.LOGGER.info("[df-parity] reseed: copyWith method = {}", copyWith.getName());
+			Object result = copyWith.invoke(blendedNoise, terrainRandom);
+			if (log) ExampleMod.LOGGER.info("[df-parity] reseed: success — new instance {}", result == null ? "null" : "ok");
+			return result;
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			if (log) ExampleMod.LOGGER.warn("[df-parity] reseed: exception {}", e.toString());
+			return null;
+		}
+	}
+
+	private static Object findFieldByTypeContains(Object obj, String[] typeHints) {
+		Class<?> cls = obj.getClass();
+		while (cls != null && cls != Object.class) {
+			for (java.lang.reflect.Field f : cls.getDeclaredFields()) {
+				String typeName = f.getType().getSimpleName();
+				for (String hint : typeHints) {
+					if (typeName.contains(hint)) {
+						f.setAccessible(true);
+						try {
+							Object v = f.get(obj);
+							if (v != null) return v;
+						} catch (IllegalAccessException ignored) { /* next */ }
+					}
+				}
+			}
+			cls = cls.getSuperclass();
+		}
+		return null;
+	}
+
+	private static Method findStringMethod(Object target, String[] names) {
+		Class<?> cls = target.getClass();
+		while (cls != null && cls != Object.class) {
+			for (Method m : cls.getDeclaredMethods()) {
+				if (m.getParameterCount() != 1) continue;
+				if (m.getParameterTypes()[0] != String.class) continue;
+				for (String n : names) {
+					if (m.getName().equals(n)) {
+						m.setAccessible(true);
+						return m;
+					}
+				}
+			}
+			for (Class<?> iface : cls.getInterfaces()) {
+				for (Method m : iface.getDeclaredMethods()) {
+					if (m.getParameterCount() != 1) continue;
+					if (m.getParameterTypes()[0] != String.class) continue;
+					for (String n : names) {
+						if (m.getName().equals(n)) {
+							m.setAccessible(true);
+							return m;
+						}
+					}
+				}
+			}
+			cls = cls.getSuperclass();
+		}
+		return null;
+	}
+
+	private static Method findSingleArgMethod(Object target, String[] names, Class<?> argType) {
+		Class<?> cls = target.getClass();
+		while (cls != null && cls != Object.class) {
+			for (Method m : cls.getDeclaredMethods()) {
+				if (m.getParameterCount() != 1) continue;
+				Class<?> p = m.getParameterTypes()[0];
+				if (!p.isAssignableFrom(argType)) continue;
+				for (String n : names) {
+					if (m.getName().equals(n)) {
+						m.setAccessible(true);
+						return m;
+					}
+				}
+			}
+			cls = cls.getSuperclass();
+		}
+		return null;
 	}
 
 	private static Method findGetOrCreateNoise(Object noiseConfig) {

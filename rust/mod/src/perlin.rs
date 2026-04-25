@@ -324,6 +324,7 @@ pub fn wrap(x: f64) -> f64 {
 /// `noise_levels[i]` is `None` if its amplitude is 0 (vanilla skips
 /// constructing the `ImprovedNoise` in that case to save random draws,
 /// modulo the legacy-init `skipOctave` accounting).
+#[derive(Debug)]
 pub struct PerlinNoise {
     pub first_octave: i32,
     pub amplitudes: Vec<f64>,
@@ -641,6 +642,156 @@ impl NormalNoise {
     #[inline]
     pub fn max_value(&self) -> f64 {
         self.max_value
+    }
+}
+
+// ============================================================================
+// BlendedNoise — vanilla's main 3D terrain density (yarn InterpolatedNoiseSampler)
+// ============================================================================
+
+/// Direct port of vanilla `BlendedNoise` (yarn `InterpolatedNoiseSampler`).
+///
+/// <p>Three legacy-Perlin chains drive the sample:
+/// - `min_limit_noise` — 16 octaves over `(-15..=0)`
+/// - `max_limit_noise` — 16 octaves over `(-15..=0)`
+/// - `main_noise`      — 8 octaves over `(-7..=0)`
+///
+/// The chains are seeded sequentially from the same `XoroshiroRandomSource`,
+/// so order is significant. `compute(x, y, z)` interpolates between the
+/// min and max noise sums by a factor derived from the main noise.
+///
+/// Constructor parameters mirror vanilla's record:
+/// - `xz_scale` / `y_scale` — multiplied by `684.412` to get the limit
+///   sample multipliers.
+/// - `xz_factor` / `y_factor` — the main noise samples at limit
+///   coords divided by these.
+/// - `smear_scale_multiplier` — y-scale smearing factor for
+///   `ImprovedNoise.noise(x,y,z, yScale, yLimit)` calls.
+#[derive(Debug)]
+pub struct BlendedNoise {
+    pub min_limit: PerlinNoise,
+    pub max_limit: PerlinNoise,
+    pub main: PerlinNoise,
+    xz_multiplier: f64,
+    y_multiplier: f64,
+    xz_factor: f64,
+    y_factor: f64,
+    smear_scale_multiplier: f64,
+    pub max_value: f64,
+}
+
+impl BlendedNoise {
+    /// Vanilla `new BlendedNoise(random, xzScale, yScale, xzFactor, yFactor, smearScaleMultiplier)` —
+    /// the public constructor that consumes a `XoroshiroRandomSource`
+    /// to seed the three legacy-Perlin chains in order.
+    pub fn new(
+        random: &mut XoroshiroRandomSource,
+        xz_scale: f64,
+        y_scale: f64,
+        xz_factor: f64,
+        y_factor: f64,
+        smear_scale_multiplier: f64,
+    ) -> Self {
+        // Vanilla `IntStream.rangeClosed(-15, 0)` → 16 octaves.
+        let limit_octaves: Vec<i32> = (-15..=0).collect();
+        // Vanilla `IntStream.rangeClosed(-7, 0)` → 8 octaves.
+        let main_octaves: Vec<i32> = (-7..=0).collect();
+
+        let min_limit = PerlinNoise::create_legacy_for_blended_noise(random, &limit_octaves);
+        let max_limit = PerlinNoise::create_legacy_for_blended_noise(random, &limit_octaves);
+        let main = PerlinNoise::create_legacy_for_blended_noise(random, &main_octaves);
+
+        let xz_multiplier = 684.412 * xz_scale;
+        let y_multiplier = 684.412 * y_scale;
+        let max_value = min_limit.max_broken_value(y_multiplier);
+
+        Self {
+            min_limit,
+            max_limit,
+            main,
+            xz_multiplier,
+            y_multiplier,
+            xz_factor,
+            y_factor,
+            smear_scale_multiplier,
+            max_value,
+        }
+    }
+
+    /// Vanilla `compute(FunctionContext)` — samples at integer block
+    /// coords. Returns the interpolated terrain density.
+    ///
+    /// Block coords are passed as `f64` so the caller can pre-cast
+    /// (vanilla casts `(double) blockX` etc. before multiplying).
+    pub fn sample(&self, x: f64, y: f64, z: f64) -> f64 {
+        let limit_x = x * self.xz_multiplier;
+        let limit_y = y * self.y_multiplier;
+        let limit_z = z * self.xz_multiplier;
+        let main_x = limit_x / self.xz_factor;
+        let main_y = limit_y / self.y_factor;
+        let main_z = limit_z / self.xz_factor;
+        let limit_smear = self.y_multiplier * self.smear_scale_multiplier;
+        let main_smear = limit_smear / self.y_factor;
+
+        // Pass 1: 8 octaves of mainNoise to compute the blend factor.
+        let mut main_noise_value = 0.0_f64;
+        let mut pow = 1.0_f64;
+        for i in 0..8 {
+            if let Some(noise) = self.main.get_octave_noise(i) {
+                main_noise_value += noise.noise_with_yfudge(
+                    wrap(main_x * pow),
+                    wrap(main_y * pow),
+                    wrap(main_z * pow),
+                    main_smear * pow,
+                    main_y * pow,
+                ) / pow;
+            }
+            pow /= 2.0;
+        }
+
+        let factor = (main_noise_value / 10.0 + 1.0) / 2.0;
+        let is_max = factor >= 1.0;
+        let is_min = factor <= 0.0;
+
+        // Pass 2: 16 octaves each of min/max limit noises, skipping the
+        // chain that won't contribute (when factor is at an extreme).
+        let mut blend_min = 0.0_f64;
+        let mut blend_max = 0.0_f64;
+        let mut pow = 1.0_f64;
+        for i in 0..16 {
+            let wx = wrap(limit_x * pow);
+            let wy = wrap(limit_y * pow);
+            let wz = wrap(limit_z * pow);
+            let y_scale_pow = limit_smear * pow;
+            if !is_max {
+                if let Some(min_noise) = self.min_limit.get_octave_noise(i) {
+                    blend_min +=
+                        min_noise.noise_with_yfudge(wx, wy, wz, y_scale_pow, limit_y * pow) / pow;
+                }
+            }
+            if !is_min {
+                if let Some(max_noise) = self.max_limit.get_octave_noise(i) {
+                    blend_max +=
+                        max_noise.noise_with_yfudge(wx, wy, wz, y_scale_pow, limit_y * pow) / pow;
+                }
+            }
+            pow /= 2.0;
+        }
+
+        clamped_lerp(factor, blend_min / 512.0, blend_max / 512.0) / 128.0
+    }
+}
+
+/// Vanilla `Mth.clampedLerp(t, lo, hi)` — t outside `[0,1]` returns the
+/// nearest endpoint instead of extrapolating.
+#[inline]
+pub fn clamped_lerp(t: f64, lo: f64, hi: f64) -> f64 {
+    if t < 0.0 {
+        lo
+    } else if t > 1.0 {
+        hi
+    } else {
+        lerp(t, lo, hi)
     }
 }
 

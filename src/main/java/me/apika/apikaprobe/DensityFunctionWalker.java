@@ -78,6 +78,7 @@ public final class DensityFunctionWalker {
 	private static final int OP_SHIFTED_NOISE = 0x14;
 	private static final int OP_WEIRD_SCALED_SAMPLER = 0x15;
 	private static final int OP_SPLINE = 0x16;
+	private static final int OP_BLENDED_NOISE = 0x17;
 	private static final int OP_SPLINE_CONSTANT = 0x00;
 	private static final int OP_SPLINE_MULTIPOINT = 0x01;
 	private static final int MARKER_INTERPOLATED = 0;
@@ -174,6 +175,15 @@ public final class DensityFunctionWalker {
 			encodeRangeChoice(out, node); return;
 		}
 		if (cls.contains("Constant")) { encodeConstant(out, node); return; }
+		// Yarn `InterpolatedNoiseSampler` (mojmap `BlendedNoise`) — vanilla's
+		// main 3D terrain density. Tested before the generic "Noise" catch
+		// since "InterpolatedNoiseSampler" contains "Noise" and would
+		// otherwise dispatch to encodeNoise (which expects xzScale/yScale +
+		// a NoiseHolder field, not the 5-scalar BlendedNoise shape).
+		if (cls.equals("InterpolatedNoiseSampler") || cls.endsWith("$InterpolatedNoiseSampler")
+				|| cls.contains("BlendedNoise")) {
+			encodeBlendedNoise(out, node); return;
+		}
 		if (cls.contains("Noise")) { encodeNoise(out, node); return; }
 		if (cls.contains("Clamp")) { encodeClamp(out, node); return; }
 		if (cls.contains("Spline")) { encodeSpline(out, node); return; }
@@ -345,6 +355,38 @@ public final class DensityFunctionWalker {
 		writeDouble(out, yScale == null ? 1.0 : yScale);
 		String name = resolveNoiseName(invokeAny(node, new String[]{"noise"}));
 		writeString(out, name);
+	}
+
+	/** Yarn `InterpolatedNoiseSampler` / mojmap `BlendedNoise` — encode the
+	 *  5 scalar config doubles (xzScale, yScale, xzFactor, yFactor,
+	 *  smearScaleMultiplier). The 3 internal Perlin chains are not
+	 *  serialized; Rust re-seeds them at first sample using the world's
+	 *  master Xoroshiro forked from `from_hash_of("minecraft:terrain")`. */
+	private static final java.util.concurrent.atomic.AtomicBoolean blendedNoiseLogged =
+			new java.util.concurrent.atomic.AtomicBoolean(false);
+
+	private static void encodeBlendedNoise(ByteArrayOutputStream out, Object node) {
+		out.write(OP_BLENDED_NOISE);
+		// InterpolatedNoiseSampler is a class (not a record), so its
+		// scale params are FIELDS, not no-arg accessor methods. Read by
+		// field name with field-reflection. Method-based readDoubleAny
+		// returns null on a class, leaving us with bogus 1.0 defaults.
+		Double xzScale = readDoubleFieldAny(node, new String[]{"xzScale"});
+		Double yScale = readDoubleFieldAny(node, new String[]{"yScale"});
+		Double xzFactor = readDoubleFieldAny(node, new String[]{"xzFactor"});
+		Double yFactor = readDoubleFieldAny(node, new String[]{"yFactor"});
+		Double smear = readDoubleFieldAny(node, new String[]{"smearScaleMultiplier"});
+		if (blendedNoiseLogged.compareAndSet(false, true)) {
+			ExampleMod.LOGGER.info(
+					"[df-walker] encodeBlendedNoise on {}: xzScale={} yScale={} xzFactor={} yFactor={} smear={}",
+					node.getClass().getName(),
+					xzScale, yScale, xzFactor, yFactor, smear);
+		}
+		writeDouble(out, xzScale == null ? 1.0 : xzScale);
+		writeDouble(out, yScale == null ? 1.0 : yScale);
+		writeDouble(out, xzFactor == null ? 1.0 : xzFactor);
+		writeDouble(out, yFactor == null ? 1.0 : yFactor);
+		writeDouble(out, smear == null ? 1.0 : smear);
 	}
 
 	private static void encodeWeirdScaledSampler(ByteArrayOutputStream out, Object node) {
@@ -626,6 +668,31 @@ public final class DensityFunctionWalker {
 		for (String n : names) {
 			Object v = invokeNoArg(o, n);
 			if (v instanceof Double d) return d;
+		}
+		return null;
+	}
+
+	/** Field-based double reader. Use for non-record classes where the
+	 *  yarn shape is `private final double xzScale;` with no auto-accessor
+	 *  (e.g. InterpolatedNoiseSampler). Walks the class hierarchy and
+	 *  unboxes either {@code double} or {@link Double} typed fields. */
+	private static Double readDoubleFieldAny(Object o, String[] names) {
+		Class<?> cls = o.getClass();
+		while (cls != null && cls != Object.class) {
+			for (String n : names) {
+				try {
+					java.lang.reflect.Field f = cls.getDeclaredField(n);
+					f.setAccessible(true);
+					Object v = f.get(o);
+					if (v instanceof Double d) return d;
+					if (f.getType() == double.class) return f.getDouble(o);
+				} catch (NoSuchFieldException ignored) {
+					// next name
+				} catch (IllegalAccessException ignored) {
+					// next name
+				}
+			}
+			cls = cls.getSuperclass();
 		}
 		return null;
 	}
