@@ -30,6 +30,48 @@ Critical findings:
 2. `fillSlice` walks `this.interpolators` and `selectCellYZ` walks `this.cellCaches` — both are simple lists. We can mixin once into each method to coalesce *all* cache fills into one or two bulk Rust calls per phase.
 3. FlatCache fills eagerly in its constructor with `fill=true` — savings is bounded but cheap to swap.
 
+## Step 2b/3 — batch interpreter scaffolding (perf neutral, design correct)
+
+Added `DensityFunction::compute_batch(xs, ys, zs, state, out)` to
+`rust/mod/src/density.rs` — batch evaluation across N positions with
+intermediate-result scratch arrays acting as implicit per-batch caches.
+Implemented for all opcodes; Spline & BlendedNoise fall back to
+per-cell loops.
+
+Wired `sampleDensitySlicesRust` to use it: each Rayon-parallel Y slab
+builds position arrays and calls `compute_batch` once, replacing the
+prior per-cell tight loop.
+
+Live measurement vs per-cell baseline:
+
+| Path | µs per JNI call | ms per bulk |
+|---|---|---|
+| Per-cell compute | 1500–2000 | 12–18 |
+| Batch compute | 2000–2400 | 14–18 |
+
+**Slight regression** (~25%). Why batch didn't win:
+
+1. The cheap ops we batched (Add/Mul/Squeeze/etc.) were already
+   nanoseconds each. Their cost is dwarfed by the heavy ops.
+2. The heavy ops (Spline, BlendedNoise, Noise, ShiftedNoise) still go
+   per-cell in tight loops. Same work as before.
+3. Per-recursion-level `Vec<f64>::with_capacity(245)` allocations
+   stack up. ~30-40 vecs allocated per JNI call × 144 calls/chunk
+   = ~11 MB allocation churn per chunk. Eats the cheap-op savings.
+
+To actually win, the next move is one of:
+
+- **Allocation pool** — thread-local arena for scratch buffers,
+  borrow-return pattern. Brings batch to neutral.
+- **Batch BlendedNoise** — the dominant op. Per-position perlin chain
+  is already hot, but batching could amortize the 3-way blend
+  arithmetic and the Y-axis interpolation.
+- **Batch Spline** — coordinate eval over positions, then per-position
+  piecewise interpolation with shared spline table.
+
+Default ENABLED=false. The infrastructure is correct (0 fallbacks,
+parity preserved) and ready for follow-up.
+
 ## Step 2b — infrastructure shipped, perf wall identified
 
 Built and verified end-to-end (commit `663316e` capture, this commit fill mixin):

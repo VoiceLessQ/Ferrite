@@ -674,22 +674,39 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_sampleDensitySlicesRu
         return -1;
     };
 
+    // Pre-build position arrays so each Rayon-parallel Y slab can call
+    // compute_batch over its (side_z * side_x) cells in one tree walk.
+    // Batched evaluation amortizes intermediate-result computation
+    // across positions — replaces vanilla's CacheOnce-style memoization
+    // with implicit per-batch caching via temp arrays. Net: same number
+    // of perlin samples + opcodes, but with tight inner loops the
+    // compiler can vectorize.
     use rayon::prelude::*;
     let slab_bytes = side_x * side_z * 8;
+    let xz_count = side_x * side_z;
     out_slice
         .par_chunks_mut(slab_bytes)
         .enumerate()
         .for_each(|(iy, slab)| {
             let by = origin_y + (iy as i32) * step_y;
+            // Build position arrays for this Y slab.
+            let mut xs = Vec::with_capacity(xz_count);
+            let mut ys = Vec::with_capacity(xz_count);
+            let mut zs = Vec::with_capacity(xz_count);
             for iz in 0..side_z {
                 let bz = origin_z + (iz as i32) * step_z;
                 for ix in 0..side_x {
                     let bx = origin_x + (ix as i32) * step_x;
-                    let ctx = crate::density::FunctionContext::new(bx, by, bz);
-                    let v = df.compute(&ctx, state);
-                    let off = (iz * side_x + ix) * 8;
-                    slab[off..off + 8].copy_from_slice(&v.to_le_bytes());
+                    xs.push(bx);
+                    ys.push(by);
+                    zs.push(bz);
                 }
+            }
+            let mut tmp = vec![0.0f64; xz_count];
+            df.compute_batch(&xs, &ys, &zs, state, &mut tmp);
+            for (k, v) in tmp.iter().enumerate() {
+                let off = k * 8;
+                slab[off..off + 8].copy_from_slice(&v.to_le_bytes());
             }
         });
     total as jint
