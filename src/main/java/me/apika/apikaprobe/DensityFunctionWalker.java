@@ -188,6 +188,24 @@ public final class DensityFunctionWalker {
 		if (cls.contains("Clamp")) { encodeClamp(out, node); return; }
 		if (cls.contains("Spline")) { encodeSpline(out, node); return; }
 		if (cls.contains("Marker") || cls.contains("Wrapping")) { encodeMarker(out, node); return; }
+		// Cache wrapper classes — private inner classes of ChunkNoiseSampler
+		// (yarn $FlatCache, $DensityInterpolator, $Cache2D, $CacheOnce,
+		// $CacheAllInCell). After mapAll(this::wrap) runs, inner Markers
+		// in any subtree have been replaced by these wrappers. We emit the
+		// same OP_MARKER bytes as their corresponding Marker kind so a
+		// fingerprint of `marker.wrapped()` taken at chunk-wrap time
+		// matches the one taken at world load (where the inner subtree
+		// still contained Markers, not wrappers). Required for
+		// fingerprint-based identification across the mapAll boundary —
+		// see CACHE_FILL_PLAN.md "step 2a postmortem".
+		int cacheKind = recognizeCacheWrapper(cls);
+		if (cacheKind >= 0) {
+			out.write(OP_MARKER);
+			out.write(cacheKind);
+			Object inner = invokeAny(node, new String[]{"wrapped", "noiseFiller", "function"});
+			writeNode(out, inner);
+			return;
+		}
 		if (cls.contains("TwoArgument") || cls.contains("BinaryOperation")) {
 			encodeBinary(out, node); return;
 		}
@@ -198,6 +216,48 @@ public final class DensityFunctionWalker {
 		// Unknown — log once per new class and emit stub.
 		logUnknownOnce(node.getClass().getName());
 		writeUnknown(out, cls);
+	}
+
+	/** Map a {@link net.minecraft.world.gen.chunk.ChunkNoiseSampler} private
+	 *  cache-wrapper class simple name to its equivalent {@code MARKER_*}
+	 *  kind code. Returns -1 for non-wrappers. Yarn rotates the names
+	 *  occasionally; we accept both bare and inner-class ($-suffixed) forms.
+	 *
+	 *  <p>Yarn 1.21.11 names verified via the loom tiny mappings:
+	 *  - {@code ChunkNoiseSampler$FlatCache}
+	 *  - {@code ChunkNoiseSampler$DensityInterpolator} (mojmap: NoiseInterpolator)
+	 *  - {@code ChunkNoiseSampler$Cache2D}
+	 *  - {@code ChunkNoiseSampler$CacheOnce}
+	 *  - {@code ChunkNoiseSampler$CacheAllInCell}
+	 */
+	private static int recognizeCacheWrapper(String cls) {
+		if (cls == null) return -1;
+		if (cls.equals("FlatCache") || cls.endsWith("$FlatCache")) return MARKER_FLAT_CACHE;
+		if (cls.equals("DensityInterpolator") || cls.endsWith("$DensityInterpolator")
+				|| cls.equals("NoiseInterpolator") || cls.endsWith("$NoiseInterpolator")) return MARKER_INTERPOLATED;
+		if (cls.equals("Cache2D") || cls.endsWith("$Cache2D")) return MARKER_CACHE_2D;
+		if (cls.equals("CacheOnce") || cls.endsWith("$CacheOnce")) return MARKER_CACHE_ONCE;
+		if (cls.equals("CacheAllInCell") || cls.endsWith("$CacheAllInCell")
+				|| cls.equals("CellCache") || cls.endsWith("$CellCache")) return MARKER_CACHE_ALL_IN_CELL;
+		return -1;
+	}
+
+	/** Compute a stable hex fingerprint of a DF subtree, suitable for
+	 *  matching across mapAll boundaries. Returns null on encode failure. */
+	public static String fingerprint(Object df) {
+		if (df == null) return null;
+		ByteBuffer bb = encode(df);
+		if (bb == null) return null;
+		int n = bb.limit();
+		byte[] arr = new byte[n];
+		bb.position(0);
+		bb.get(arr);
+		StringBuilder sb = new StringBuilder(n * 2);
+		for (byte x : arr) {
+			sb.append(Character.forDigit((x >> 4) & 0xF, 16));
+			sb.append(Character.forDigit(x & 0xF, 16));
+		}
+		return sb.toString();
 	}
 
 	private static final java.util.concurrent.ConcurrentHashMap<String, Boolean> seenUnknown =

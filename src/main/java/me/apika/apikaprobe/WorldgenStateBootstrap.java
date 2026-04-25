@@ -236,19 +236,21 @@ public final class WorldgenStateBootstrap {
 		int totalDeepMarkers = 0;
 		int totalDeepRegistered = 0;
 		int totalDeepFailed = 0;
+		java.util.Map<String, String> fingerprintMap = new java.util.HashMap<>();
 		for (Object[] rootEntry : rootDfs) {
 			Object rootDf = rootEntry[0];
 			String rootName = (String) rootEntry[1];
-			DeepMarkerWalker.Result r = DeepMarkerWalker.walk(rootDf, rootName, identityMap);
+			DeepMarkerWalker.Result r = DeepMarkerWalker.walk(rootDf, rootName, identityMap, fingerprintMap);
 			totalDeepMarkers += r.markersFound;
 			totalDeepRegistered += r.markersRegistered;
 			totalDeepFailed += r.registrationFailures;
 		}
 		ExampleMod.LOGGER.info(
-				"[worldgen-init] deep-marker walk: found={} registered={} failed={} mapSize={}",
-				totalDeepMarkers, totalDeepRegistered, totalDeepFailed, identityMap.size());
-		// Publish the identity map so cache wrappers can look up names.
+				"[worldgen-init] deep-marker walk: found={} registered={} failed={} mapSize={} fpMapSize={}",
+				totalDeepMarkers, totalDeepRegistered, totalDeepFailed, identityMap.size(), fingerprintMap.size());
+		// Publish the identity + fingerprint maps so cache wrappers can look up names.
 		identifiedRouterDfs = java.util.Collections.unmodifiableMap(identityMap);
+		fingerprintToName = java.util.Collections.unmodifiableMap(fingerprintMap);
 		// Merge synthetic names into the validator-visible list. Builder
 		// state was already published by registerDensityFunctions; we
 		// extend it so /ferrite density validate iterates these too.
@@ -412,15 +414,27 @@ public final class WorldgenStateBootstrap {
 	private static volatile List<String> registeredDensityFunctionNames = Collections.emptyList();
 
 	/** IdentityHashMap of live DF instances → registered ferrite names.
-	 *  Phase 2.5 cache wrappers (RustFlatCache etc.) use this to identify
-	 *  which registered DF a vanilla `Marker(FlatCache, X)` is caching,
-	 *  so the wrapper can bulk-fill from the right Rust path. Populated
-	 *  by {@link #registerResolvedRouterClimateDfs}. */
+	 *  Kept as a fast path even though vanilla's {@code mapAll(this::wrap)}
+	 *  re-instantiates Markers per-chunk (so identity rarely matches at
+	 *  chunk-wrap time). The real lookup happens via
+	 *  {@link #fingerprintToName()}. */
 	private static volatile java.util.Map<Object, String> identifiedRouterDfs =
 			java.util.Collections.emptyMap();
 
 	public static java.util.Map<Object, String> identifiedRouterDfs() {
 		return identifiedRouterDfs;
+	}
+
+	/** Hex-bytecode fingerprint of every registered Marker's inner
+	 *  subtree → registered ferrite name. Survives the
+	 *  {@code mapAll(this::wrap)} re-instantiation boundary because
+	 *  {@link DensityFunctionWalker} encodes both Markers and their
+	 *  post-transformation cache-wrapper equivalents to identical bytes. */
+	private static volatile java.util.Map<String, String> fingerprintToName =
+			java.util.Collections.emptyMap();
+
+	public static java.util.Map<String, String> fingerprintToName() {
+		return fingerprintToName;
 	}
 
 	public static List<String> registeredDensityFunctionNames() {

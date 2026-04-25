@@ -43,12 +43,15 @@ public final class DeepMarkerWalker {
 
 	public static final class Result {
 		public final Map<Object, String> markerToName;
+		public final Map<String, String> fingerprintToName;
 		public final int markersFound;
 		public final int markersRegistered;
 		public final int registrationFailures;
 
-		Result(Map<Object, String> map, int found, int registered, int failed) {
+		Result(Map<Object, String> map, Map<String, String> fpMap,
+				int found, int registered, int failed) {
 			this.markerToName = map;
+			this.fingerprintToName = fpMap;
 			this.markersFound = found;
 			this.markersRegistered = registered;
 			this.registrationFailures = failed;
@@ -59,15 +62,18 @@ public final class DeepMarkerWalker {
 	 * Walk {@code root}, register every reachable Marker's inner subtree
 	 * to Rust under {@code ferrite:auto/<rootName>/<kind>_<i>} names, and
 	 * return the resulting Marker→name identity map (accumulating into
-	 * {@code accumulator} if non-null).
+	 * {@code accumulator} if non-null) plus a fingerprint→name map that
+	 * survives the {@code mapAll(this::wrap)} re-instantiation boundary.
 	 */
-	public static Result walk(Object root, String rootName, Map<Object, String> accumulator) {
+	public static Result walk(Object root, String rootName, Map<Object, String> accumulator,
+			Map<String, String> fingerprintAccumulator) {
 		Map<Object, String> map = accumulator != null ? accumulator : new IdentityHashMap<>();
+		Map<String, String> fpMap = fingerprintAccumulator != null ? fingerprintAccumulator : new java.util.HashMap<>();
 		Counters c = new Counters();
 		if (root != null) {
-			recurse(root, rootName, map, c, 0);
+			recurse(root, rootName, map, fpMap, c, 0);
 		}
-		return new Result(map, c.found, c.registered, c.failed);
+		return new Result(map, fpMap, c.found, c.registered, c.failed);
 	}
 
 	private static final class Counters {
@@ -77,7 +83,7 @@ public final class DeepMarkerWalker {
 	}
 
 	private static void recurse(Object node, String rootName, Map<Object, String> map,
-			Counters c, int depth) {
+			Map<String, String> fpMap, Counters c, int depth) {
 		if (node == null || depth > 64) return;
 		String cls = node.getClass().getSimpleName();
 
@@ -85,7 +91,7 @@ public final class DeepMarkerWalker {
 		if (cls.equals("HolderHolder") || cls.endsWith("$HolderHolder")
 				|| cls.equals("RegistryEntryHolder") || cls.endsWith("$RegistryEntryHolder")) {
 			Object inner = unwrapHolder(node);
-			if (inner != null) recurse(inner, rootName, map, c, depth + 1);
+			if (inner != null) recurse(inner, rootName, map, fpMap, c, depth + 1);
 			return;
 		}
 
@@ -96,7 +102,7 @@ public final class DeepMarkerWalker {
 			if (cls.contains("BeardifierMarker") || cls.equals("BeardifierOrMarker")) {
 				return;
 			}
-			handleMarker(node, rootName, map, c, depth);
+			handleMarker(node, rootName, map, fpMap, c, depth);
 			return;
 		}
 
@@ -104,28 +110,28 @@ public final class DeepMarkerWalker {
 		// dispatch order — most specific first.
 		if (cls.contains("BlendAlpha") || cls.contains("BlendOffset")) return;
 		if (cls.contains("BlendDensity")) {
-			recurseChild(node, new String[]{"input", "wrapped"}, rootName, map, c, depth);
+			recurseChild(node, new String[]{"input", "wrapped"}, rootName, map, fpMap, c, depth);
 			return;
 		}
 		if (cls.contains("YClampedGradient") || cls.contains("ClampedYGradient")
 				|| cls.contains("YGradient")) return;
 		if (cls.contains("ShiftedNoise")) {
-			recurseChild(node, new String[]{"shiftX"}, rootName, map, c, depth);
-			recurseChild(node, new String[]{"shiftY"}, rootName, map, c, depth);
-			recurseChild(node, new String[]{"shiftZ"}, rootName, map, c, depth);
+			recurseChild(node, new String[]{"shiftX"}, rootName, map, fpMap, c, depth);
+			recurseChild(node, new String[]{"shiftY"}, rootName, map, fpMap, c, depth);
+			recurseChild(node, new String[]{"shiftZ"}, rootName, map, fpMap, c, depth);
 			return;
 		}
 		if (cls.equals("ShiftA") || cls.endsWith("$ShiftA")
 				|| cls.equals("ShiftB") || cls.endsWith("$ShiftB")
 				|| cls.equals("Shift")  || cls.endsWith("$Shift")) return;
 		if (cls.contains("WeirdScaledSampler") || cls.contains("WeirdScaled")) {
-			recurseChild(node, new String[]{"input"}, rootName, map, c, depth);
+			recurseChild(node, new String[]{"input"}, rootName, map, fpMap, c, depth);
 			return;
 		}
 		if (cls.contains("RangeChoice") || cls.contains("RangeSelector")) {
-			recurseChild(node, new String[]{"input"}, rootName, map, c, depth);
-			recurseChild(node, new String[]{"whenInRange"}, rootName, map, c, depth);
-			recurseChild(node, new String[]{"whenOutOfRange"}, rootName, map, c, depth);
+			recurseChild(node, new String[]{"input"}, rootName, map, fpMap, c, depth);
+			recurseChild(node, new String[]{"whenInRange"}, rootName, map, fpMap, c, depth);
+			recurseChild(node, new String[]{"whenOutOfRange"}, rootName, map, fpMap, c, depth);
 			return;
 		}
 		if (cls.contains("Constant")) return;
@@ -133,20 +139,20 @@ public final class DeepMarkerWalker {
 				|| cls.contains("BlendedNoise")) return;
 		if (cls.contains("Noise")) return;
 		if (cls.contains("Clamp")) {
-			recurseChild(node, new String[]{"input"}, rootName, map, c, depth);
+			recurseChild(node, new String[]{"input"}, rootName, map, fpMap, c, depth);
 			return;
 		}
 		if (cls.contains("Spline")) {
-			recurseSpline(node, rootName, map, c, depth);
+			recurseSpline(node, rootName, map, fpMap, c, depth);
 			return;
 		}
 		if (cls.contains("TwoArgument") || cls.contains("BinaryOperation")) {
-			recurseChild(node, new String[]{"argument1", "input1", "first"}, rootName, map, c, depth);
-			recurseChild(node, new String[]{"argument2", "input2", "second"}, rootName, map, c, depth);
+			recurseChild(node, new String[]{"argument1", "input1", "first"}, rootName, map, fpMap, c, depth);
+			recurseChild(node, new String[]{"argument2", "input2", "second"}, rootName, map, fpMap, c, depth);
 			return;
 		}
 		if (cls.contains("Mapped") || cls.contains("Unary") || cls.contains("UnaryOperation")) {
-			recurseChild(node, new String[]{"input", "wrapped"}, rootName, map, c, depth);
+			recurseChild(node, new String[]{"input", "wrapped"}, rootName, map, fpMap, c, depth);
 			return;
 		}
 		// Unknown node type — leave for DensityFunctionWalker to log; we
@@ -154,9 +160,9 @@ public final class DeepMarkerWalker {
 	}
 
 	private static void recurseChild(Object parent, String[] accessorNames,
-			String rootName, Map<Object, String> map, Counters c, int depth) {
+			String rootName, Map<Object, String> map, Map<String, String> fpMap, Counters c, int depth) {
 		Object child = invokeAny(parent, accessorNames);
-		if (child != null) recurse(child, rootName, map, c, depth + 1);
+		if (child != null) recurse(child, rootName, map, fpMap, c, depth + 1);
 	}
 
 	/**
@@ -165,7 +171,7 @@ public final class DeepMarkerWalker {
 	 * recurse INTO the child to find nested markers.
 	 */
 	private static void handleMarker(Object marker, String rootName,
-			Map<Object, String> map, Counters c, int depth) {
+			Map<Object, String> map, Map<String, String> fpMap, Counters c, int depth) {
 		c.found++;
 		// Don't re-register a Marker we've already seen (shared subtrees).
 		if (map.containsKey(marker)) return;
@@ -195,6 +201,21 @@ public final class DeepMarkerWalker {
 			if (ok) {
 				map.put(marker, name);
 				c.registered++;
+				// Compute fingerprint of the inner subtree from the bytecode
+				// we just registered (cheaper than re-encoding). This is
+				// what cache mixins look up at chunk-wrap time, where the
+				// inner subtree may contain post-mapAll cache wrappers
+				// instead of the Markers we walked here.
+				int fpLen = bytecode.limit();
+				byte[] fpArr = new byte[fpLen];
+				bytecode.position(0);
+				bytecode.get(fpArr);
+				StringBuilder fpHex = new StringBuilder(fpLen * 2);
+				for (byte b : fpArr) {
+					fpHex.append(Character.forDigit((b >> 4) & 0xF, 16));
+					fpHex.append(Character.forDigit(b & 0xF, 16));
+				}
+				fpMap.putIfAbsent(fpHex.toString(), name);
 			} else {
 				c.failed++;
 			}
@@ -202,19 +223,19 @@ public final class DeepMarkerWalker {
 
 		// Recurse into the child so we also catch nested Markers further
 		// down (e.g. Marker(FlatCache, Marker(CacheOnce, X))).
-		recurse(inner, rootName, map, c, depth + 1);
+		recurse(inner, rootName, map, fpMap, c, depth + 1);
 	}
 
 	/** Walk a Spline node to find DF coordinate references and recurse. */
 	private static void recurseSpline(Object splineNode, String rootName,
-			Map<Object, String> map, Counters c, int depth) {
+			Map<Object, String> map, Map<String, String> fpMap, Counters c, int depth) {
 		Object spline = invokeAny(splineNode, new String[]{"spline"});
 		if (spline == null) return;
-		walkSpline(spline, rootName, map, c, depth + 1);
+		walkSpline(spline, rootName, map, fpMap, c, depth + 1);
 	}
 
 	private static void walkSpline(Object spline, String rootName,
-			Map<Object, String> map, Counters c, int depth) {
+			Map<Object, String> map, Map<String, String> fpMap, Counters c, int depth) {
 		if (spline == null || depth > 64) return;
 		String cls = spline.getClass().getSimpleName();
 		if (cls.contains("Constant") || cls.contains("FixedFloatFunction")) return;
@@ -223,11 +244,11 @@ public final class DeepMarkerWalker {
 			Object coord = invokeAny(spline, new String[]{"coordinate", "locationFunction"});
 			if (coord != null) {
 				Object coordFn = extractSplineCoordFn(coord);
-				if (coordFn != null) recurse(coordFn, rootName, map, c, depth + 1);
+				if (coordFn != null) recurse(coordFn, rootName, map, fpMap, c, depth + 1);
 			}
 			Object valuesObj = invokeAny(spline, new String[]{"values"});
 			if (valuesObj instanceof List<?> values) {
-				for (Object v : values) walkSpline(v, rootName, map, c, depth + 1);
+				for (Object v : values) walkSpline(v, rootName, map, fpMap, c, depth + 1);
 			}
 		}
 	}

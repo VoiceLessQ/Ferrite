@@ -30,6 +30,32 @@ Critical findings:
 2. `fillSlice` walks `this.interpolators` and `selectCellYZ` walks `this.cellCaches` — both are simple lists. We can mixin once into each method to coalesce *all* cache fills into one or two bulk Rust calls per phase.
 3. FlatCache fills eagerly in its constructor with `fill=true` — savings is bounded but cheap to swap.
 
+## Step 2a postmortem — fingerprint matching pivot
+
+The first observational mixin showed `matched=0` across 109k+ wrappings — identity matching is fundamentally broken because vanilla's `mapAll(this::wrap)` recursively re-instantiates Markers via `new Marker(this.type(), this.wrapped().mapAll(visitor))`. The Markers we walked at world load are never the ones `wrapNew` receives.
+
+Pivoted to **structural fingerprint matching**:
+
+1. `DensityFunctionWalker.encode()` produces deterministic bytecode per DF tree.
+2. Extended the walker to recognize `ChunkNoiseSampler$FlatCache`, `$DensityInterpolator`, etc. and emit them as their equivalent `OP_MARKER` opcode. So a tree with original `Marker(FlatCache, X)` and a tree where `mapAll` has already transformed it to `FlatCache(X)` produce **identical** bytes.
+3. At world load, `DeepMarkerWalker.handleMarker` computes the fingerprint of every registered Marker's inner subtree and stores `fingerprintHex → registeredName` in `WorldgenStateBootstrap.fingerprintToName()`.
+4. At chunk-wrap time, `CacheRouteCaptureMixin` reflectively calls `function.wrapped()`, fingerprints the result, and looks up.
+
+**Verified ratio (live runClient):**
+
+| Cache type | Matched | Unmatched | Hit rate | Note |
+|---|---|---|---|---|
+| FlatCache | 9857 | 21672 | 31% | unmatched = blendAlpha/blendOffset singletons + interior markers we didn't walk into |
+| DensityInterpolator | 5907 | 25597 | 19% | unmatched = interior markers buried in subtrees we don't recurse into fully |
+| CacheAllInCell | 0 | 1969 | 0% | **expected** — vanilla creates this from the synthetic `cacheAllInCell(add(finalDensity, BeardifierMarker))` built at NoiseChunk construction time, not from anything in the router we walked |
+
+The 31%/19% gap is real (we'd want ≥80% for step 2b to be worthwhile). Two paths to improve:
+
+- **Walk gaps** — figure out which interior Markers are missed and extend `DeepMarkerWalker.recurse` (e.g., dive deeper into spline coordinates, ShiftedNoise accessors, BlendDensity input).
+- **Synthetic registration** — register the `cacheAllInCell(add(finalDensity, BeardifierMarker))` synthetic explicitly at world load to recover the cellCache 0%.
+
+Open question for next session: is 30–80% match enough to ship step 2b (real fill mixin) with vanilla fallback for unmatched markers? Probably yes — graceful degradation per-marker is fine.
+
 ## Step 1 — DONE
 
 `DeepMarkerWalker.walk(rootDf, rootName, identityMap)` recursively walks every router root, finds every reachable `Marker(type, child)` instance, registers `child` as a Rust DF under a synthetic name `ferrite:auto/<rootName>/<kind>_<index>`, and records `marker → syntheticName` in `identifiedRouterDfs`.

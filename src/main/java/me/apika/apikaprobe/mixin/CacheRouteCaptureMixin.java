@@ -8,7 +8,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
 import net.minecraft.world.gen.densityfunction.DensityFunction;
 
+import java.lang.reflect.Method;
+
 import me.apika.apikaprobe.CacheRouteStats;
+import me.apika.apikaprobe.DensityFunctionWalker;
 import me.apika.apikaprobe.WorldgenStateBootstrap;
 
 /**
@@ -37,7 +40,35 @@ public abstract class CacheRouteCaptureMixin {
 		DensityFunction returned = cir.getReturnValue();
 		if (returned == null || returned == function) return;
 		String cls = returned.getClass().getSimpleName();
+
+		// Fast path: identity. Rare hit because vanilla's mapAll(this::wrap)
+		// re-instantiates Markers, but cheap to try.
 		String rustName = WorldgenStateBootstrap.identifiedRouterDfs().get(function);
+
+		// Real path: fingerprint the input Marker's wrapped subtree.
+		// DensityFunctionWalker emits the same OP_MARKER bytes for both
+		// Markers and their post-mapAll cache-wrapper equivalents, so the
+		// fingerprint we computed at world load matches what we compute now.
+		if (rustName == null) {
+			Object inner = ferrite$callWrapped(function);
+			if (inner != null) {
+				String fp = DensityFunctionWalker.fingerprint(inner);
+				if (fp != null) {
+					rustName = WorldgenStateBootstrap.fingerprintToName().get(fp);
+				}
+			}
+		}
 		CacheRouteStats.record(cls, rustName);
+	}
+
+	/** Reflectively call {@code wrapped()} on the Marker so we don't
+	 *  pin to the yarn-private {@code DensityFunctionTypes$Wrapping} class. */
+	private static Object ferrite$callWrapped(Object marker) {
+		try {
+			Method m = marker.getClass().getMethod("wrapped");
+			return m.invoke(marker);
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return null;
+		}
 	}
 }
