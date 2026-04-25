@@ -10,3 +10,4 @@ crate-type = ["cdylib"]
 rosttasse = { path = "../api/" }
 rosttasse-mc = { path = "../mc/" }
 rayon = "1.10"
+md-5 = "0.10"

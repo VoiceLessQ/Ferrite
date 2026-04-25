@@ -206,6 +206,10 @@ public final class SurfaceValidator {
 	private static volatile java.lang.invoke.MethodHandle mhGetSecondaryDepth = null;
 	private static volatile java.lang.invoke.MethodHandle mhEstimateSurfaceHeight = null;
 	private static volatile java.lang.invoke.MethodHandle mhGetSeaLevel = null;
+	/** Field getters as MethodHandles so the per-(x,y,z) read is a
+	 *  direct invokeExact (~30ns) instead of Field.getInt/get (~200ns). */
+	private static volatile java.lang.invoke.MethodHandle mhRunDepth = null;
+	private static volatile java.lang.invoke.MethodHandle mhBiomeSupplier = null;
 
 	private static void ensureFastReaderHandles(Object liveCtx) {
 		if (fldRunDepth != null) return; // already resolved
@@ -215,6 +219,19 @@ public final class SurfaceValidator {
 			if (rd != null) { rd.setAccessible(true); fldRunDepth = rd; }
 			java.lang.reflect.Field bs = findSupplierFieldClass(ctxClass);
 			if (bs != null) { bs.setAccessible(true); fldBiomeSupplier = bs; }
+
+			// Field-getter MethodHandles — fast-path replacement for the
+			// Field.getInt / Field.get calls in the hot per-(x,y,z) loop.
+			java.lang.invoke.MethodHandles.Lookup lookup0 =
+					java.lang.invoke.MethodHandles.lookup();
+			if (rd != null) {
+				mhRunDepth = lookup0.unreflectGetter(rd).asType(
+						java.lang.invoke.MethodType.methodType(int.class, Object.class));
+			}
+			if (bs != null) {
+				mhBiomeSupplier = lookup0.unreflectGetter(bs).asType(
+						java.lang.invoke.MethodType.methodType(Object.class, Object.class));
+			}
 
 			// MethodHandles for the 3 ctx methods we call per Y / per column.
 			// asType to (Object) → primitive so the call site doesn't need
@@ -300,7 +317,7 @@ public final class SurfaceValidator {
 			secondary = cc.secondaryDepths[cellIdx];
 			surfaceH  = cc.surfaceHeights[cellIdx];
 		} else {
-			runDepth  = fastReadInt(liveCtx, fldRunDepth);
+			runDepth  = fastReadIntField(liveCtx);
 			secondary = fastReadDoubleMH(liveCtx, mhGetSecondaryDepth);
 			surfaceH  = fastReadIntMH(liveCtx, mhEstimateSurfaceHeight, y);
 
@@ -345,6 +362,30 @@ public final class SurfaceValidator {
 		try { return f.getInt(o); } catch (ReflectiveOperationException e) { return 0; }
 	}
 
+	/** Fast-path int-field read via MethodHandle.invokeExact (~30ns)
+	 *  with a Field.getInt fallback if the MH isn't resolved yet. */
+	private static int fastReadIntField(Object o) {
+		java.lang.invoke.MethodHandle mh = mhRunDepth;
+		if (mh != null) {
+			try { return (int) mh.invokeExact(o); }
+			catch (Throwable t) { /* fall through */ }
+		}
+		return fastReadInt(o, fldRunDepth);
+	}
+
+	/** Fast-path Object-field read via MethodHandle.invokeExact. */
+	private static Object fastReadObjectField(Object o, java.lang.invoke.MethodHandle mh,
+			java.lang.reflect.Field fallback) {
+		if (mh != null) {
+			try { return mh.invokeExact(o); }
+			catch (Throwable t) { /* fall through */ }
+		}
+		if (fallback != null) {
+			try { return fallback.get(o); } catch (ReflectiveOperationException ignored) {}
+		}
+		return null;
+	}
+
 	/** Opt A: MethodHandle.invokeExact, asType'd to (Object) -> int.
 	 *  ~30ns per call (warm) vs Method.invoke at ~200ns. */
 	private static int fastReadIntMH(Object o, java.lang.invoke.MethodHandle mh, int dflt) {
@@ -368,18 +409,16 @@ public final class SurfaceValidator {
 	 * public yarn classes — direct virtual calls JITed inline.
 	 */
 	private static String fastReadBiomeName(Object liveCtx) {
-		java.lang.reflect.Field f = fldBiomeSupplier;
-		if (f == null) return "unknown";
+		Object supplier = fastReadObjectField(liveCtx, mhBiomeSupplier, fldBiomeSupplier);
+		if (!(supplier instanceof java.util.function.Supplier<?> s)) return "unknown";
 		try {
-			Object supplier = f.get(liveCtx);
-			if (!(supplier instanceof java.util.function.Supplier<?> s)) return "unknown";
 			Object entry = s.get();
 			if (!(entry instanceof net.minecraft.registry.entry.RegistryEntry<?> regEntry)) return "unknown";
 			java.util.Optional<? extends net.minecraft.registry.RegistryKey<?>> keyOpt = regEntry.getKey();
 			if (!keyOpt.isPresent()) return "unknown";
 			net.minecraft.util.Identifier id = keyOpt.get().getValue();
 			return id == null ? "unknown" : id.toString();
-		} catch (ReflectiveOperationException | RuntimeException e) {
+		} catch (RuntimeException e) {
 			return "unknown";
 		}
 	}
@@ -391,13 +430,11 @@ public final class SurfaceValidator {
 	 * (package-private MaterialRuleContext method).
 	 */
 	private static boolean fastReadIsCold(Object liveCtx, int x, int y, int z, String biomeName) {
-		java.lang.reflect.Field f = fldBiomeSupplier;
-		if (f == null) return false;
 		java.lang.invoke.MethodHandle mhSea = mhGetSeaLevel;
 		if (mhSea == null) return false;
+		Object supplier = fastReadObjectField(liveCtx, mhBiomeSupplier, fldBiomeSupplier);
+		if (!(supplier instanceof java.util.function.Supplier<?> s)) return false;
 		try {
-			Object supplier = f.get(liveCtx);
-			if (!(supplier instanceof java.util.function.Supplier<?> s)) return false;
 			Object entry = s.get();
 			if (!(entry instanceof net.minecraft.registry.entry.RegistryEntry<?> regEntry)) return false;
 			Object biomeRaw = regEntry.value();
@@ -466,6 +503,38 @@ public final class SurfaceValidator {
 	 *  or boolean moved). Caller passes 0 / false. */
 	public static boolean cachedSetBlockStateNeedsExtraArg() {
 		return cachedSetBlockStateExtraArg;
+	}
+
+	/** MethodHandle wrapper of the cached setBlockState method.
+	 *  Already has the optional third arg bound (0 / false) so the
+	 *  call-site signature is always {@code (Object chunk, Object pos,
+	 *  Object state) -> void}. Replaces Method.invoke (~300ns)
+	 *  with MethodHandle.invokeExact (~30ns) per write. */
+	private static volatile java.lang.invoke.MethodHandle mhSetBlockState = null;
+
+	public static java.lang.invoke.MethodHandle mhSetBlockState(Object protoChunk) {
+		java.lang.invoke.MethodHandle existing = mhSetBlockState;
+		if (existing != null) return existing;
+		java.lang.reflect.Method m = cachedSetBlockStateMethod(protoChunk);
+		try {
+			java.lang.invoke.MethodHandles.Lookup lookup = java.lang.invoke.MethodHandles.lookup();
+			java.lang.invoke.MethodHandle mh = lookup.unreflect(m);
+			Class<?>[] params = m.getParameterTypes();
+			if (params.length == 3) {
+				if (params[2] == int.class) {
+					mh = java.lang.invoke.MethodHandles.insertArguments(mh, 3, 0);
+				} else {
+					mh = java.lang.invoke.MethodHandles.insertArguments(mh, 3, false);
+				}
+			}
+			// Drop return value (BlockState) and erase to (Object, Object, Object) -> void.
+			mh = mh.asType(java.lang.invoke.MethodType.methodType(
+					void.class, Object.class, Object.class, Object.class));
+			mhSetBlockState = mh;
+			return mh;
+		} catch (IllegalAccessException e) {
+			throw new IllegalStateException("unreflect setBlockState failed", e);
+		}
 	}
 
 	public static void install(CompiledRuleTree tree) {
@@ -773,14 +842,41 @@ public final class SurfaceValidator {
 		int n = channelNames.length;
 		double[] out = new double[n];
 
+		double bx = (double) blockX;
+		double bz = (double) blockZ;
+
+		// Fast path: Rust's seed-driven worldgen state. Parity proven
+		// bit-exact vs yarn's DoublePerlinNoiseSampler in /ferrite
+		// worldgen validate (60/60 noises, diff=0.0) — see
+		// docs/SEED_DRIVEN_DISPATCH.md. One JNI per channel replaces
+		// one Method.invoke per channel.
+		if (me.apika.apikaprobe.RustBridge.NATIVE_AVAILABLE && rustNoiseReady()) {
+			java.nio.ByteBuffer[] bufs = ensureRustNameBuffers(channelNames);
+			int[] lens = cachedChannelNameLengths;
+			boolean allGood = true;
+			for (int i = 0; i < n; i++) {
+				double v = me.apika.apikaprobe.RustBridge.sampleWorldgenNoise(
+						bufs[i], lens[i], bx, 0.0, bz);
+				if (Double.isNaN(v)) {
+					// Rust doesn't know this channel — fall through to the
+					// reflective path for *this* call (don't poison the fast
+					// path for other channels next call).
+					allGood = false;
+					break;
+				}
+				out[i] = v;
+			}
+			if (allGood) return out;
+		}
+
+		// Slow path: reflective yarn samplers. Used before worldgen state
+		// finalizes (early boot, or a mod that skips bootstrap) and as the
+		// safety net for channels Rust doesn't have.
 		Object[] samplers = cachedSamplers;
 		if (samplers == null || samplers.length != n) {
 			samplers = buildSamplerCache(ruleContext, channelNames);
 			cachedSamplers = samplers;
 		}
-
-		double bx = (double) blockX;
-		double bz = (double) blockZ;
 		for (int i = 0; i < n; i++) {
 			Object sampler = samplers[i];
 			if (sampler == null) {
@@ -797,6 +893,48 @@ public final class SurfaceValidator {
 			}
 		}
 		return out;
+	}
+
+	/** Cache of direct ByteBuffers holding UTF-8 encoded channel names,
+	 *  one per entry in the active tree's {@link CompiledRuleTree#noiseChannelTable()}.
+	 *  Allocated lazily and reused across every sample call; Rust only
+	 *  reads the buffer contents. */
+	private static volatile java.nio.ByteBuffer[] cachedChannelNameBuffers = null;
+	private static volatile int[] cachedChannelNameLengths = null;
+	private static volatile String[] cachedChannelNameSource = null;
+
+	/** Once finalized, stays finalized for the world's lifetime, so we
+	 *  only need to query Rust once. null = unresolved, TRUE = ready,
+	 *  FALSE = not finalized (transient at early boot). */
+	private static volatile Boolean rustNoiseReady = null;
+
+	private static boolean rustNoiseReady() {
+		Boolean cached = rustNoiseReady;
+		if (cached != null && cached) return true;
+		boolean ready = me.apika.apikaprobe.RustBridge.worldgenNoiseCount() >= 0;
+		if (ready) rustNoiseReady = Boolean.TRUE;
+		return ready;
+	}
+
+	private static java.nio.ByteBuffer[] ensureRustNameBuffers(String[] channelNames) {
+		java.nio.ByteBuffer[] cached = cachedChannelNameBuffers;
+		if (cached != null && cachedChannelNameSource == channelNames) return cached;
+		int n = channelNames.length;
+		java.nio.ByteBuffer[] bufs = new java.nio.ByteBuffer[n];
+		int[] lens = new int[n];
+		for (int i = 0; i < n; i++) {
+			byte[] bytes = channelNames[i].getBytes(java.nio.charset.StandardCharsets.UTF_8);
+			java.nio.ByteBuffer b = java.nio.ByteBuffer.allocateDirect(bytes.length)
+					.order(java.nio.ByteOrder.nativeOrder());
+			b.put(bytes);
+			b.flip();
+			bufs[i] = b;
+			lens[i] = bytes.length;
+		}
+		cachedChannelNameBuffers = bufs;
+		cachedChannelNameLengths = lens;
+		cachedChannelNameSource = channelNames;
+		return bufs;
 	}
 
 	/**

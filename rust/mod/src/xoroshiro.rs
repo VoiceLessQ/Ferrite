@@ -210,6 +210,33 @@ impl XoroshiroRandomSource {
         self.next_long() as i32
     }
 
+    /// Vanilla `nextInt(int bound)` — Lemire-style unbiased bounded
+    /// integer using a 32x32→64 unsigned multiply and rejection on
+    /// the fractional part. Bit-exact with vanilla's
+    /// `XoroshiroRandomSource.nextInt(int)`.
+    ///
+    /// Panics if `bound <= 0` (matches Java's `IllegalArgumentException`).
+    #[inline]
+    pub fn next_int_bounded(&mut self, bound: i32) -> i32 {
+        assert!(bound > 0, "Bound must be positive");
+        let bound_u = bound as u32 as u64; // zero-extend
+        let mut random_bits = (self.next_int() as u32) as u64;
+        let mut multiplied = random_bits.wrapping_mul(bound_u);
+        let mut fractional = multiplied & 0xFFFF_FFFF;
+        if fractional < bound_u {
+            // Integer.remainderUnsigned(~bound + 1, bound) — bound is positive,
+            // so ~bound + 1 == -bound (two's complement). Treated as unsigned.
+            let neg_bound_u = (!(bound as u32)).wrapping_add(1) as u64;
+            let unbiased_start = neg_bound_u % bound_u;
+            while fractional < unbiased_start {
+                random_bits = (self.next_int() as u32) as u64;
+                multiplied = random_bits.wrapping_mul(bound_u);
+                fractional = multiplied & 0xFFFF_FFFF;
+            }
+        }
+        (multiplied >> 32) as i32
+    }
+
     /// Vanilla `nextBoolean()` — `(nextLong() & 1) != 0`.
     #[inline]
     pub fn next_boolean(&mut self) -> bool {
@@ -237,6 +264,26 @@ impl XoroshiroRandomSource {
     #[inline]
     pub fn next_double(&mut self) -> f64 {
         (self.next_bits(53) as f64) * (DOUBLE_UNIT_F32 as f64)
+    }
+
+    /// Vanilla `consumeCount(int rounds)` — discard N PRNG outputs.
+    /// Used by `PerlinNoise` legacy init to skip 262 longs per missing
+    /// octave (matching what `new ImprovedNoise(random)` would have
+    /// drawn: 3 doubles + 256 nextInt calls + slack).
+    #[inline]
+    pub fn consume_count(&mut self, rounds: u32) {
+        for _ in 0..rounds {
+            self.generator.next_long();
+        }
+    }
+
+    /// Vanilla `forkPositional()` — draws two longs to seed a new
+    /// `XoroshiroPositionalRandomFactory`.
+    #[inline]
+    pub fn fork_positional(&mut self) -> XoroshiroPositionalRandomFactory {
+        let lo = self.next_long();
+        let hi = self.next_long();
+        XoroshiroPositionalRandomFactory::new(lo, hi)
     }
 }
 
@@ -274,6 +321,41 @@ impl XoroshiroPositionalRandomFactory {
         let random_seed = positional_seed ^ self.seed_lo;
         XoroshiroRandomSource::from_pair(random_seed, self.seed_hi)
     }
+
+    /// Vanilla `fromHashOf(String name)`:
+    /// ```text
+    /// Seed128bit seed = RandomSupport.seedFromHashOf(name);
+    /// return new XoroshiroRandomSource(seed.xor(this.seedLo, this.seedHi));
+    /// ```
+    /// MD5 the UTF-8 bytes of `name`; first 8 bytes are seedLo, next 8
+    /// are seedHi — both decoded big-endian (Guava `Longs.fromBytes`).
+    /// Then XOR against the factory's stored (seedLo, seedHi) pair.
+    #[inline]
+    pub fn from_hash_of(&self, name: &str) -> XoroshiroRandomSource {
+        let (hash_lo, hash_hi) = seed_from_hash_of(name);
+        XoroshiroRandomSource::from_pair(hash_lo ^ self.seed_lo, hash_hi ^ self.seed_hi)
+    }
+
+    /// Vanilla `fromSeed(long seed)`:
+    /// ```text
+    /// return new XoroshiroRandomSource(seed ^ this.seedLo, seed ^ this.seedHi);
+    /// ```
+    #[inline]
+    pub fn from_seed(&self, seed: i64) -> XoroshiroRandomSource {
+        XoroshiroRandomSource::from_pair(seed ^ self.seed_lo, seed ^ self.seed_hi)
+    }
+}
+
+/// Vanilla `RandomSupport.seedFromHashOf(name)`:
+/// MD5 of the UTF-8 bytes; first 8 bytes → seedLo (big-endian),
+/// next 8 → seedHi (big-endian). Bit-exact with Guava's
+/// `Longs.fromBytes(b0, b1, ..., b7)`.
+pub fn seed_from_hash_of(name: &str) -> (i64, i64) {
+    use md5::{Digest, Md5};
+    let digest = Md5::digest(name.as_bytes());
+    let lo = i64::from_be_bytes(digest[0..8].try_into().unwrap());
+    let hi = i64::from_be_bytes(digest[8..16].try_into().unwrap());
+    (lo, hi)
 }
 
 // ============================================================================
@@ -387,6 +469,81 @@ mod tests {
                 assert!((0.0..1.0).contains(&f), "next_float at ({},-60,{}) = {} out of [0,1)", x, z, f);
             }
         }
+    }
+
+    /// next_int_bounded must always return a value in [0, bound).
+    #[test]
+    fn next_int_bounded_in_range() {
+        let mut r = XoroshiroRandomSource::from_legacy_seed(42);
+        for _ in 0..1000 {
+            let v = r.next_int_bounded(256);
+            assert!((0..256).contains(&v));
+            let v = r.next_int_bounded(7);
+            assert!((0..7).contains(&v));
+        }
+    }
+
+    /// next_int_bounded with bound=1 must always return 0.
+    #[test]
+    fn next_int_bounded_one_is_zero() {
+        let mut r = XoroshiroRandomSource::from_legacy_seed(123);
+        for _ in 0..32 {
+            assert_eq!(r.next_int_bounded(1), 0);
+        }
+    }
+
+    /// MD5("") = d41d8cd98f00b204e9800998ecf8427e — verifies our
+    /// big-endian byte → i64 decoding matches Guava's `Longs.fromBytes`.
+    #[test]
+    fn seed_from_hash_of_empty_string() {
+        let (lo, hi) = seed_from_hash_of("");
+        assert_eq!(lo as u64, 0xd41d8cd98f00b204);
+        assert_eq!(hi as u64, 0xe9800998ecf8427e);
+    }
+
+    /// Same name → same seed; different names → different seeds.
+    #[test]
+    fn seed_from_hash_of_is_deterministic_and_varies() {
+        let a = seed_from_hash_of("octave_0");
+        let b = seed_from_hash_of("octave_0");
+        let c = seed_from_hash_of("octave_-1");
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    /// from_hash_of XORs the MD5 against the factory seeds.
+    #[test]
+    fn from_hash_of_xors_factory_seeds() {
+        let factory = XoroshiroPositionalRandomFactory::new(0xAAAA_BBBB, 0xCCCC_DDDD);
+        let (hash_lo, hash_hi) = seed_from_hash_of("octave_0");
+        let r = factory.from_hash_of("octave_0");
+        assert_eq!(r.generator.seed_lo, hash_lo ^ 0xAAAA_BBBB);
+        assert_eq!(r.generator.seed_hi, hash_hi ^ 0xCCCC_DDDD);
+    }
+
+    /// fork_positional drains exactly two longs and exposes them as the
+    /// new factory's (seed_lo, seed_hi).
+    #[test]
+    fn fork_positional_drains_two_longs() {
+        let mut a = XoroshiroRandomSource::from_legacy_seed(2026);
+        let mut b = XoroshiroRandomSource::from_legacy_seed(2026);
+        let factory = a.fork_positional();
+        let lo = b.next_long();
+        let hi = b.next_long();
+        assert_eq!(factory.seed_lo, lo);
+        assert_eq!(factory.seed_hi, hi);
+    }
+
+    /// consume_count(N) advances the stream by exactly N longs.
+    #[test]
+    fn consume_count_advances_stream() {
+        let mut a = XoroshiroRandomSource::from_legacy_seed(7);
+        let mut b = XoroshiroRandomSource::from_legacy_seed(7);
+        a.consume_count(5);
+        for _ in 0..5 {
+            b.next_long();
+        }
+        assert_eq!(a.next_long(), b.next_long());
     }
 
     /// next_double must be in [0.0, 1.0).

@@ -1,8 +1,14 @@
 package me.apika.apikaprobe;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
 
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 
@@ -78,6 +84,78 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("bfs-min")
 								.then(CommandManager.argument("n", IntegerArgumentType.integer(1, 4096))
 										.executes(FerriteCommand::setBfsMin))))
+				.then(CommandManager.literal("worldgen")
+						.then(CommandManager.literal("status").executes(FerriteCommand::worldgenStatus))
+						.then(CommandManager.literal("sample")
+								.then(CommandManager.argument("name", StringArgumentType.greedyString())
+										.executes(FerriteCommand::worldgenSample)))
+						.then(CommandManager.literal("validate")
+								.executes(ctx -> worldgenValidate(ctx, 100))
+								.then(CommandManager.argument("samples", IntegerArgumentType.integer(1, 100000))
+										.executes(ctx -> worldgenValidate(ctx,
+												IntegerArgumentType.getInteger(ctx, "samples"))))))
+				.then(CommandManager.literal("density")
+						.then(CommandManager.literal("validate")
+								.executes(ctx -> densityValidate(ctx, 200))
+								.then(CommandManager.argument("samples", IntegerArgumentType.integer(1, 100000))
+										.executes(ctx -> densityValidate(ctx,
+												IntegerArgumentType.getInteger(ctx, "samples")))))
+						.then(CommandManager.literal("sample")
+								.then(CommandManager.argument("name", StringArgumentType.greedyString())
+										.executes(FerriteCommand::densitySample)))
+						.then(CommandManager.literal("dump")
+								.then(CommandManager.argument("name", StringArgumentType.greedyString())
+										.executes(FerriteCommand::densityDump))))
+				.then(CommandManager.literal("biome")
+						.then(CommandManager.literal("validate")
+								.executes(ctx -> biomeValidate(ctx, 1000))
+								.then(CommandManager.argument("samples", IntegerArgumentType.integer(1, 1000000))
+										.executes(ctx -> biomeValidate(ctx,
+												IntegerArgumentType.getInteger(ctx, "samples")))))
+						.then(CommandManager.literal("at")
+								.executes(FerriteCommand::biomeAtPlayer)
+								.then(CommandManager.argument("x", IntegerArgumentType.integer())
+										.then(CommandManager.argument("y", IntegerArgumentType.integer())
+												.then(CommandManager.argument("z", IntegerArgumentType.integer())
+														.executes(FerriteCommand::biomeAtCoords)))))
+						.then(CommandManager.literal("chunk")
+								.then(CommandManager.argument("cx", IntegerArgumentType.integer())
+										.then(CommandManager.argument("cz", IntegerArgumentType.integer())
+												.executes(FerriteCommand::biomeAtChunk))))
+						.then(CommandManager.literal("actual")
+								.then(CommandManager.argument("x", IntegerArgumentType.integer())
+										.then(CommandManager.argument("y", IntegerArgumentType.integer())
+												.then(CommandManager.argument("z", IntegerArgumentType.integer())
+														.executes(FerriteCommand::biomeActual)))))
+						.then(CommandManager.literal("compare")
+								.then(CommandManager.argument("x", IntegerArgumentType.integer())
+										.then(CommandManager.argument("y", IntegerArgumentType.integer())
+												.then(CommandManager.argument("z", IntegerArgumentType.integer())
+														.executes(FerriteCommand::biomeCompare)))))
+						.then(CommandManager.literal("rust")
+								.executes(FerriteCommand::biomeRustAtPlayer)
+								.then(CommandManager.argument("x", IntegerArgumentType.integer())
+										.then(CommandManager.argument("y", IntegerArgumentType.integer())
+												.then(CommandManager.argument("z", IntegerArgumentType.integer())
+														.executes(FerriteCommand::biomeRustAtCoords)))))
+						.then(CommandManager.literal("predict")
+								.executes(ctx -> biomePredict(ctx, 256))
+								.then(CommandManager.argument("radius", IntegerArgumentType.integer(16, 8192))
+										.executes(ctx -> biomePredict(ctx,
+												IntegerArgumentType.getInteger(ctx, "radius")))))
+						.then(CommandManager.literal("route")
+								.then(CommandManager.literal("on").executes(FerriteCommand::biomeRouteOn))
+								.then(CommandManager.literal("off").executes(FerriteCommand::biomeRouteOff))
+								.then(CommandManager.literal("status").executes(FerriteCommand::biomeRouteStatus))))
+				.then(CommandManager.literal("prewarm")
+						.then(CommandManager.literal("on").executes(FerriteCommand::prewarmOn))
+						.then(CommandManager.literal("off").executes(FerriteCommand::prewarmOff))
+						.then(CommandManager.literal("status").executes(FerriteCommand::prewarmStatus))
+						.then(CommandManager.literal("clear").executes(FerriteCommand::prewarmClear)))
+				.then(CommandManager.literal("chunkforce")
+						.then(CommandManager.literal("on").executes(FerriteCommand::chunkForceOn))
+						.then(CommandManager.literal("off").executes(FerriteCommand::chunkForceOff))
+						.then(CommandManager.literal("status").executes(FerriteCommand::chunkForceStatus)))
 				.then(CommandManager.literal("surface")
 						.then(CommandManager.literal("compile").executes(FerriteCommand::surfaceCompile))
 						.then(CommandManager.literal("stats").executes(FerriteCommand::surfaceStats))
@@ -605,6 +683,388 @@ public final class FerriteCommand {
 		String line = SurfaceValidator.statsLine();
 		sendFeedback(ctx, line, false);
 		ExampleMod.LOGGER.info(line);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int worldgenStatus(CommandContext<ServerCommandSource> ctx) {
+		if (!RustBridge.NATIVE_AVAILABLE) {
+			sendFeedback(ctx, "[worldgen] native unavailable — Rust state will never finalize", false);
+			return Command.SINGLE_SUCCESS;
+		}
+		int count = RustBridge.worldgenNoiseCount();
+		String line = count < 0
+				? "[worldgen] Rust state NOT finalized (bootstrap didn't run, or failed)"
+				: "[worldgen] Rust state finalized — " + count + " noises registered";
+		sendFeedback(ctx, line, false);
+		ExampleMod.LOGGER.info(line);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int worldgenSample(CommandContext<ServerCommandSource> ctx) {
+		if (!RustBridge.NATIVE_AVAILABLE) {
+			sendFeedback(ctx, "[worldgen] native unavailable", false);
+			return Command.SINGLE_SUCCESS;
+		}
+		String rawName = StringArgumentType.getString(ctx, "name").trim();
+		// Be forgiving about the namespace: if the user typed `temperature`
+		// (no colon), treat it as `minecraft:temperature`. Rust hashes the
+		// full `Identifier.toString()` form, so the colon must be present.
+		String name = rawName.contains(":") ? rawName : "minecraft:" + rawName;
+		var source = ctx.getSource();
+		var pos = source.getPosition();
+		// Use INTEGER block coords (matching how DensityFunction.Noise
+		// samples). Helps catch off-by-fraction noise mismatches.
+		double x = (int) pos.x;
+		double y = (int) pos.y;
+		double z = (int) pos.z;
+
+		byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
+		ByteBuffer nameBuf = ByteBuffer.allocateDirect(nameBytes.length).order(ByteOrder.nativeOrder());
+		nameBuf.put(nameBytes);
+		nameBuf.flip();
+
+		double value = RustBridge.sampleWorldgenNoise(nameBuf, nameBytes.length, x, y, z);
+		String line;
+		if (Double.isNaN(value)) {
+			line = String.format("[worldgen] sample(%s, %.2f, %.2f, %.2f) = NaN (not finalized or name unknown)",
+					name, x, y, z);
+		} else {
+			line = String.format("[worldgen] sample(%s, %.2f, %.2f, %.2f) = %.6f", name, x, y, z, value);
+		}
+		sendFeedback(ctx, line, false);
+		ExampleMod.LOGGER.info(line);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int worldgenValidate(CommandContext<ServerCommandSource> ctx, int samples) {
+		String result = WorldgenParity.runParityCheck(samples, 10000);
+		sendFeedback(ctx, result, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int biomeValidate(CommandContext<ServerCommandSource> ctx, int samples) {
+		String result = BiomeParity.runParityCheck(samples);
+		sendFeedback(ctx, result, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int densityValidate(CommandContext<ServerCommandSource> ctx, int samples) {
+		String result = DensityParity.runAll(ctx.getSource().getServer(), samples);
+		sendFeedback(ctx, result, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int densityDump(CommandContext<ServerCommandSource> ctx) {
+		String name = StringArgumentType.getString(ctx, "name").trim();
+		if (!name.contains(":")) name = "minecraft:" + name;
+		byte[] nameBytes = name.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+		java.nio.ByteBuffer nameBuf = java.nio.ByteBuffer.allocateDirect(nameBytes.length)
+				.order(java.nio.ByteOrder.nativeOrder());
+		nameBuf.put(nameBytes);
+		nameBuf.flip();
+		String dump = RustBridge.dumpDensityFunction(nameBuf, nameBytes.length);
+		if (dump == null) {
+			sendFeedback(ctx, "[density] " + name + " — not registered", false);
+		} else {
+			ExampleMod.LOGGER.info("[density-dump] {}\n{}", name, dump);
+			sendFeedback(ctx, "[density] dumped " + name + " to log (" + dump.length() + " chars)", false);
+		}
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int densitySample(CommandContext<ServerCommandSource> ctx) {
+		String name = StringArgumentType.getString(ctx, "name").trim();
+		if (!name.contains(":")) name = "minecraft:" + name;
+		var pos = ctx.getSource().getPosition();
+		int x = (int) pos.x;
+		int y = (int) pos.y;
+		int z = (int) pos.z;
+		byte[] nameBytes = name.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+		java.nio.ByteBuffer nameBuf = java.nio.ByteBuffer.allocateDirect(nameBytes.length)
+				.order(java.nio.ByteOrder.nativeOrder());
+		nameBuf.put(nameBytes);
+		nameBuf.flip();
+		double rust = RustBridge.sampleDensityFunction(nameBuf, nameBytes.length, x, y, z);
+		// Side-by-side: also call vanilla's DF at the same coord.
+		Double yarn = DensityParity.sampleVanilla(ctx.getSource().getServer(), name, x, y, z);
+		String line;
+		if (Double.isNaN(rust)) {
+			line = String.format("[density] %s @(%d,%d,%d) rust=NaN yarn=%s", name, x, y, z,
+					yarn == null ? "?" : String.format("%.6f", yarn));
+		} else if (yarn == null) {
+			line = String.format("[density] %s @(%d,%d,%d) rust=%.6f yarn=?", name, x, y, z, rust);
+		} else {
+			double diff = Math.abs(rust - yarn);
+			String status = diff < 1e-9 ? "MATCH" : String.format("DIFF=%.6e", diff);
+			line = String.format("[density] %s @(%d,%d,%d) rust=%.6f yarn=%.6f [%s]",
+					name, x, y, z, rust, yarn, status);
+		}
+		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int biomeAtPlayer(CommandContext<ServerCommandSource> ctx) {
+		var pos = ctx.getSource().getPosition();
+		return reportBiomeAt(ctx, (int) pos.x, (int) pos.y, (int) pos.z);
+	}
+
+	private static int biomeAtCoords(CommandContext<ServerCommandSource> ctx) {
+		int x = IntegerArgumentType.getInteger(ctx, "x");
+		int y = IntegerArgumentType.getInteger(ctx, "y");
+		int z = IntegerArgumentType.getInteger(ctx, "z");
+		return reportBiomeAt(ctx, x, y, z);
+	}
+
+	private static int biomeAtChunk(CommandContext<ServerCommandSource> ctx) {
+		int cx = IntegerArgumentType.getInteger(ctx, "cx");
+		int cz = IntegerArgumentType.getInteger(ctx, "cz");
+		// Center of chunk; y=64 = a stable mid-range height. The biome
+		// sampler uses quart coords so y matters less than (x, z) for most
+		// surface biomes — y=64 gives a representative answer.
+		return reportBiomeAt(ctx, (cx << 4) + 8, 64, (cz << 4) + 8);
+	}
+
+	private static int reportBiomeAt(CommandContext<ServerCommandSource> ctx, int x, int y, int z) {
+		String biome = BiomeParity.lookupBiomeAt(x, y, z);
+		String line;
+		if (biome == null) {
+			line = String.format("[biome] (%d,%d,%d) — unavailable (sampler not captured or Rust state not finalized)", x, y, z);
+		} else {
+			line = String.format("[biome] (%d,%d,%d) → %s", x, y, z, biome);
+		}
+		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int biomeActual(CommandContext<ServerCommandSource> ctx) {
+		int x = IntegerArgumentType.getInteger(ctx, "x");
+		int y = IntegerArgumentType.getInteger(ctx, "y");
+		int z = IntegerArgumentType.getInteger(ctx, "z");
+		String biome = BiomeParity.lookupActualBiomeAt(ctx.getSource().getWorld(), x, y, z);
+		String line = String.format("[biome-actual] (%d,%d,%d) → %s", x, y, z, biome);
+		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int biomeRustAtPlayer(CommandContext<ServerCommandSource> ctx) {
+		var pos = ctx.getSource().getPosition();
+		return reportBiomeRust(ctx, (int) pos.x, (int) pos.y, (int) pos.z);
+	}
+
+	private static int biomeRustAtCoords(CommandContext<ServerCommandSource> ctx) {
+		int x = IntegerArgumentType.getInteger(ctx, "x");
+		int y = IntegerArgumentType.getInteger(ctx, "y");
+		int z = IntegerArgumentType.getInteger(ctx, "z");
+		return reportBiomeRust(ctx, x, y, z);
+	}
+
+	private static int reportBiomeRust(CommandContext<ServerCommandSource> ctx, int x, int y, int z) {
+		int rustId = RustBridge.findBiomeAtBlockRust(x, y, z);
+		java.util.List<String> names = WorldgenStateBootstrap.registeredBiomeNames();
+		String rustName = (rustId < 0 || rustId >= names.size())
+				? "<rust:invalid id=" + rustId + ">"
+				: names.get(rustId);
+		// Side-by-side with vanilla path (lookupBiomeAt uses vanilla's
+		// Climate.Sampler then Rust's R-tree).
+		String vanillaPath = BiomeParity.lookupBiomeAt(x, y, z);
+		String status = (vanillaPath != null && vanillaPath.equals(rustName)) ? "MATCH" : "DIFF";
+		String line = String.format("[biome-rust] (%d,%d,%d) rust=%s vanilla-climate=%s [%s]",
+				x, y, z, rustName, vanillaPath == null ? "?" : vanillaPath, status);
+		sendFeedback(ctx, line, false);
+		// On DIFF, dump per-axis climate from both sides so we can see
+		// which axis diverged. Vanilla's TargetPoint quantizes after
+		// `(float)compute(...)`, so we un-quantize the vanilla side back
+		// to ~float for direct comparison with rust.
+		if (!"MATCH".equals(status)) {
+			String[] axes = {"temperature", "vegetation", "continents", "erosion", "depth", "ridges"};
+			int qx = (x >> 2) << 2, qy = (y >> 2) << 2, qz = (z >> 2) << 2;
+			double[] vanillaClimate = BiomeParity.sampleVanillaClimate(x, y, z);
+			for (int i = 0; i < axes.length; i++) {
+				String axis = axes[i];
+				String name = "ferrite:climate/" + axis;
+				byte[] nb = name.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+				java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocateDirect(nb.length)
+						.order(java.nio.ByteOrder.nativeOrder());
+				buf.put(nb); buf.flip();
+				double rust = RustBridge.sampleDensityFunction(buf, nb.length, qx, qy, qz);
+				double vanilla = (vanillaClimate == null) ? Double.NaN : vanillaClimate[i];
+				double diff = Math.abs(rust - vanilla);
+				ExampleMod.LOGGER.info("[biome-rust-axis] {} rust={} vanilla={} diff={}",
+						axis,
+						String.format("%.6f", rust),
+						String.format("%.6f", vanilla),
+						String.format("%.6e", diff));
+			}
+		}
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * Bulk biome prediction over an NxN region centered on the player.
+	 * Samples on the 4-block quart grid (matching vanilla's biome cell
+	 * size) at player Y. Outputs total cells, unique biomes, and the top
+	 * 5 by count plus elapsed time. Works at unloaded coords because
+	 * findBiomeAtBlockRust depends only on seed-derived climate noises,
+	 * not chunk data.
+	 */
+	private static int biomePredict(CommandContext<ServerCommandSource> ctx, int radiusBlocks) {
+		var pos = ctx.getSource().getPosition();
+		int cx = (int) pos.x;
+		int cy = (int) pos.y;
+		int cz = (int) pos.z;
+		int step = 4; // quart-pos cells
+		int side = (radiusBlocks * 2) / step;
+		java.util.List<String> names = WorldgenStateBootstrap.registeredBiomeNames();
+		int[] counts = new int[names.size()];
+		int unknown = 0;
+		int total = side * side;
+		// Batch path: one JNI call fills an int[] of biome IDs, replacing
+		// `total` per-cell calls. Per-cell work in Rust is identical;
+		// what we save is the JNI boundary cost per cell.
+		java.nio.ByteBuffer out = java.nio.ByteBuffer.allocateDirect(total * 4)
+				.order(java.nio.ByteOrder.nativeOrder());
+		long t0 = System.nanoTime();
+		int written = RustBridge.findBiomeRegionRust(
+				cx - radiusBlocks, cy, cz - radiusBlocks,
+				side, side, step, out);
+		long elapsedNs = System.nanoTime() - t0;
+		if (written != total) {
+			String err = String.format(
+					"[biome-predict] batch returned %d, expected %d — falling back",
+					written, total);
+			sendFeedback(ctx, err, false);
+			return Command.SINGLE_SUCCESS;
+		}
+		java.nio.IntBuffer ids = out.asIntBuffer();
+		for (int i = 0; i < total; i++) {
+			int id = ids.get(i);
+			if (id < 0 || id >= counts.length) unknown++;
+			else counts[id]++;
+		}
+
+		// Top 5 by count.
+		Integer[] order = new Integer[counts.length];
+		for (int i = 0; i < order.length; i++) order[i] = i;
+		java.util.Arrays.sort(order, (a, b) -> Integer.compare(counts[b], counts[a]));
+		int distinct = 0;
+		for (int c : counts) if (c > 0) distinct++;
+
+		String header = String.format(
+				"[biome-predict] center=(%d,%d) radius=%d cells=%d distinct=%d unknown=%d elapsed=%.2fms (%.0fns/cell)",
+				cx, cz, radiusBlocks, total, distinct, unknown,
+				elapsedNs / 1_000_000.0,
+				(double) elapsedNs / Math.max(1, total));
+		sendFeedback(ctx, header, false);
+		ExampleMod.LOGGER.info(header);
+		int top = Math.min(5, distinct);
+		for (int i = 0; i < top; i++) {
+			int id = order[i];
+			if (counts[id] == 0) break;
+			double pct = 100.0 * counts[id] / total;
+			String line = String.format("[biome-predict]   %s: %d (%.1f%%)",
+					names.get(id), counts[id], pct);
+			sendFeedback(ctx, line, false);
+			ExampleMod.LOGGER.info(line);
+		}
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int biomeRouteOn(CommandContext<ServerCommandSource> ctx) {
+		RustBiomeRouter.ENABLED = true;
+		String line = String.format("[biome-route] ENABLED (router has %d holders)",
+				RustBiomeRouter.size());
+		sendFeedback(ctx, line, false);
+		ExampleMod.LOGGER.info(line);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int biomeRouteOff(CommandContext<ServerCommandSource> ctx) {
+		RustBiomeRouter.ENABLED = false;
+		sendFeedback(ctx, "[biome-route] disabled", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int biomeRouteStatus(CommandContext<ServerCommandSource> ctx) {
+		String line = String.format("[biome-route] enabled=%s holders=%d",
+				RustBiomeRouter.ENABLED, RustBiomeRouter.size());
+		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int prewarmOn(CommandContext<ServerCommandSource> ctx) {
+		ChunkPrewarmer.ENABLED = true;
+		ChunkPrewarmer.start();
+		// Auto-enable the router so cache hits actually short-circuit vanilla.
+		RustBiomeRouter.ENABLED = true;
+		String line = "[prewarm] ENABLED (router auto-enabled). "
+				+ "Worker pool started; trigger fires per server tick.";
+		sendFeedback(ctx, line, false);
+		ExampleMod.LOGGER.info(line);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int prewarmOff(CommandContext<ServerCommandSource> ctx) {
+		ChunkPrewarmer.ENABLED = false;
+		sendFeedback(ctx, "[prewarm] disabled (router untouched)", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int prewarmStatus(CommandContext<ServerCommandSource> ctx) {
+		String line = String.format(
+				"[prewarm] enabled=%s cached=%d inflight=%d warmed=%d hits=%d misses=%d avgWarm=%dus",
+				ChunkPrewarmer.ENABLED, ChunkPrewarmer.cachedChunks(),
+				ChunkPrewarmer.inflightCount(), ChunkPrewarmer.warmed(),
+				ChunkPrewarmer.hits(), ChunkPrewarmer.misses(),
+				ChunkPrewarmer.warmAvgUs());
+		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int prewarmClear(CommandContext<ServerCommandSource> ctx) {
+		ChunkPrewarmer.clear();
+		sendFeedback(ctx, "[prewarm] cache cleared, stats reset", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int chunkForceOn(CommandContext<ServerCommandSource> ctx) {
+		ChunkForcer.ENABLED = true;
+		sendFeedback(ctx, "[chunkforce] ENABLED — vanilla chunkgen forced ahead in rings (viewDist+16)", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int chunkForceOff(CommandContext<ServerCommandSource> ctx) {
+		ChunkForcer.ENABLED = false;
+		sendFeedback(ctx, "[chunkforce] disabled (in-flight tickets allowed to complete naturally)", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int chunkForceStatus(CommandContext<ServerCommandSource> ctx) {
+		String line = String.format(
+				"[chunkforce] enabled=%s inflight=%d scheduled=%d completed=%d errored=%d",
+				ChunkForcer.ENABLED, ChunkForcer.inflightCount(),
+				ChunkForcer.scheduledCount(), ChunkForcer.completedCount(),
+				ChunkForcer.erroredCount());
+		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int biomeCompare(CommandContext<ServerCommandSource> ctx) {
+		int x = IntegerArgumentType.getInteger(ctx, "x");
+		int y = IntegerArgumentType.getInteger(ctx, "y");
+		int z = IntegerArgumentType.getInteger(ctx, "z");
+		String predicted = BiomeParity.lookupBiomeAt(x, y, z);
+		String actual = BiomeParity.lookupActualBiomeAt(ctx.getSource().getWorld(), x, y, z);
+		String status;
+		if (predicted == null) {
+			status = "rust=<unavailable>";
+		} else if (predicted.equals(actual)) {
+			status = "MATCH";
+		} else {
+			status = "MISMATCH";
+		}
+		String line = String.format("[biome-compare] (%d,%d,%d) rust=%s vanilla=%s [%s]",
+				x, y, z, predicted, actual, status);
+		sendFeedback(ctx, line, false);
 		return Command.SINGLE_SUCCESS;
 	}
 

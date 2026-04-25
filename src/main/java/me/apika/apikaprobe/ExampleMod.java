@@ -1,6 +1,7 @@
 package me.apika.apikaprobe;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +44,19 @@ public class ExampleMod implements ModInitializer {
 		RedstoneOracle.register();
 		RedstoneRustDispatcher.register();
 		FerriteCommand.register();
+		WorldgenStateBootstrap.register();
+		ChunkDecoratorTiming.register();
+		ChunkPrewarmTrigger.register();
+		ChunkForcer.register();
+		ChunkForceTrigger.register();
+		// Vanilla loaded a chunk — drop our biome prediction for it.
+		// Vanilla now owns the authoritative biome data; keeping our
+		// cached int[1536] would just hog memory for chunks the cache
+		// will never serve again.
+		ServerChunkEvents.CHUNK_LOAD.register((world, chunk) -> {
+			net.minecraft.util.math.ChunkPos pos = chunk.getPos();
+			ChunkPrewarmer.evict(pos.x, pos.z);
+		});
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			// Explicitly disable every Rust-backed dispatcher so vanilla

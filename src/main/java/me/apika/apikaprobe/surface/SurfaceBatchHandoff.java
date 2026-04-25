@@ -2,6 +2,7 @@ package me.apika.apikaprobe.surface;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.HashMap;
 
 import me.apika.apikaprobe.RustBridge;
 
@@ -68,6 +69,13 @@ public final class SurfaceBatchHandoff {
 	private int currentColumnCount;
 	private int currentNoiseStride; // = noiseChannelCount per column
 
+	/** Per-flush memoization: biome name → precomputed match-bits byte
+	 *  array. A typical chunk spans only a handful of distinct biomes,
+	 *  so this caches the {@code List.contains} × biomeSetCount matrix
+	 *  of work per unique biome instead of per column.
+	 *  Cleared in {@link #beginBatch}. */
+	private final HashMap<String, byte[]> biomeBitsCache = new HashMap<>();
+
 	public void setTree(CompiledRuleTree tree) {
 		this.tree = tree;
 		byte[] bc = tree.bytecode();
@@ -86,6 +94,7 @@ public final class SurfaceBatchHandoff {
 	public void beginBatch(int columnCount) {
 		this.currentColumnCount = columnCount;
 		this.currentNoiseStride = noiseChannelCount;
+		this.biomeBitsCache.clear();
 
 		blockYs        = ensureCapacity(blockYs,        columnCount * 4);
 		runDepths      = ensureCapacity(runDepths,      columnCount * 4);
@@ -130,6 +139,90 @@ public final class SurfaceBatchHandoff {
 	}
 
 	/**
+	 * Bulk-pack the entire batch from the dispatcher's per-thread arrays.
+	 * Replaces ~30k × 55 individual {@code putInt}/{@code putDouble}/
+	 * {@code put} calls with ~10 array copies per batch via
+	 * {@link java.nio.IntBuffer#put(int[], int, int)} and friends.
+	 *
+	 * <p>The int arrays are expected to be sized to at least
+	 * {@code count}. Extra tail entries past {@code count} are ignored
+	 * (they may hold stale values from a previous batch).
+	 *
+	 * <p>{@code biomes} is consulted per column to resolve the biome
+	 * match-bits row — same per-flush memoization as {@link #packColumn}.
+	 * {@code noiseSlab} is the dispatcher's flat {@code count ×
+	 * channelCount} f64 buffer; it's copied contiguously into
+	 * {@code noiseValues}.
+	 */
+	@SuppressWarnings("java:S107") // parallel arrays mirror DispatchState; collapsing them is a bigger refactor
+	public void packBulk(
+			int[] xsArr, int[] ysArr, int[] zsArr,
+			int[] runDepthsArr, int[] stoneAboveArr, int[] stoneBelowArr,
+			int[] fluidHeightsArr, int[] surfaceHeightsArr,
+			double[] secondaryDepthsArr, boolean[] isColdsArr,
+			String[] biomesArr, double[] noiseSlabArr,
+			int count) {
+		// Bulk int copies. asIntBuffer() views the underlying memory;
+		// position(0).put(arr, 0, count) writes count ints (count*4 bytes)
+		// starting at the buffer's byte 0.
+		bulkInt(xs,             xsArr,             count);
+		bulkInt(zs,             zsArr,             count);
+		bulkInt(blockYs,        ysArr,             count);
+		bulkInt(runDepths,      runDepthsArr,      count);
+		bulkInt(stoneAbove,     stoneAboveArr,     count);
+		bulkInt(stoneBelow,     stoneBelowArr,     count);
+		bulkInt(fluidHeights,   fluidHeightsArr,   count);
+		bulkInt(surfaceHeights, surfaceHeightsArr, count);
+		// Bulk doubles.
+		secondaryDepths.asDoubleBuffer().put(secondaryDepthsArr, 0, count);
+
+		// Flags: boolean[]→byte[] with isCold bit0. Small loop (only 1 byte
+		// per column, typically <50k iterations — trivial vs the big buffers).
+		for (int i = 0; i < count; i++) {
+			flags.put(i, isColdsArr[i] ? (byte) 0x01 : 0);
+		}
+
+		// Biome match bits — same memoized cache as packColumn.
+		java.util.List<String>[] table = tree.biomeSetTable();
+		byte[] scratch = null;
+		for (int i = 0; i < count; i++) {
+			String biome = biomesArr[i];
+			byte[] bits = biomeBitsCache.get(biome);
+			if (bits == null) {
+				bits = new byte[biomeSetCount];
+				for (int k = 0; k < biomeSetCount; k++) {
+					bits[k] = (byte) (table[k].contains(biome) ? 1 : 0);
+				}
+				biomeBitsCache.put(biome, bits);
+			}
+			// Bulk-copy the row into biomeMatchBits at the column's base.
+			// Using a scratch ByteBuffer wrapper would need positioning;
+			// a single put loop of biomeSetCount bytes is dwarfed by other
+			// work and keeps this allocation-free. biomeSetCount is typically
+			// <60 for vanilla surface rules.
+			if (scratch != bits) scratch = bits;
+			int base = i * biomeSetCount;
+			for (int k = 0; k < biomeSetCount; k++) {
+				biomeMatchBits.put(base + k, bits[k]);
+			}
+		}
+
+		// Noise slab: straight contiguous double copy into noiseValues.
+		int noiseCopyCount = count * currentNoiseStride;
+		if (noiseCopyCount > 0) {
+			noiseValues.asDoubleBuffer().put(noiseSlabArr, 0, noiseCopyCount);
+		}
+
+		// Mark the batch size (mirrors beginBatch's columnCount; callers
+		// typically match them, but defensive against early-return paths).
+		this.currentColumnCount = count;
+	}
+
+	private static void bulkInt(java.nio.ByteBuffer buf, int[] src, int count) {
+		buf.asIntBuffer().put(src, 0, count);
+	}
+
+	/**
 	 * Write one column's input into the parallel arrays at index {@code col}.
 	 * Caller must have called {@link #beginBatch(int)} first.
 	 */
@@ -144,11 +237,23 @@ public final class SurfaceBatchHandoff {
 		flags.put(col, (byte) ((ctx.isCold() ? 0x01 : 0) | (ctx.isSteep() ? 0x02 : 0)));
 
 		// Biome match bits — one byte per pool entry, 1 if column biome ∈ entry.
+		// Memoize the full bits row per biome name; typical chunks touch
+		// <30 distinct biomes across thousands of columns, so this
+		// collapses the O(columns × poolCount × poolSize) inner work
+		// into O(distinctBiomes × poolCount × poolSize).
 		String biome = ctx.biomeName();
-		java.util.List<String>[] table = tree.biomeSetTable();
+		byte[] bits = biomeBitsCache.get(biome);
+		if (bits == null) {
+			java.util.List<String>[] table = tree.biomeSetTable();
+			bits = new byte[biomeSetCount];
+			for (int i = 0; i < biomeSetCount; i++) {
+				bits[i] = (byte) (table[i].contains(biome) ? 1 : 0);
+			}
+			biomeBitsCache.put(biome, bits);
+		}
 		int bitsBase = col * biomeSetCount;
 		for (int i = 0; i < biomeSetCount; i++) {
-			biomeMatchBits.put(bitsBase + i, (byte) (table[i].contains(biome) ? 1 : 0));
+			biomeMatchBits.put(bitsBase + i, bits[i]);
 		}
 
 		// Noise values — pre-sampled by caller, packed contiguously.

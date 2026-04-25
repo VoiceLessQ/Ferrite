@@ -168,6 +168,168 @@ public class RustBridge {
       java.nio.ByteBuffer results,
       int n);
 
+  /**
+   * Begin a fresh worldgen-state build on the Rust side. Derives the
+   * root positional random factory from {@code seed} the same way
+   * vanilla's {@code RandomState} (yarn {@code NoiseConfig}) does:
+   * {@code Xoroshiro(seed).forkPositional()}.
+   *
+   * <p>Pair with one {@link #registerNoiseParameter} call per named
+   * noise from {@code Registry<NoiseParameters>}, then
+   * {@link #finalizeWorldgenState}. After finalization the Rust side
+   * can sample any named noise without crossing JNI per-position.
+   *
+   * <p>Returns true on success, false if Rust rejected the call
+   * (e.g. state already finalized this process).
+   */
+  public static native boolean initWorldgenState(long seed);
+
+  /**
+   * Register one named noise into the in-progress build. {@code name}
+   * is the UTF-8-encoded full identifier ({@code Identifier.toString()}
+   * form, e.g. {@code "minecraft:temperature"}) — that's what vanilla
+   * hashes via {@code PositionalRandomFactory.fromHashOf(Identifier)}.
+   *
+   * <p>{@code amplitudes} is a direct {@link java.nio.ByteBuffer} of
+   * {@code ampCount} f64 values in little-endian order (host byte order
+   * on x86_64/aarch64 — same convention as the surface evaluator).
+   *
+   * <p>Returns true on success, false on any decode/registration error.
+   */
+  public static native boolean registerNoiseParameter(
+      java.nio.ByteBuffer name,
+      int nameLen,
+      int firstOctave,
+      java.nio.ByteBuffer amplitudes,
+      int ampCount);
+
+  /**
+   * Seal the in-progress build and publish it as the global worldgen
+   * state. Subsequent {@link #registerNoiseParameter} calls fail.
+   * Returns false if there was nothing to finalize or the state was
+   * already published.
+   */
+  public static native boolean finalizeWorldgenState();
+
+  /**
+   * Number of noises currently registered in the finalized worldgen
+   * state, or -1 if not finalized. Diagnostic only.
+   */
+  public static native int worldgenNoiseCount();
+
+  /** Diagnostic: root positional-factory seedLo/seedHi. 0 if not finalized. */
+  public static native long worldgenRootSeedLo();
+  public static native long worldgenRootSeedHi();
+
+  /** Compute the root positional-factory (lo, hi) for an arbitrary
+   *  world seed without requiring init/finalize. Returns long[2] = (lo, hi). */
+  public static native long[] rootSeedsForSeed(long seed);
+
+  /**
+   * End-to-end Rust biome lookup at a block coord. Samples the 6
+   * `ferrite:climate/<axis>` DFs (resolved from the live NoiseConfig
+   * router at world load), quantizes, runs the R-tree. Returns biome
+   * ID, or -1 if any climate DF or the biome tree isn't registered.
+   * Block coords are snapped to quart-aligned values internally.
+   */
+  public static native int findBiomeAtBlockRust(int blockX, int blockY, int blockZ);
+
+  /**
+   * Batched biome lookup over an `(sideX × sideZ)` grid sampled at
+   * `stepBlocks` spacing. Fills {@code outBuffer} with i32 biome IDs in
+   * row-major order: index {@code (iz * sideX + ix)} for cell at
+   * {@code (originX + ix*step, originY, originZ + iz*step)}.
+   * One JNI call replaces sideX*sideZ calls to
+   * {@link #findBiomeAtBlockRust}; per-cell work is identical.
+   * Returns the number of cells written, or -1 on error.
+   * {@code outBuffer} must be a direct ByteBuffer with at least
+   * {@code sideX * sideZ * 4} bytes capacity.
+   */
+  public static native int findBiomeRegionRust(
+      int originX, int originY, int originZ,
+      int sideX, int sideZ, int stepBlocks,
+      java.nio.ByteBuffer outBuffer);
+
+  /**
+   * 3D batch biome lookup over an {@code (sideX × sideY × sideZ)} grid.
+   * Output layout: row-major {@code (iy, iz, ix)} —
+   * index {@code (iy * sideZ + iz) * sideX + ix}.
+   * One call replaces sideX*sideY*sideZ per-cell calls AND gives Rayon
+   * a large enough workload to actually parallelize. For a full chunk
+   * (4×96×4 = 1536 cells) this drops per-chunk warm cost from ~26ms
+   * to ~3-5ms.
+   * Returns total cells written, or -1 on error.
+   * {@code outBuffer} must hold at least {@code sideX*sideY*sideZ*4} bytes.
+   */
+  public static native int findBiomeRegion3DRust(
+      int originX, int originY, int originZ,
+      int sideX, int sideY, int sideZ, int stepBlocks,
+      java.nio.ByteBuffer outBuffer);
+
+  /**
+   * Bulk-register biome entries into Rust's worldgen state. Buffer
+   * format: per-entry stride 112 bytes, host byte order:
+   * {@code [i32 biomeId, i32 _pad, i64×13 (6×(min,max) + offset)]}.
+   * Call between {@link #initWorldgenState} and
+   * {@link #finalizeWorldgenState}.
+   */
+  public static native boolean registerBiomeEntries(java.nio.ByteBuffer entries, int count);
+
+  /**
+   * Query Rust's biome R-tree for the biome at a quantized climate
+   * target point. Returns -1 if Rust's biome tree wasn't registered
+   * (worldgen state not finalized yet, or a custom world without
+   * MultiNoiseBiomeSource).
+   *
+   * <p>Coords are vanilla's quantized form: {@code (long)(coord * 10000)}.
+   * Use {@link Climate.TargetPoint#toParameterArray} to extract them
+   * from a vanilla {@code Climate.Sampler.sample} result.
+   */
+  public static native int queryBiomeAtTarget(
+      long temperature, long humidity, long continentalness,
+      long erosion, long depth, long weirdness);
+
+  /**
+   * Register one named density function into Rust's worldgen state.
+   * {@code bytecode} is the DF tree encoded per Rust-side opcode
+   * format (see rust/mod/src/density.rs). Call between
+   * {@link #initWorldgenState} and {@link #finalizeWorldgenState}.
+   * Returns false if bytecode fails to parse.
+   */
+  public static native boolean registerDensityFunction(
+      java.nio.ByteBuffer name, int nameLen,
+      java.nio.ByteBuffer bytecode, int bytecodeLen);
+
+  /**
+   * Sample a registered density function at an integer block coord.
+   * Returns {@code NaN} if not finalized or not registered.
+   */
+  public static native double sampleDensityFunction(
+      java.nio.ByteBuffer name, int nameLen,
+      int x, int y, int z);
+
+  /** Count of registered density functions, or -1 if state not finalized. */
+  public static native int densityFunctionCount();
+
+  /**
+   * Debug dump of a registered DF as a multi-line String. Useful for
+   * verifying the walker built what we expect. Returns null on miss.
+   */
+  public static native String dumpDensityFunction(java.nio.ByteBuffer name, int nameLen);
+
+  /**
+   * Sample a named noise from Rust's finalized worldgen state.
+   * {@code name} is the UTF-8 identifier buffer (same format as
+   * {@link #registerNoiseParameter}). Returns {@code NaN} if the state
+   * isn't finalized or the name isn't registered.
+   */
+  public static native double sampleWorldgenNoise(
+      java.nio.ByteBuffer name,
+      int nameLen,
+      double x,
+      double y,
+      double z);
+
   public static native void evaluateSurfaceRuleBatch(
       java.nio.ByteBuffer bytecode,
       int bytecodeLen,

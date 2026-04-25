@@ -44,7 +44,7 @@ public final class SurfaceDispatcher {
 	 *  default-block-only filter keeps it well under 32K. Overflow
 	 *  beyond capacity falls through to vanilla for the overflowing
 	 *  positions (logged once per session). */
-	private static final int CAPACITY = 32_768;
+	private static final int CAPACITY = 65_536;
 
 	private static final ThreadLocal<DispatchState> STATE =
 			ThreadLocal.withInitial(DispatchState::new);
@@ -175,37 +175,25 @@ public final class SurfaceDispatcher {
 		handoff.setTree(tree);
 		handoff.beginBatch(n);
 
-		int channels = tree.noiseChannelTable().length;
-		double[] noiseSlab = st.noiseValues;
-		// Build per-position ColumnContext objects only at flush time
-		// so the hot enqueue path stays allocation-free. The packColumn
-		// API takes ColumnContext today; a future optimization can add
-		// a packColumnRaw overload to skip this allocation pass.
-		double[] noisePerCol = channels > 0 ? new double[channels] : new double[0];
-		for (int i = 0; i < n; i++) {
-			if (channels > 0) {
-				System.arraycopy(noiseSlab, i * channels, noisePerCol, 0, channels);
-			}
-			ColumnContext ctx = new ColumnContext(
-					st.biomes[i], st.ys[i],
-					st.runDepths[i], st.stoneAboves[i], st.stoneBelows[i],
-					st.fluidHeights[i], st.isColds[i], false, // isSteep placeholder
-					st.surfaceHeights[i], st.secondaryDepths[i],
-					noisePerCol);
-			handoff.packColumn(i, ctx);
-			// Pack world-space (x, z) so Rust's OP_VERT_GRADIENT can do
-			// the per-block PRNG roll. Without this, Rust falls back to
-			// midpoint at (0, y, 0) which would deterministically misroll.
-			handoff.packColumnXZ(i, st.xs[i], st.zs[i]);
-		}
+		// Bulk-pack the entire batch in one call. Replaces the allocation-
+		// heavy per-column ColumnContext loop with ~10 direct array copies
+		// via IntBuffer.put(int[]) / DoubleBuffer.put(double[]).
+		handoff.packBulk(
+				st.xs, st.ys, st.zs,
+				st.runDepths, st.stoneAboves, st.stoneBelows,
+				st.fluidHeights, st.surfaceHeights,
+				st.secondaryDepths, st.isColds,
+				st.biomes, st.noiseValues,
+				n);
 
 		handoff.dispatch();
 
-		// Walk results, write to chunk via reflection (protoChunk is
-		// ChunkAccess in mojmap / Chunk in yarn).
-		java.lang.reflect.Method setBlockStateMethod = SurfaceValidator.cachedSetBlockStateMethod(st.protoChunk);
-		boolean needsExtraArg = SurfaceValidator.cachedSetBlockStateNeedsExtraArg();
-		Class<?> extraType = needsExtraArg ? setBlockStateMethod.getParameterTypes()[2] : null;
+		// Walk results, write to chunk via a pre-bound MethodHandle
+		// (signature erased to (chunk, pos, state) -> void; any optional
+		// 3rd flag arg is already bound to 0/false). invokeExact ~30ns
+		// per write vs Method.invoke ~300ns.
+		java.lang.invoke.MethodHandle setBlockStateMH =
+				SurfaceValidator.mhSetBlockState(st.protoChunk);
 		BlockPos.Mutable pos = new BlockPos.Mutable();
 		int written = 0;
 		for (int i = 0; i < n; i++) {
@@ -213,16 +201,9 @@ public final class SurfaceDispatcher {
 			if (!(result instanceof BlockState bs)) continue;
 			pos.set(st.xs[i], st.ys[i], st.zs[i]);
 			try {
-				if (!needsExtraArg) {
-					// Vanilla's BlockColumn writes via 2-arg form on this path.
-					setBlockStateMethod.invoke(st.protoChunk, pos, bs);
-				} else if (extraType == int.class) {
-					setBlockStateMethod.invoke(st.protoChunk, pos, bs, 0);
-				} else {
-					setBlockStateMethod.invoke(st.protoChunk, pos, bs, false);
-				}
+				setBlockStateMH.invokeExact((Object) st.protoChunk, (Object) pos, (Object) bs);
 				written++;
-			} catch (ReflectiveOperationException | RuntimeException e) {
+			} catch (Throwable t) {
 				// Best-effort write; if it fails, vanilla's terrain block stays.
 			}
 		}

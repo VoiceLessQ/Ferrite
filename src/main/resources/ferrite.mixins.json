@@ -36,7 +36,11 @@
 		"RedstoneControllerInvoker",
 		"RedstoneRustMixin",
 		"FerriteControllerInstallMixin",
-		"SurfaceValidatorMixin"
+		"SurfaceValidatorMixin",
+		"NoiseConfigCaptureMixin",
+		"MultiNoiseBiomeSourceCaptureMixin",
+		"MultiNoiseBiomeSourceRouteMixin",
+		"ChunkDecoratorTimingMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
