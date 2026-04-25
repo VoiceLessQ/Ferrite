@@ -352,6 +352,8 @@ for this session.
 | [ferrite.mixins.json](src/main/resources/ferrite.mixins.json) | Added `MultiNoiseBiomeSourceRouteMixin` |
 | [ExampleMod.java](src/main/java/me/apika/apikaprobe/ExampleMod.java) | Registers `ChunkPrewarmTrigger`, `ChunkForcer`, `ChunkForceTrigger`, plus `ServerChunkEvents.CHUNK_LOAD` for cache eviction |
 | [FerriteCommand.java](src/main/java/me/apika/apikaprobe/FerriteCommand.java) | Adds `/ferrite chunkforce on/off/status` alongside `/ferrite prewarm on/off/status/clear` |
+| [LightTimingMonitor.java](src/main/java/me/apika/apikaprobe/LightTimingMonitor.java) | Per-chunk wall-time of `INITIALIZE_LIGHT` / `LIGHT` phases via `whenComplete` listener on the returned future; 5-second window reports |
+| [LightTimingMixin.java](src/main/java/me/apika/apikaprobe/mixin/LightTimingMixin.java) | Hooks `ServerLightingProvider.initializeLight` + `light`, attaches `whenComplete` to capture async-work duration |
 
 ---
 
@@ -421,3 +423,91 @@ Anchor stays Mojang source. We don't borrow code or design from other
 Rust MC ports or other chunkgen mods. If/when parallel dispatch matters
 enough to revisit, it gets ported the same way every other Track B item
 gets ported: from Mojang, validated against the live oracle, shipped.
+
+---
+
+## Profiling pass: where the per-chunk time actually goes
+
+After Act 6 we knew the throughput ceiling was vanilla per-chunk wall
+time, not our scheduler. Picking the next port required a breakdown,
+so a `LightTimingMonitor` was added (parallel to `ChunkDecoratorTiming`)
+that wraps the `CompletableFuture` returned by
+`ServerLightingProvider.initializeLight` and `light` to capture actual
+async-work duration — not just task-submission overhead.
+
+After ~5 minutes of fast-flight with prewarm + chunkforce on:
+
+| Phase | avg ms/chunk | Notes |
+|---|---:|---|
+| `noise-sync` | **70-75 ms** | vanilla terrain noise sampling — not yet ported |
+| `light` (LIGHT phase) | 19-49 ms | flood-fill, high variance |
+| `light-init` (INITIALIZE_LIGHT) | 14-17 ms | early light setup |
+| `surface` | 9-11 ms | already Rust-dispatched |
+| `features` | 2.5-5 ms | decoration, already cheap |
+| | ~120 ms wall total | (multi-CF parallelism inside one chunk → 47 chunks/sec measured throughput) |
+
+**Verdict:** noise is the actual biggest sinner, ~2× lighting. The
+hypothesis going in was that lighting would be #1 — that turned out to
+be wrong. Profiling first saved a multi-week port in the wrong
+direction.
+
+---
+
+## Next port: terrain noise (`NoiseChunk` + `NoiseInterpolator`)
+
+### Inventory pass
+
+Read 1.21.11 source under `26.1.2/server/.../levelgen/`. Mapped the
+dependency chain for `NoiseChunk` (yarn `ChunkNoiseSampler`):
+
+**Already have in Rust** (`rust/mod/src/`):
+
+- `xoroshiro.rs` — `Xoroshiro128PlusPlus`, bit-exact
+- `perlin.rs` — `ImprovedNoise` + `PerlinNoise` (octave-summed) +
+  `NormalNoise` wrapper, bit-exact on the 60 climate noises
+- `density.rs` — DF interpreter for climate axes (temperature,
+  vegetation, depth, continents, erosion, ridges)
+- `climate.rs` — biome R-tree
+
+**Must port**:
+
+- `NoiseChunk` state machine — cell-grid iteration + cache invalidation
+  (~830 LOC of Java)
+- `NoiseInterpolator` — trilinear interpolation; ~260k `lerp3` calls per
+  chunk; SIMD-friendly hot loop
+- `BlendedNoise` — vanilla's main 3D terrain density (3 octave-summed
+  Perlin chains: `minLimit`, `maxLimit`, `main`)
+- DF interpreter expansion — climate-only today; need the full op set
+  (Add, Mul, Range, Clamp, Lerp, Beardifier markers, ore-vein toggles,
+  etc.)
+- `Aquifer.NoiseBasedAquifer` — stateful fluid placement (barrier /
+  flood / lava / spread noises)
+- Caching wrappers: `Cache2D`, `CacheAllInCell`, `CacheOnce`, `FlatCache`
+- Block-state codec + material rule evaluation for surface-rule output
+
+### Phasing strategy
+
+Port in layers, vanilla orchestrator stays Java until each layer proves
+out:
+
+1. **Phase 1: hot-loop only.** Port `NoiseInterpolator` + finish the
+   DF interpreter (all ops, not just climate). Keep `NoiseChunk` in
+   Java; redirect only `getInterpolatedDensity` / `getInterpolatedState`
+   into Rust via mixin. Validates the inner-loop SIMD win.
+2. **Phase 2: state machine.** Port `NoiseChunk` cell iteration. JNI
+   boundary moves outward — chunk-position + settings cross once per
+   chunk instead of per cell.
+3. **Phase 3: aquifer + beardifier + blender.** Stateful pieces with
+   real parity risk; saved for last so phases 1/2 are already validated.
+
+Same discipline as DF / biome / surface ports: port from Mojang source,
+validate against the live oracle bit-exact at every layer, ship behind a
+runtime toggle, measure.
+
+Estimated total: 3-4k LOC of Rust. Phase 1 alone is the biggest single
+throughput win — 73 ms / chunk → ~10-15 ms expected, ~2-2.5× chunkgen
+throughput. Phases 2-3 compound from there.
+
+After noise: lighting (~33-66 ms combined). Same discipline. Stateful
+port (per-section storages, runtime flood updates), so harder than
+noise — but ranked #2 by the data.

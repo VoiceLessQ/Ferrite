@@ -46,6 +46,7 @@ public class ExampleMod implements ModInitializer {
 		FerriteCommand.register();
 		WorldgenStateBootstrap.register();
 		ChunkDecoratorTiming.register();
+		LightTimingMonitor.register();
 		ChunkPrewarmTrigger.register();
 		ChunkForcer.register();
 		ChunkForceTrigger.register();
