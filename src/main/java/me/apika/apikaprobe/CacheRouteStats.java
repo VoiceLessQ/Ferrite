@@ -64,17 +64,28 @@ public final class CacheRouteStats {
 		}
 	}
 
-	private static final java.util.concurrent.atomic.AtomicBoolean cellCacheStructDumped =
-			new java.util.concurrent.atomic.AtomicBoolean(false);
+	private static final java.util.concurrent.atomic.AtomicInteger cellCacheStructDumpCount =
+			new java.util.concurrent.atomic.AtomicInteger(0);
 
-	/** One-shot: walk the unmatched cellCache.wrapped() subtree via reflection
-	 *  and log each node's class name + children. Definitive answer to "what's
-	 *  actually in the runtime tree". */
+	/** Dump the first 3 unique cellCache structures so we can distinguish
+	 *  the outer fullNoiseDensity wrapping from any nested ones. */
 	public static void dumpCellCacheStructureOnce(Object root) {
 		if (root == null) return;
-		if (!cellCacheStructDumped.compareAndSet(false, true)) return;
-		StringBuilder sb = new StringBuilder("[cache-route] cellCache STRUCTURE:\n");
-		dumpNode(sb, root, 0, 8);
+		int n = cellCacheStructDumpCount.incrementAndGet();
+		if (n > 3) return;
+		StringBuilder sb = new StringBuilder("[cache-route] cellCache STRUCTURE #" + n + ":\n");
+		dumpNode(sb, root, 0, 6);
+		// Also log sub-class for argument1 directly so we can sanity check
+		// without having to read tree indentation.
+		try {
+			java.lang.reflect.Method m = root.getClass().getMethod("argument1");
+			Object a1 = m.invoke(root);
+			sb.append("[direct] argument1 class = ")
+					.append(a1 == null ? "null" : a1.getClass().getName())
+					.append("\n");
+		} catch (ReflectiveOperationException ignored) {
+			sb.append("[direct] argument1 method N/A on ").append(root.getClass().getSimpleName()).append("\n");
+		}
 		ExampleMod.LOGGER.info(sb.toString());
 	}
 

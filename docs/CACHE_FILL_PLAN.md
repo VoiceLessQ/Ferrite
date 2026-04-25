@@ -30,6 +30,29 @@ Critical findings:
 2. `fillSlice` walks `this.interpolators` and `selectCellYZ` walks `this.cellCaches` — both are simple lists. We can mixin once into each method to coalesce *all* cache fills into one or two bulk Rust calls per phase.
 3. FlatCache fills eagerly in its constructor with `fill=true` — savings is bounded but cheap to swap.
 
+## Step 2a — DONE (100% match across all three cache types)
+
+After a chain of fixes the observational mixin now sees:
+
+| Cache type | Matched | Unmatched | Hit rate |
+|---|---|---|---|
+| FlatCache | 14576 | 0 | **100%** |
+| DensityInterpolator | 14520 | 0 | **100%** |
+| CellCache | 905 | 0 | **100%** |
+
+The journey:
+
+| Step | flatCache | interp | cellCache | What changed |
+|---|---|---|---|---|
+| Initial (identity) | 0% | 0% | 0% | nothing — identity always misses |
+| Fingerprint v1 (input.wrapped) | 31% | 19% | 0% | encoder treats cache wrappers as Markers |
+| Fingerprint v2 (return.wrapped) | 63% | 38% | 0% | fingerprint returnedwrapper.wrapped() instead of input |
+| All 15 router accessors | 63% | **75%** | 0% | walked aquifer/vein/preliminarySurfaceLevel |
+| Synthetic Add(finalDensity, beardifier) | — | — | still 0 | registered but mismatched |
+| **LinearOperation walker fix** | **100%** | **100%** | **100%** | encoder treats yarn's constant-folded LinearOperation as Mul/Add(Constant, X) |
+
+The LinearOperation fix was the keystone. Yarn's `BinaryOperationLike.create` constant-folds `Mul(Constant(k), X)` into `LinearOperation(MUL, X, ..., k)` during `mapAll`. At world load we encoded `Mul(Constant(0.64), Marker)`, at chunk-wrap we saw `LinearOperation(MUL, ..., 0.64)`. The walker didn't recognize LinearOperation, fell through to `OP_CONSTANT 0.0` stub, and bytecodes diverged on every constant-folded subtree (which is most of vanilla worldgen). Fix: walker emits `OP_MUL/OP_ADD OP_CONSTANT(arg) [encoded input]` for LinearOperation — bit-identical to the unfolded source it was created from.
+
 ## Step 2a postmortem — fingerprint matching pivot
 
 The first observational mixin showed `matched=0` across 109k+ wrappings — identity matching is fundamentally broken because vanilla's `mapAll(this::wrap)` recursively re-instantiates Markers via `new Marker(this.type(), this.wrapped().mapAll(visitor))`. The Markers we walked at world load are never the ones `wrapNew` receives.

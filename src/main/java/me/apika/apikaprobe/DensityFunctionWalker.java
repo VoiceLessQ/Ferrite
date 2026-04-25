@@ -206,6 +206,19 @@ public final class DensityFunctionWalker {
 			writeNode(out, inner);
 			return;
 		}
+		// Yarn `LinearOperation` (no mojmap equivalent) — produced by
+		// BinaryOperationLike.create when it constant-folds Mul/Add with
+		// a Constant argument. Has fields {specificType: ADD|MUL,
+		// input: DF, argument: double constant}. We emit the equivalent
+		// OP_MUL/OP_ADD with OP_CONSTANT(argument) so a runtime
+		// LinearOperation fingerprints identically to the world-load
+		// Mul(Constant, X) it was folded from. Without this, fingerprints
+		// of any subtree containing a constant-folded Mul/Add (very common
+		// in vanilla worldgen) diverge between pre/post mapAll.
+		if (cls.contains("LinearOperation")) {
+			encodeLinearOperation(out, node);
+			return;
+		}
 		if (cls.contains("TwoArgument") || cls.contains("BinaryOperation")) {
 			encodeBinary(out, node); return;
 		}
@@ -284,6 +297,38 @@ public final class DensityFunctionWalker {
 	 * covers ADD / MUL / MIN / MAX via an enum field. Read the enum's
 	 * name() and dispatch.
 	 */
+	/**
+	 * Emit a LinearOperation (yarn-only constant-folded BinaryOperation)
+	 * as the equivalent {@code OP_MUL/OP_ADD ( OP_CONSTANT argument ) ( input )}
+	 * so its bytecode matches the unfolded {@code Mul/Add(Constant, X)}
+	 * that a Mojmap codec or pre-mapAll yarn tree would have at the same
+	 * structural position. Critical for fingerprint-stability across
+	 * the {@code mapAll(this::wrap)} boundary — see CACHE_FILL_PLAN.md.
+	 */
+	private static void encodeLinearOperation(ByteArrayOutputStream out, Object node) {
+		String specific = readEnumName(node, new String[]{"specificType", "type"});
+		int opcode = switch (specific == null ? "" : specific) {
+			case "ADD", "Add" -> OP_ADD;
+			case "MUL", "Mul" -> OP_MUL;
+			default -> -1;
+		};
+		if (opcode < 0) {
+			ExampleMod.LOGGER.warn("[df-walker] unknown LinearOperation specificType: {} on {}",
+					specific, node.getClass().getName());
+			writeUnknown(out, "linear"); return;
+		}
+		Double argument = readDoubleAny(node, new String[]{"argument"});
+		if (argument == null) argument = readDoubleFieldAny(node, new String[]{"argument"});
+		Object input = invokeAny(node, new String[]{"input"});
+		out.write(opcode);
+		// Constant arg first to match BinaryOperationLike.create's fold rule
+		// (which produces LinearOperation when argument1 is Constant; matches
+		// our world-load Mul(Constant, X) layout).
+		out.write(OP_CONSTANT);
+		writeDouble(out, argument == null ? 0.0 : argument);
+		writeNode(out, input);
+	}
+
 	private static void encodeBinary(ByteArrayOutputStream out, Object node) {
 		String typeName = readEnumName(node, new String[]{"type", "specificType", "operation"});
 		int opcode = switch (typeName == null ? "" : typeName) {

@@ -341,6 +341,20 @@ public final class WorldgenStateBootstrap {
 				fp.append(Character.forDigit(b & 0xF, 16));
 			}
 			fpMap.putIfAbsent(fp.toString(), name);
+			// Log the first 96 hex chars of both finalDensity-only bytecode
+			// and the composed synthetic so we can diff against the runtime
+			// cellCache fingerprint.
+			StringBuilder fdHex = new StringBuilder(Math.min(fdLen, 48) * 2);
+			for (int i = 0; i < Math.min(fdLen, 48); i++) {
+				fdHex.append(Character.forDigit((fdArr[i] >> 4) & 0xF, 16));
+				fdHex.append(Character.forDigit(fdArr[i] & 0xF, 16));
+			}
+			ExampleMod.LOGGER.info(
+					"[worldgen-init] synthetic fp prefix={} (composed len={}, fdLen={})",
+					fp.length() > 96 ? fp.substring(0, 96) + "..." : fp.toString(),
+					composed.length, fdLen);
+			ExampleMod.LOGGER.info(
+					"[worldgen-init] finalDensity bytecode prefix={}", fdHex);
 			return true;
 		} catch (RuntimeException e) {
 			ExampleMod.LOGGER.warn(
