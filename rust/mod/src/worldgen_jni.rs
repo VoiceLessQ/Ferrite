@@ -759,76 +759,86 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_populateNoiseBufferRu
 
     let Some(out_slice) = write_buffer(&env, &out_buf, BLOCK_BYTES) else { return -1; };
 
-    // ---- Step 1: corner sample at vanilla's cell grid ----
-    // Sequential — Rayon over-subscription with 4 concurrent chunkgen
-    // workers each spawning Rayon over all cores pushed JNI cost from
-    // 6.57 ms (single-thread bench) to 34 ms under contention. With
-    // sequential and N callers, each gets one core un-contended →
-    // total CPU usage is N cores, no over-subscription.
-    let mut corners = vec![0.0_f64; CORNER_TOTAL];
-    let corner_slab_len = CORNER_X * CORNER_Z;
-    corners
-        .chunks_mut(corner_slab_len)
-        .enumerate()
-        .for_each(|(iy, slab)| {
-            let by = MIN_Y + (iy as i32) * CELL_HEIGHT;
-            for iz in 0..CORNER_Z {
-                let bz = chunk_min_block_z + (iz as i32) * CELL_WIDTH;
-                for ix in 0..CORNER_X {
-                    let bx = chunk_min_block_x + (ix as i32) * CELL_WIDTH;
-                    let ctx = crate::density::FunctionContext::new(bx, by, bz);
-                    slab[iz * CORNER_X + ix] = df.compute(&ctx, state);
-                }
-            }
-        });
+    // Phase 2.5 step 4 — DI-aware corner sample + outer compose.
+    //
+    // Vanilla doesn't trilinear-lerp the FULL composed expression. It
+    // lerps only the inner DensityInterpolator (DI) subtrees and
+    // computes the outer Min/Squeeze/Add tree per-block using the
+    // already-lerped DI values. (LERP and Min/Squeeze don't commute, so
+    // the prior "lerp the whole thing" path drifted by ~0.02 at cell
+    // boundaries.)
+    //
+    // Strategy:
+    //   (1) enumerate the wrapped subtrees of every Marker(Interpolated)
+    //       in the outer tree.
+    //   (2) corner-sample each at the cell-corner grid (1225 positions),
+    //       producing one buffer per DI.
+    //   (3) per-block: walk the outer tree with a DI counter; at each
+    //       Marker(Interpolated, _) node, trilinear-lerp from the
+    //       corresponding corner buffer instead of recursing.
+    //
+    // If the tree has 0 DIs (e.g., synthetic Add(finalDensity, ...) where
+    // finalDensity isn't wrapped in Interpolated at the top — verified
+    // for vanilla 1.21.11), we still corner-sample the whole tree and
+    // lerp, matching vanilla's path for that pre-DI subtree. (Step (1)
+    // and (3) are no-ops; step (2) becomes the legacy full-tree corner
+    // sample.)
 
-    // ---- Step 2: per-block trilinear lerp into 16×384×16 buffer ----
+    let mut di_inputs: Vec<&crate::density::DensityFunction> = Vec::new();
+    df.enumerate_di_inputs(&mut di_inputs);
+
+    let cell_size = (CELL_WIDTH, CELL_HEIGHT, CELL_WIDTH);
+    let corner_dims = (CORNER_X, CORNER_Y, CORNER_Z);
+    let chunk_min = (chunk_min_block_x, MIN_Y, chunk_min_block_z);
+
+    // ---- Step 1: corner-sample each DI subtree ----
+    // Sequential per-DI; Rayon parallelism over Y slabs *within* one
+    // corner sample only (so 4 concurrent chunkgen workers each running
+    // this don't oversubscribe the global pool).
+    let mut di_buffers: Vec<Vec<f64>> = Vec::with_capacity(di_inputs.len());
+    for di_input in &di_inputs {
+        let mut buf = vec![0.0_f64; CORNER_TOTAL];
+        let corner_slab_len = CORNER_X * CORNER_Z;
+        buf.chunks_mut(corner_slab_len)
+            .enumerate()
+            .for_each(|(iy, slab)| {
+                let by = MIN_Y + (iy as i32) * CELL_HEIGHT;
+                for iz in 0..CORNER_Z {
+                    let bz = chunk_min_block_z + (iz as i32) * CELL_WIDTH;
+                    for ix in 0..CORNER_X {
+                        let bx = chunk_min_block_x + (ix as i32) * CELL_WIDTH;
+                        let ctx = crate::density::FunctionContext::new(bx, by, bz);
+                        // Plain compute: DI's wrapped subtree is
+                        // evaluated end-to-end; nested Markers act as
+                        // passthroughs (vanilla does the same — inner
+                        // DIs have isInInterpolationLoop=true,
+                        // isSamplingForCaches=false → return delegate).
+                        slab[iz * CORNER_X + ix] = di_input.compute(&ctx, state);
+                    }
+                }
+            });
+        di_buffers.push(buf);
+    }
+
+    // ---- Step 2: per-block compose the outer tree with DI lerp ----
     let y_row_bytes = CHUNK * CHUNK * 8;
+    use rayon::prelude::*;
     out_slice
-        .chunks_mut(y_row_bytes)
+        .par_chunks_mut(y_row_bytes)
         .enumerate()
         .for_each(|(by_idx, y_row)| {
-            // by_idx 0..384 → blockY = MIN_Y + by_idx
-            let cell_y = (by_idx >> 3) as usize;       // 384 / 8 = 48 cells
-            let in_cell_y = by_idx & 7;
-            let fy = (in_cell_y as f64) / (CELL_HEIGHT as f64);
-            let qy_low = cell_y;
-            let qy_high = cell_y + 1;
-
+            let by = MIN_Y + by_idx as i32;
             for iz in 0..CHUNK {
-                let cell_z = iz >> 2;
-                let in_cell_z = iz & 3;
-                let fz = (in_cell_z as f64) / (CELL_WIDTH as f64);
-                let qz_low = cell_z;
-                let qz_high = cell_z + 1;
-
+                let bz = chunk_min_block_z + iz as i32;
                 for ix in 0..CHUNK {
-                    let cell_x = ix >> 2;
-                    let in_cell_x = ix & 3;
-                    let fx = (in_cell_x as f64) / (CELL_WIDTH as f64);
-                    let qx_low = cell_x;
-                    let qx_high = cell_x + 1;
-
-                    let idx = |qy: usize, qz: usize, qx: usize| -> f64 {
-                        corners[(qy * CORNER_Z + qz) * CORNER_X + qx]
-                    };
-                    let v000 = idx(qy_low,  qz_low,  qx_low);
-                    let v100 = idx(qy_low,  qz_low,  qx_high);
-                    let v010 = idx(qy_high, qz_low,  qx_low);
-                    let v110 = idx(qy_high, qz_low,  qx_high);
-                    let v001 = idx(qy_low,  qz_high, qx_low);
-                    let v101 = idx(qy_low,  qz_high, qx_high);
-                    let v011 = idx(qy_high, qz_high, qx_low);
-                    let v111 = idx(qy_high, qz_high, qx_high);
-
-                    let l00 = v000 + fx * (v100 - v000);
-                    let l10 = v010 + fx * (v110 - v010);
-                    let l01 = v001 + fx * (v101 - v001);
-                    let l11 = v011 + fx * (v111 - v011);
-                    let l0 = l00 + fy * (l10 - l00);
-                    let l1 = l01 + fy * (l11 - l01);
-                    let v = l0 + fz * (l1 - l0);
-
+                    let bx = chunk_min_block_x + ix as i32;
+                    let ctx = crate::density::FunctionContext::new(bx, by, bz);
+                    let mut counter: usize = 0;
+                    let v = df.compute_with_di_lerp(
+                        &ctx, state,
+                        &di_buffers, chunk_min, cell_size, corner_dims,
+                        &mut counter,
+                    );
                     let off = (iz * CHUNK + ix) * 8;
                     y_row[off..off + 8].copy_from_slice(&v.to_le_bytes());
                 }

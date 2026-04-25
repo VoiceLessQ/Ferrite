@@ -346,6 +346,24 @@ impl DfSpline {
     /// - linear extension to the coordinate's min/max beyond endpoints
     /// - each value's own min/max
     /// - Hermite overshoot bounds when derivatives are nonzero
+    /// Walk this spline (recursive into Multipoint children) and the
+    /// embedded coordinate DFs, collecting DI subtree refs in DFS order.
+    /// Mirrors the dispatch order used by spline evaluation in
+    /// [`DensityFunction::compute_with_di_lerp`] (currently spline goes
+    /// through plain `compute`, so this is reachable only via the
+    /// outer-tree walker reaching us).
+    pub fn enumerate_di_inputs<'a>(&'a self, out: &mut Vec<&'a DensityFunction>) {
+        match self {
+            DfSpline::Constant(_) => {}
+            DfSpline::Multipoint { coordinate, values, .. } => {
+                coordinate.enumerate_di_inputs(out);
+                for v in values {
+                    v.enumerate_di_inputs(out);
+                }
+            }
+        }
+    }
+
     pub fn new_multipoint(
         coordinate: DensityFunction,
         locations: Vec<f32>,
@@ -1169,6 +1187,173 @@ impl DensityFunction {
         }
     }
 
+    /// Walk the DF tree and collect references to the wrapped subtree of
+    /// every {@code Marker(Interpolated)} reachable WITHOUT crossing into
+    /// another DI's wrapped subtree. Vanilla worldgen wraps the heavy
+    /// per-position DFs (BlendedNoise, Spline, RangeChoice-with-noise)
+    /// in DI markers; the OUTER tree above the DIs is just cheap
+    /// arithmetic (Add/Min/Squeeze/etc.) operating on the lerped DI
+    /// values.
+    ///
+    /// Order matches [`compute_with_di_lerp`] DFS so a parallel index
+    /// counter walks both phases identically.
+    ///
+    /// Used by [`Self::populate_chunk_density_v2`]: corner-sample each
+    /// returned subtree at the cell-corner grid, then per-block compose
+    /// the outer tree with DI markers replaced by trilinear lerp from
+    /// the corner buffers.
+    pub fn enumerate_di_inputs<'a>(&'a self, out: &mut Vec<&'a DensityFunction>) {
+        match self {
+            DensityFunction::Marker { kind: MarkerKind::Interpolated, wrapped } => {
+                // The DI itself is corner-sampled separately; do NOT
+                // recurse into wrapped here. Inner Markers/cache wrappers
+                // inside wrapped are passthroughs during corner sampling.
+                out.push(wrapped);
+            }
+            DensityFunction::Marker { wrapped, .. } => {
+                wrapped.enumerate_di_inputs(out);
+            }
+            DensityFunction::Add(a, b) | DensityFunction::Mul(a, b)
+            | DensityFunction::Min(a, b) | DensityFunction::Max(a, b) => {
+                a.enumerate_di_inputs(out);
+                b.enumerate_di_inputs(out);
+            }
+            DensityFunction::Abs(x) | DensityFunction::Square(x)
+            | DensityFunction::Cube(x) | DensityFunction::HalfNegative(x)
+            | DensityFunction::QuarterNegative(x) | DensityFunction::Invert(x)
+            | DensityFunction::Squeeze(x) => {
+                x.enumerate_di_inputs(out);
+            }
+            DensityFunction::Clamp { input, .. } => input.enumerate_di_inputs(out),
+            DensityFunction::RangeChoice { input, when_in_range, when_out_of_range, .. } => {
+                input.enumerate_di_inputs(out);
+                when_in_range.enumerate_di_inputs(out);
+                when_out_of_range.enumerate_di_inputs(out);
+            }
+            DensityFunction::ShiftedNoise { shift_x, shift_y, shift_z, .. } => {
+                shift_x.enumerate_di_inputs(out);
+                shift_y.enumerate_di_inputs(out);
+                shift_z.enumerate_di_inputs(out);
+            }
+            DensityFunction::WeirdScaledSampler { input, .. } => {
+                input.enumerate_di_inputs(out);
+            }
+            // Spline coordinate functions can contain DIs. Walk them.
+            DensityFunction::Spline(spline) => {
+                spline.enumerate_di_inputs(out);
+            }
+            // Leaves: no DIs reachable.
+            DensityFunction::Constant(_)
+            | DensityFunction::Noise { .. }
+            | DensityFunction::YClampedGradient { .. }
+            | DensityFunction::Shift { .. }
+            | DensityFunction::ShiftA { .. }
+            | DensityFunction::ShiftB { .. }
+            | DensityFunction::BlendedNoise(_) => {}
+        }
+    }
+
+    /// Per-block compute using pre-sampled DI corner buffers. Replacement
+    /// for [`Self::compute`] when the caller has already corner-sampled
+    /// the DI subtrees enumerated by [`Self::enumerate_di_inputs`].
+    ///
+    /// At each `Marker(Interpolated, _)` node, instead of recursing
+    /// into wrapped, do a trilinear lerp from `di_buffers[*counter]`
+    /// using the chunk-local block coordinates. `counter` advances in
+    /// DFS order matching `enumerate_di_inputs`.
+    ///
+    /// All conditional branches (RangeChoice, etc.) ALWAYS evaluate
+    /// both arms to keep the counter deterministic — selects the
+    /// correct value at the end. Same for Mul/Min/Max short-circuits
+    /// (mathematically equivalent to vanilla's value-aware shortcuts).
+    pub fn compute_with_di_lerp(
+        &self,
+        ctx: &FunctionContext,
+        state: &WorldgenState,
+        di_buffers: &[Vec<f64>],
+        chunk_min: (i32, i32, i32),
+        cell_size: (i32, i32, i32),  // (cell_width, cell_height, cell_width)
+        corner_dims: (usize, usize, usize),  // (corner_x, corner_y, corner_z)
+        counter: &mut usize,
+    ) -> f64 {
+        match self {
+            DensityFunction::Marker { kind: MarkerKind::Interpolated, .. } => {
+                let idx = *counter;
+                *counter += 1;
+                if idx < di_buffers.len() {
+                    trilinear_lerp_corner(
+                        &di_buffers[idx],
+                        ctx.block_x, ctx.block_y, ctx.block_z,
+                        chunk_min, cell_size, corner_dims,
+                    )
+                } else {
+                    // Defensive: counter overflow — shouldn't happen if
+                    // enumerate matches DFS. Fall back to compute.
+                    self.compute(ctx, state)
+                }
+            }
+            DensityFunction::Marker { wrapped, .. } => {
+                wrapped.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter)
+            }
+
+            DensityFunction::Add(a, b) => {
+                let av = a.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                let bv = b.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                av + bv
+            }
+            DensityFunction::Mul(a, b) => {
+                // Always-eval (counter-stable). a*0 == 0 either way.
+                let av = a.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                let bv = b.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                av * bv
+            }
+            DensityFunction::Min(a, b) => {
+                let av = a.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                let bv = b.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                av.min(bv)
+            }
+            DensityFunction::Max(a, b) => {
+                let av = a.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                let bv = b.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                av.max(bv)
+            }
+
+            DensityFunction::Abs(x) => x.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter).abs(),
+            DensityFunction::Square(x) => { let v = x.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter); v * v }
+            DensityFunction::Cube(x) => { let v = x.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter); v * v * v }
+            DensityFunction::HalfNegative(x) => {
+                let v = x.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                if v > 0.0 { v } else { v * 0.5 }
+            }
+            DensityFunction::QuarterNegative(x) => {
+                let v = x.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                if v > 0.0 { v } else { v * 0.25 }
+            }
+            DensityFunction::Invert(x) => 1.0 / x.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter),
+            DensityFunction::Squeeze(x) => {
+                let c = x.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter).clamp(-1.0, 1.0);
+                c / 2.0 - c * c * c / 24.0
+            }
+
+            DensityFunction::Clamp { input, min, max } => {
+                input.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter).clamp(*min, *max)
+            }
+
+            DensityFunction::RangeChoice { input, min_inclusive, max_exclusive, when_in_range, when_out_of_range } => {
+                let v = input.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                // Always eval both for counter stability.
+                let in_v = when_in_range.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                let out_v = when_out_of_range.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                if v >= *min_inclusive && v < *max_exclusive { in_v } else { out_v }
+            }
+
+            // Leaves and per-position ops fall back to plain compute.
+            // They don't contain DIs (verified by enumerate_di_inputs
+            // not recursing into them).
+            _ => self.compute(ctx, state),
+        }
+    }
+
     /// Vanilla `minValue()`. Computed recursively; no caching. Useful
     /// for short-circuit logic in `Min`/`Max` and for downstream
     /// bounds analysis.
@@ -1320,6 +1505,65 @@ impl DensityFunction {
 /// Vanilla `Mth.clampedMap(v, from, to, fromVal, toVal)`. Lerp from
 /// `fromVal` at `v=from` to `toVal` at `v=to`, clamped outside.
 #[inline]
+/// Trilinear lerp from a chunk-corner buffer at a block position.
+///
+/// `corners` layout: row-major `(cy, cz, cx)` —
+/// `corners[(cy * cz_dim + cz) * cx_dim + cx]` is the f64 sample at
+/// the corner `(chunk_min.0 + cx*cell_size.0,
+///              chunk_min.1 + cy*cell_size.1,
+///              chunk_min.2 + cz*cell_size.2)`.
+///
+/// Lerp order matches vanilla's `MathHelper.lerp3` (X first, then Y,
+/// then Z) so per-block density values are bit-identical to what
+/// vanilla's `DensityInterpolator.sample` produces in the
+/// `isSamplingForCaches` branch.
+fn trilinear_lerp_corner(
+    corners: &[f64],
+    block_x: i32, block_y: i32, block_z: i32,
+    chunk_min: (i32, i32, i32),
+    cell_size: (i32, i32, i32),
+    corner_dims: (usize, usize, usize),
+) -> f64 {
+    let (cx_dim, _cy_dim, cz_dim) = corner_dims;
+
+    let dx = block_x - chunk_min.0;
+    let dy = block_y - chunk_min.1;
+    let dz = block_z - chunk_min.2;
+
+    let cx_lo = (dx / cell_size.0) as usize;
+    let cy_lo = (dy / cell_size.1) as usize;
+    let cz_lo = (dz / cell_size.2) as usize;
+
+    let fx = (dx as f64 - (cx_lo as i32 * cell_size.0) as f64) / cell_size.0 as f64;
+    let fy = (dy as f64 - (cy_lo as i32 * cell_size.1) as f64) / cell_size.1 as f64;
+    let fz = (dz as f64 - (cz_lo as i32 * cell_size.2) as f64) / cell_size.2 as f64;
+
+    let stride_y = cz_dim * cx_dim;
+    let stride_z = cx_dim;
+
+    let idx = |cx: usize, cy: usize, cz: usize| cy * stride_y + cz * stride_z + cx;
+
+    let c000 = corners[idx(cx_lo,     cy_lo,     cz_lo)];
+    let c100 = corners[idx(cx_lo + 1, cy_lo,     cz_lo)];
+    let c010 = corners[idx(cx_lo,     cy_lo + 1, cz_lo)];
+    let c110 = corners[idx(cx_lo + 1, cy_lo + 1, cz_lo)];
+    let c001 = corners[idx(cx_lo,     cy_lo,     cz_lo + 1)];
+    let c101 = corners[idx(cx_lo + 1, cy_lo,     cz_lo + 1)];
+    let c011 = corners[idx(cx_lo,     cy_lo + 1, cz_lo + 1)];
+    let c111 = corners[idx(cx_lo + 1, cy_lo + 1, cz_lo + 1)];
+
+    // X first, then Y, then Z — matches MathHelper.lerp3 / lerp2 chain.
+    let cx00 = c000 + fx * (c100 - c000);
+    let cx10 = c010 + fx * (c110 - c010);
+    let cx01 = c001 + fx * (c101 - c001);
+    let cx11 = c011 + fx * (c111 - c011);
+
+    let cxy0 = cx00 + fy * (cx10 - cx00);
+    let cxy1 = cx01 + fy * (cx11 - cx01);
+
+    cxy0 + fz * (cxy1 - cxy0)
+}
+
 fn clamped_map(v: f64, from: f64, to: f64, from_value: f64, to_value: f64) -> f64 {
     if v <= from {
         from_value

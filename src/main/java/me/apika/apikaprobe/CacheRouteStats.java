@@ -158,6 +158,8 @@ public final class CacheRouteStats {
 		if (n % SUMMARY_EVERY == 0) {
 			ExampleMod.LOGGER.info(summary());
 			ExampleMod.LOGGER.info(BulkInterpolatorFill.diagSummary());
+			ExampleMod.LOGGER.info(BulkChunkDensityFill.diagSummary());
+			ExampleMod.LOGGER.info(RustFinalDensityBufferWrapper.diagSummary());
 		}
 	}
 

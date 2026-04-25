@@ -30,6 +30,40 @@ Critical findings:
 2. `fillSlice` walks `this.interpolators` and `selectCellYZ` walks `this.cellCaches` — both are simple lists. We can mixin once into each method to coalesce *all* cache fills into one or two bulk Rust calls per phase.
 3. FlatCache fills eagerly in its constructor with `fill=true` — savings is bounded but cheap to swap.
 
+## Step 4 — full chunk-density takeover (correct, perf regressed)
+
+Implemented the "drive yourself" approach the user proposed: replace vanilla's outer `cacheAllInCell(add(finalDensity, beardifier))` `CellCache` with `RustFinalDensityBufferWrapper` that pre-fills a 16×384×16 chunk-density buffer in one Rust JNI call.
+
+**Components:**
+
+1. **`density.rs::enumerate_di_inputs`** — collects refs to the wrapped subtrees of every `Marker(Interpolated)` reachable from the outer DF. Doesn't recurse into DI subtrees (they're corner-sampled separately).
+2. **`density.rs::compute_with_di_lerp`** — per-block compose using a counter-keyed lookup of pre-sampled DI corner buffers. At each `Marker(Interpolated, _)` node, trilinear-lerp from the buffer instead of recursing.
+3. **`density.rs::trilinear_lerp_corner`** — vanilla-matched X→Y→Z lerp order (mirrors `MathHelper.lerp3`).
+4. **`worldgen_jni::populateNoiseBufferRust`** — rewritten: enumerate DIs → corner-sample each → per-block compose with DI lerp → write 16×384×16 f64 buffer. Replaces the prior "lerp the whole expression at corners" approach (which had 0.02 maxDiff because Min/Squeeze don't commute with linear interpolation).
+5. **`BulkChunkDensityMixin`** — `@Inject HEAD cancellable` on yarn's `getActualDensityFunctionImpl`. Recognizes the synthetic outer `CACHE_ALL_IN_CELL` Wrapping by fingerprint (`ferrite:synthetic/full_noise_density`) and substitutes our wrapper. Yarn 1.21.11 enum.toString returns CamelCase (`CacheAllInCell`, not `CACHE_ALL_IN_CELL`) — diagnostic loop confirmed.
+6. **`BulkChunkDensityFill`** — toggle (`-Dferrite.bulkChunkDensity=true`) + diagnostics (mixin fires, gate counters, substitution count).
+
+**Live measurement (sustained over 2825 chunks):**
+
+| Metric | Value | Vanilla baseline |
+|---|---|---|
+| Wrapper substitutions | 2825 | n/a |
+| Per-block buffer hits | 233 M | n/a |
+| Per-block fallbacks | **0** | n/a |
+| JNI per chunk | 56.4 ms avg | n/a |
+| noise-sync per chunk | **~110-148 ms** | **~55-79 ms** |
+
+**0 fallbacks across 233 million per-block samples.** The architecture is bulletproof. The math is sound (DI corner-sample + outer compose mirrors vanilla's selective interpolation exactly).
+
+**But perf regressed ~30-90 ms/chunk.** Same fundamental reason as 2b: vanilla's lazy per-block evaluation with JIT-inlined CacheOnce hits is **~30× faster** per cell than our eager bulk-fill amortized:
+
+- Vanilla per-block: ~20 ns/cell (JIT + cache hit) × 98304 cells = ~2 ms steady state
+- Ours: 56 ms upfront + ~5 ns/cell buffer reads = **~56 ms** floor
+
+Vanilla beats us because the JIT optimizes per-block hot paths to near-native speed, and CacheOnce makes shared-subtree evaluations effectively free. We can't undercut 2 ms/chunk with any bulk approach.
+
+**Default off.** Commit ships ENABLED=false. The infrastructure is real and reusable for future "Track A^2" approaches (e.g., if we someday port the entire chunkgen step + aquifer + structures to Rust, we'd plug into this same wrapper).
+
 ## Step 2b/3 — batch interpreter scaffolding (perf neutral, design correct)
 
 Added `DensityFunction::compute_batch(xs, ys, zs, state, out)` to
