@@ -26,6 +26,7 @@ pub use worldgen_jni::Java_me_apika_apikaprobe_RustBridge_registerBiomeEntries;
 pub use worldgen_jni::Java_me_apika_apikaprobe_RustBridge_queryBiomeAtTarget;
 pub use worldgen_jni::Java_me_apika_apikaprobe_RustBridge_registerDensityFunction;
 pub use worldgen_jni::Java_me_apika_apikaprobe_RustBridge_sampleDensityFunction;
+pub use worldgen_jni::Java_me_apika_apikaprobe_RustBridge_sampleDensityRegion3DRust;
 pub use worldgen_jni::Java_me_apika_apikaprobe_RustBridge_densityFunctionCount;
 pub use worldgen_jni::Java_me_apika_apikaprobe_RustBridge_dumpDensityFunction;
 pub use worldgen_jni::Java_me_apika_apikaprobe_RustBridge_rootSeedsForSeed;

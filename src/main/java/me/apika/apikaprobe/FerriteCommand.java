@@ -105,7 +105,9 @@ public final class FerriteCommand {
 										.executes(FerriteCommand::densitySample)))
 						.then(CommandManager.literal("dump")
 								.then(CommandManager.argument("name", StringArgumentType.greedyString())
-										.executes(FerriteCommand::densityDump))))
+										.executes(FerriteCommand::densityDump)))
+						.then(CommandManager.literal("bench-region")
+								.executes(FerriteCommand::densityBenchRegion)))
 				.then(CommandManager.literal("biome")
 						.then(CommandManager.literal("validate")
 								.executes(ctx -> biomeValidate(ctx, 1000))
@@ -751,6 +753,97 @@ public final class FerriteCommand {
 	private static int densityValidate(CommandContext<ServerCommandSource> ctx, int samples) {
 		String result = DensityParity.runAll(ctx.getSource().getServer(), samples);
 		sendFeedback(ctx, result, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/** Microbench Rust bulk-region sampling vs Java per-cell vanilla
+	 *  compute, both over a chunk-sized region of ferrite:terrain/
+	 *  final_density. Reports per-cell µs and total ms each side.
+	 *  Sanity-checks Rust output against Java at a few sample cells. */
+	private static int densityBenchRegion(CommandContext<ServerCommandSource> ctx) {
+		final String name = "ferrite:terrain/final_density";
+		// Cell-corner grid: 4 × 97 × 4. Y range -64..320 at step 4 = 97
+		// inclusive cell-Y rows. Same shape NoiseChunk would corner-sample.
+		final int sideX = 4, sideY = 97, sideZ = 4, step = 4;
+		final int total = sideX * sideY * sideZ;
+		final int originX = 0, originY = -64, originZ = 0;
+
+		byte[] nameBytes = name.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+		java.nio.ByteBuffer nameBuf = java.nio.ByteBuffer.allocateDirect(nameBytes.length)
+				.order(java.nio.ByteOrder.nativeOrder());
+		nameBuf.put(nameBytes);
+		nameBuf.flip();
+		java.nio.ByteBuffer outBuf = java.nio.ByteBuffer.allocateDirect(total * 8)
+				.order(java.nio.ByteOrder.nativeOrder());
+
+		// Warm-up: one untimed call so JIT + Rust threadpool spin up.
+		int written = RustBridge.sampleDensityRegion3DRust(
+				nameBuf, nameBytes.length,
+				originX, originY, originZ, sideX, sideY, sideZ, step, outBuf);
+		if (written != total) {
+			sendFeedback(ctx, "[density-bench] Rust returned " + written + ", expected " + total
+					+ " (state finalized? name registered?)", false);
+			return Command.SINGLE_SUCCESS;
+		}
+		int iters = 5;
+		long rustNs = 0;
+		for (int i = 0; i < iters; i++) {
+			outBuf.position(0);
+			long t0 = System.nanoTime();
+			RustBridge.sampleDensityRegion3DRust(
+					nameBuf, nameBytes.length,
+					originX, originY, originZ, sideX, sideY, sideZ, step, outBuf);
+			rustNs += System.nanoTime() - t0;
+		}
+
+		// Java side: vanilla per-cell compute via DensityParity.sampleVanilla
+		// at every (originX + ix*step, originY + iy*step, originZ + iz*step).
+		// One iter — Java is much slower; 5 iters would extend the bench.
+		long javaNs;
+		double[] javaVals = new double[total];
+		{
+			long t0 = System.nanoTime();
+			for (int iy = 0; iy < sideY; iy++) {
+				int by = originY + iy * step;
+				for (int iz = 0; iz < sideZ; iz++) {
+					int bz = originZ + iz * step;
+					for (int ix = 0; ix < sideX; ix++) {
+						int bx = originX + ix * step;
+						Double v = DensityParity.sampleVanilla(
+								ctx.getSource().getServer(), name, bx, by, bz);
+						javaVals[(iy * sideZ + iz) * sideX + ix] =
+								(v == null) ? Double.NaN : v;
+					}
+				}
+			}
+			javaNs = System.nanoTime() - t0;
+		}
+
+		// Sanity check 8 sample positions for parity.
+		outBuf.position(0);
+		java.nio.DoubleBuffer rustDoubles = outBuf.asDoubleBuffer();
+		int mismatch = 0;
+		double maxDiff = 0.0;
+		for (int k = 0; k < total; k++) {
+			double r = rustDoubles.get(k);
+			double j = javaVals[k];
+			if (Double.isNaN(r) || Double.isNaN(j)) continue;
+			double d = Math.abs(r - j);
+			if (d > maxDiff) maxDiff = d;
+			if (d > 1.0e-9) mismatch++;
+		}
+
+		double rustMs = rustNs / iters / 1_000_000.0;
+		double javaMs = javaNs / 1_000_000.0;
+		double rustUsCell = rustNs / (double) iters / total / 1_000.0;
+		double javaUsCell = javaNs / (double) total / 1_000.0;
+
+		String line = String.format(
+				"[density-bench] %s, %d cells: rust=%.2fms (%.2fµs/cell, avg of %d) java=%.2fms (%.2fµs/cell) speedup=%.1fx mismatch=%d/%d maxDiff=%.3e",
+				name, total, rustMs, rustUsCell, iters, javaMs, javaUsCell,
+				javaMs / Math.max(rustMs, 0.001), mismatch, total, maxDiff);
+		ExampleMod.LOGGER.info(line);
+		sendFeedback(ctx, line, false);
 		return Command.SINGLE_SUCCESS;
 	}
 

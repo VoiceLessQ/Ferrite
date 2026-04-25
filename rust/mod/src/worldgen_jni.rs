@@ -552,6 +552,77 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_findBiomeRegion3DRust
     total as jint
 }
 
+/// 3D batch density-function sampler. Computes the named registered DF
+/// across an `(side_x × side_y × side_z)` grid at `step_blocks` spacing,
+/// writing f64 values into `out_buf`.
+///
+/// Output layout: row-major `(iy, iz, ix)` —
+/// index `(iy * side_z + iz) * side_x + ix` for cell at
+/// `(origin_x + ix*step, origin_y + iy*step, origin_z + iz*step)`.
+///
+/// Internal Rayon parallelism over Y-slabs. For a chunk-sized
+/// `finalDensity` corner sample (4 × 97 × 4 = 1552 cells), each Y slab
+/// is 16 cells → ~6 µs/cell × 16 = ~100 µs of work. With ~97 slabs
+/// across N cores, Rayon's task overhead is amortized.
+///
+/// Returns total cells written, or -1 on error (state not finalized,
+/// name not registered, buffer too small, invalid sides).
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_sampleDensityRegion3DRust<'local>(
+    env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    name_buf: JByteBuffer<'local>,
+    name_len: jint,
+    origin_x: jint,
+    origin_y: jint,
+    origin_z: jint,
+    side_x: jint,
+    side_y: jint,
+    side_z: jint,
+    step_blocks: jint,
+    out_buf: JByteBuffer<'local>,
+) -> jint {
+    if side_x <= 0 || side_y <= 0 || side_z <= 0 || step_blocks <= 0 { return -1; }
+    let Some(state) = worldgen_state() else { return -1; };
+    let name_len_usize = name_len.max(0) as usize;
+    let Some(name_bytes) = read_buffer(&env, &name_buf, name_len_usize) else {
+        return -1;
+    };
+    let Ok(name) = std::str::from_utf8(name_bytes) else { return -1; };
+    let Some(df) = state.density_functions.get(name) else { return -1; };
+
+    let side_x = side_x as usize;
+    let side_y = side_y as usize;
+    let side_z = side_z as usize;
+    let total = side_x.saturating_mul(side_y).saturating_mul(side_z);
+    let needed_bytes = total.saturating_mul(8); // f64 each
+
+    let Some(out_slice) = write_buffer(&env, &out_buf, needed_bytes) else {
+        return -1;
+    };
+
+    use rayon::prelude::*;
+    let slab_bytes = side_x * side_z * 8;
+    out_slice
+        .par_chunks_mut(slab_bytes)
+        .enumerate()
+        .for_each(|(iy, slab)| {
+            let by = origin_y + (iy as i32) * step_blocks;
+            for iz in 0..side_z {
+                let bz = origin_z + (iz as i32) * step_blocks;
+                for ix in 0..side_x {
+                    let bx = origin_x + (ix as i32) * step_blocks;
+                    let ctx = crate::density::FunctionContext::new(bx, by, bz);
+                    let v = df.compute(&ctx, state);
+                    let off = (iz * side_x + ix) * 8;
+                    slab[off..off + 8].copy_from_slice(&v.to_le_bytes());
+                }
+            }
+        });
+    total as jint
+}
+
 /// Sample biome at a quart-aligned coord. Returns -1 if any climate DF
 /// is missing or no biome matches.
 fn sample_biome_at(state: &crate::worldgen_state::WorldgenState, qx: jint, qy: jint, qz: jint) -> jint {

@@ -308,6 +308,28 @@ public class RustBridge {
       java.nio.ByteBuffer name, int nameLen,
       int x, int y, int z);
 
+  /**
+   * 3D batch density-function sampler. Computes the named registered
+   * DF across {@code (sideX × sideY × sideZ)} cells at
+   * {@code stepBlocks} spacing, writing f64 values into
+   * {@code outBuffer}.
+   *
+   * <p>Output layout: row-major {@code (iy, iz, ix)} —
+   * index {@code (iy * sideZ + iz) * sideX + ix} for cell at
+   * {@code (originX + ix*step, originY + iy*step, originZ + iz*step)}.
+   * Internal Rayon parallelism over Y-slabs.
+   *
+   * <p>{@code outBuffer} must be a direct ByteBuffer with at least
+   * {@code sideX * sideY * sideZ * 8} bytes capacity.
+   *
+   * <p>Returns total cells written, or -1 on error.
+   */
+  public static native int sampleDensityRegion3DRust(
+      java.nio.ByteBuffer name, int nameLen,
+      int originX, int originY, int originZ,
+      int sideX, int sideY, int sideZ, int stepBlocks,
+      java.nio.ByteBuffer outBuffer);
+
   /** Count of registered density functions, or -1 if state not finalized. */
   public static native int densityFunctionCount();
 
