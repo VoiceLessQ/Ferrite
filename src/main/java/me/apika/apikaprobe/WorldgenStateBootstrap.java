@@ -196,8 +196,13 @@ public final class WorldgenStateBootstrap {
 			{"erosion", "ferrite:climate/erosion"},
 			{"depth", "ferrite:climate/depth"},
 			{"ridges", "ferrite:climate/ridges"},
+			// Terrain DFs from the same router. finalDensity is the
+			// composed terrain density vanilla calls per-cell-corner
+			// in NoiseChunk — gating Phase 1B of the noise port.
+			{"finalDensity", "ferrite:terrain/final_density"},
 		};
 		int registered = 0;
+		List<String> registeredNames = new ArrayList<>();
 		for (String[] field : climateFields) {
 			try {
 				Method m = router.getClass().getMethod(field[0]);
@@ -210,13 +215,22 @@ public final class WorldgenStateBootstrap {
 				nameBuf.put(nameBytes); nameBuf.flip();
 				if (RustBridge.registerDensityFunction(nameBuf, nameBytes.length, bytecode, bytecode.limit())) {
 					registered++;
+					registeredNames.add(field[1]);
 				}
 			} catch (ReflectiveOperationException ignored) {
 				// router doesn't expose this accessor in current yarn — skip
 			}
 		}
-		ExampleMod.LOGGER.info("[worldgen-init] climate-router: registered {} of {} climate DFs",
-				registered, climateFields.length);
+		// Merge synthetic names into the validator-visible list. Builder
+		// state was already published by registerDensityFunctions; we
+		// extend it so /ferrite density validate iterates these too.
+		if (!registeredNames.isEmpty()) {
+			List<String> merged = new ArrayList<>(registeredDensityFunctionNames);
+			merged.addAll(registeredNames);
+			registeredDensityFunctionNames = Collections.unmodifiableList(merged);
+		}
+		ExampleMod.LOGGER.info("[worldgen-init] climate-router: registered {} of {} synthetic DFs ({})",
+				registered, climateFields.length, registeredNames);
 		return registered;
 	}
 

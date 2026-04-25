@@ -65,14 +65,28 @@ public final class DensityParity {
 		Object noiseConfig = WorldgenParity.findOverworldNoiseConfig();
 
 		for (String fullName : names) {
-			Object unresolved = lookupByName(dfRegistry, fullName);
-			if (unresolved == null) {
-				failures.add(fullName + " (no vanilla DF)");
-				totalFail++;
-				continue;
+			// Synthetic names (ferrite:climate/*, ferrite:terrain/*) refer
+			// to composed router DFs not in the registry — fetch live
+			// instead of resolving from registry.
+			Object vanilla;
+			if (fullName.startsWith("ferrite:")) {
+				String routerField = synthNameToRouterField(fullName);
+				vanilla = (routerField == null) ? null : liveRouterField(routerField);
+				if (vanilla == null) {
+					failures.add(fullName + " (no live router DF)");
+					totalFail++;
+					continue;
+				}
+			} else {
+				Object unresolved = lookupByName(dfRegistry, fullName);
+				if (unresolved == null) {
+					failures.add(fullName + " (no vanilla DF)");
+					totalFail++;
+					continue;
+				}
+				vanilla = (noiseConfig == null) ? unresolved : resolveNoises(unresolved, noiseConfig);
+				if (vanilla == null) vanilla = unresolved;
 			}
-			Object vanilla = (noiseConfig == null) ? unresolved : resolveNoises(unresolved, noiseConfig);
-			if (vanilla == null) vanilla = unresolved;
 			byte[] nameBytes = fullName.getBytes(StandardCharsets.UTF_8);
 			ByteBuffer nameBuf = ByteBuffer.allocateDirect(nameBytes.length).order(ByteOrder.nativeOrder());
 			nameBuf.put(nameBytes);
@@ -136,6 +150,19 @@ public final class DensityParity {
 	 * bound tree then computes correctly.
 	 */
 	public static Double sampleVanilla(MinecraftServer server, String fullName, int x, int y, int z) {
+		// Synthetic ferrite:* names refer to composed DFs on the live
+		// NoiseRouter — not in the DENSITY_FUNCTION registry. Route to
+		// the router-field path; the DF returned there is already
+		// resolved (NoiseHolders bound, BlendedNoise reseeded by
+		// RandomState.NoiseWiringHelper at world load).
+		if (fullName.startsWith("ferrite:")) {
+			String routerField = synthNameToRouterField(fullName);
+			if (routerField == null) return null;
+			Object live = liveRouterField(routerField);
+			if (live == null) return null;
+			return computeVanilla(live, x, y, z);
+		}
+
 		Object registry = resolveDfRegistry(server);
 		if (registry == null) return null;
 		Object unresolvedDf = lookupByName(registry, fullName);
@@ -143,6 +170,45 @@ public final class DensityParity {
 		Object noiseConfig = WorldgenParity.findOverworldNoiseConfig();
 		Object resolved = (noiseConfig == null) ? unresolvedDf : resolveNoises(unresolvedDf, noiseConfig);
 		return computeVanilla(resolved == null ? unresolvedDf : resolved, x, y, z);
+	}
+
+	/** Map our synthetic registration names back to NoiseRouter accessor
+	 *  method names. Keep in sync with WorldgenStateBootstrap's
+	 *  registerResolvedRouterClimateDfs. */
+	private static String synthNameToRouterField(String fullName) {
+		switch (fullName) {
+			case "ferrite:terrain/final_density": return "finalDensity";
+			case "ferrite:climate/temperature": return "temperature";
+			case "ferrite:climate/vegetation": return "vegetation";
+			case "ferrite:climate/continents": return "continents";
+			case "ferrite:climate/erosion": return "erosion";
+			case "ferrite:climate/depth": return "depth";
+			case "ferrite:climate/ridges": return "ridges";
+			default: return null;
+		}
+	}
+
+	/** Look up the named field on the live overworld NoiseRouter and
+	 *  return its DensityFunction. Returns null if no NoiseConfig was
+	 *  captured or the router doesn't expose this accessor. */
+	private static Object liveRouterField(String accessor) {
+		Object noiseConfig = WorldgenParity.findOverworldNoiseConfig();
+		if (noiseConfig == null) return null;
+		Object router = null;
+		for (String n : new String[]{"getNoiseRouter", "noiseRouter", "router", "getRouter"}) {
+			try {
+				Method m = noiseConfig.getClass().getMethod(n);
+				router = m.invoke(noiseConfig);
+				if (router != null) break;
+			} catch (ReflectiveOperationException ignored) { /* next */ }
+		}
+		if (router == null) return null;
+		try {
+			Method m = router.getClass().getMethod(accessor);
+			return m.invoke(router);
+		} catch (ReflectiveOperationException e) {
+			return null;
+		}
 	}
 
 	/**
