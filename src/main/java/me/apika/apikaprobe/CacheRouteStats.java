@@ -162,11 +162,14 @@ public final class CacheRouteStats {
 
 	public static String summary() {
 		return String.format(
-				"[cache-route] flatCache matched=%d unmatched=%d | interp matched=%d unmatched=%d | cellCache matched=%d unmatched=%d | other=%d",
+				"[cache-route] flatCache matched=%d unmatched=%d | interp matched=%d unmatched=%d | cellCache matched=%d unmatched=%d | other=%d | nameReg size=%d records=%d dup=%d",
 				flatCacheMatched.get(), flatCacheUnmatched.get(),
 				interpolatorMatched.get(), interpolatorUnmatched.get(),
 				cellCacheMatched.get(), cellCacheUnmatched.get(),
-				otherSeen.get());
+				otherSeen.get(),
+				InterpolatorNameRegistry.size(),
+				InterpolatorNameRegistry.recordCount.get(),
+				InterpolatorNameRegistry.duplicateCount.get());
 	}
 
 	public static void reset() {

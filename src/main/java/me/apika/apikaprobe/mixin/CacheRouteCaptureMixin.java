@@ -12,6 +12,7 @@ import java.lang.reflect.Method;
 
 import me.apika.apikaprobe.CacheRouteStats;
 import me.apika.apikaprobe.DensityFunctionWalker;
+import me.apika.apikaprobe.InterpolatorNameRegistry;
 import me.apika.apikaprobe.WorldgenStateBootstrap;
 
 /**
@@ -71,6 +72,12 @@ public abstract class CacheRouteCaptureMixin {
 			}
 		}
 		CacheRouteStats.record(cls, rustName);
+		// Step 2b: also stash the per-instance rustName so the fillSlice
+		// mixin (and friends) can look up which Rust DF to bulk-call
+		// when this wrapper participates in the cache fill.
+		if (rustName != null) {
+			InterpolatorNameRegistry.record(returned, rustName);
+		}
 		if (rustName == null) {
 			CacheRouteStats.recordUnmatchedShape(cls, function.getClass().getSimpleName());
 			// One-shot dump of cellCache fingerprint hex prefix so we can
