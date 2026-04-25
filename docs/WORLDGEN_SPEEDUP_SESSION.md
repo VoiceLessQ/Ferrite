@@ -618,3 +618,92 @@ All Phase 1B perf measurements were taken with **only `noise rust` toggled** —
 v4 stays in tree as a perf-neutral correctness reference. `/ferrite noise rust on/off/diag/reset` lives in `FerriteCommand`. The Rust-side `sampleDensityRegion3DRust` JNI is reused by future Phase 2 work. Re-disabled by default; users who toggle it on get vanilla terrain at vanilla speed (no value, no regression).
 
 Phase 2 starts fresh against the full vanilla `NoiseChunk` constructor + state machine + cell iteration loop. Re-scope from inventory pass; don't try to thread it through vanilla's wrap chain.
+
+---
+
+## Phase 2 plan: bulk-buffer density, vanilla pipeline runs unchanged
+
+After Phase 1B's wall, scouted the full vanilla noise-fill flow. The
+verdict: **don't try to compete with vanilla's hot path on its own
+terms; deliver vanilla a pre-computed density buffer.** Then
+vanilla's `Aquifer` + `OreVeinifier` + `setBlockState` + heightmaps run
+at vanilla speed against that buffer.
+
+### Architecture
+
+| Layer | Owner | Target |
+|---|---|---|
+| Bulk DF density sample on corner grid | Rust | ~3 ms / chunk |
+| Per-block trilinear lerp from corners | Rust (same JNI call) | ~2 ms / chunk |
+| Per-block density buffer (16 × 384 × 16 = 98k doubles) | DirectByteBuffer | – |
+| `Aquifer.computeSubstance` per block | Java vanilla, unchanged | ~12 ms |
+| `OreVeinifier` per block | Java vanilla, unchanged | ~6 ms |
+| Section `setBlockState` + heightmap | Java | ~7 ms |
+| **Total** | | **~30 ms / chunk** vs vanilla 65 ms |
+
+The key shift vs Phase 1B: **one JNI call per chunk produces all 98k
+densities**. Rust pays the full DF cost once, lerps once, returns a
+fat double buffer. No per-block JNI cost regardless of access pattern.
+Vanilla's pipeline reads from the buffer instead of computing fresh.
+
+### Hook point (verified by scout)
+
+Mixin `@Inject(at = HEAD, cancellable = true)` on
+`NoiseChunkGenerator.fillNoise()` (yarn) /
+`NoiseBasedChunkGenerator.doFill()` (mojmap). Cite:
+`26.1.2/server/net/minecraft/world/level/levelgen/NoiseBasedChunkGenerator.java:380-461`.
+
+The mixin allocates the density buffer, calls one JNI, then runs
+vanilla's *normal* per-block loop but with `getInterpolatedDensity()`
+redirected to a buffer read. Aquifer, OreVeinifier, section writes,
+heightmap updates — all unchanged.
+
+### Phase 2 work, in order
+
+1. **Rust JNI `populateNoiseBufferRust`** — bulk-fill 98k-double
+   per-chunk buffer using `ferrite:terrain/final_density` + cell-Y-
+   aligned lerp internally. ~80 LOC Rust. Validates against
+   `/ferrite density bench-region` parity numbers we already have.
+2. **Java mixin on `fillNoise()`** — HEAD cancellable, alloc buffer,
+   call JNI, run vanilla's loop with our buffer wired in
+   (likely via a `@Redirect` on `getInterpolatedDensity` keyed off
+   our toggle). ~120 LOC Java.
+3. **Toggle reuses `/ferrite noise rust on/off/diag`** — same surface,
+   new implementation; the v4 mixin gets retired.
+4. **A/B with the full Ferrite stack on** (prewarm + chunkforce +
+   biome route + noise-rust). Phase 1B was tested with only noise
+   rust toggled — Phase 2 baseline should compound effects.
+
+### Things explicitly out of scope for Phase 2
+
+- **Aquifer / OreVeinifier port to Rust.** Stateful (per-chunk
+  caches), works fine in Java today, no measured bottleneck. Keep
+  as Phase 3+ if ever.
+- **End dimension's `EndIslandDensityFunction`.** Out of scope per
+  the original inventory; nether and overworld base_3d_noise are
+  already validated.
+- **Surface rule re-port.** Already done as a separate accelerator;
+  not touched by Phase 2.
+
+### Risk register
+
+- **JNI overhead per chunk under concurrent gen.** Phase 1B saw 60-90
+  ms per JNI call when 4 workers contended on Rayon. The bulk-buffer
+  shape is ONE call per chunk so contention may resurface — bench
+  must be measured under multi-worker load, not single-thread.
+- **Buffer alloc cost.** 98k doubles = 800 KB per chunk. Allocating a
+  `DirectByteBuffer` per chunk in Java has GC pressure. Solution if
+  it becomes one: per-thread reusable buffer pool, same as our
+  ChunkPrewarmer ThreadLocal pattern.
+- **Cell-Y vs quart-Y discretization.** v3 used quart-Y lerp (4-block
+  Y) which Java-side caused sub-cell math drift. Phase 2's Rust-side
+  lerp must use cell-Y (8-block Y) matching vanilla's `NoiseInterpolator`
+  pattern exactly. Bit-exact corner-position parity already proven.
+
+### Why this is bigger than Phase 1B but smaller than full noise port
+
+Phase 1B was 4 iterations of "argue with vanilla's pipeline." Phase 2
+is "build something vanilla consumes" — a one-way data flow. Phase 3
+(full Rust chunkgen including Aquifer / OreVeinifier / surface
+placement) would be 5-10× more code; Phase 2 is roughly 200 LOC
+total across both languages.
