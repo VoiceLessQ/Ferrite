@@ -245,9 +245,23 @@ public final class WorldgenStateBootstrap {
 			totalDeepRegistered += r.markersRegistered;
 			totalDeepFailed += r.registrationFailures;
 		}
+		// Synthetic registration: vanilla's NoiseChunk constructor wraps
+		// `cacheAllInCell(add(finalDensity, BeardifierMarker))` at chunk
+		// gen time — a tree that doesn't exist in any router root. Build
+		// its bytecode here so the fingerprint matches when the resulting
+		// CacheAllInCell wrapper hits our mixin.
+		Object finalDensityDf = null;
+		for (Object[] re : rootDfs) {
+			if ("ferrite:terrain/final_density".equals(re[1])) {
+				finalDensityDf = re[0]; break;
+			}
+		}
+		boolean syntheticOk = registerFullNoiseDensitySynthetic(finalDensityDf, fingerprintMap);
+
 		ExampleMod.LOGGER.info(
-				"[worldgen-init] deep-marker walk: found={} registered={} failed={} mapSize={} fpMapSize={}",
-				totalDeepMarkers, totalDeepRegistered, totalDeepFailed, identityMap.size(), fingerprintMap.size());
+				"[worldgen-init] deep-marker walk: found={} registered={} failed={} mapSize={} fpMapSize={} synthetic={}",
+				totalDeepMarkers, totalDeepRegistered, totalDeepFailed, identityMap.size(), fingerprintMap.size(),
+				syntheticOk ? "ok" : "skipped");
 		// Publish the identity + fingerprint maps so cache wrappers can look up names.
 		identifiedRouterDfs = java.util.Collections.unmodifiableMap(identityMap);
 		fingerprintToName = java.util.Collections.unmodifiableMap(fingerprintMap);
@@ -263,6 +277,65 @@ public final class WorldgenStateBootstrap {
 				"[worldgen-init] climate-router: {} root DFs + {} deep markers registered ({})",
 				rootRegistered, totalDeepRegistered, registeredNames);
 		return rootRegistered + totalDeepRegistered;
+	}
+
+	/**
+	 * Build and register the synthetic {@code Add(finalDensity, BeardifierMarker)}
+	 * subtree that vanilla's {@code NoiseChunk} constructor wraps with
+	 * {@code cacheAllInCell(...)} during chunkgen. Adds the fingerprint to
+	 * {@code fpMap} so the {@code CacheAllInCell} wrapper produced at chunk-wrap
+	 * time matches when our mixin fingerprints its {@code wrapped()} subtree.
+	 *
+	 * <p>The bytecode is composed by hand:
+	 * {@code [OP_ADD][encode(finalDensity)][OP_CONSTANT][f64 0.0]}.
+	 * Since {@code DensityFunctionWalker} encodes {@code BeardifierMarker} as
+	 * {@code OP_CONSTANT 0.0} (it's a singleton enum returning 0 from
+	 * {@code compute()}), this matches what the mixin will see post-mapAll.
+	 */
+	private static boolean registerFullNoiseDensitySynthetic(Object finalDensity,
+			java.util.Map<String, String> fpMap) {
+		if (finalDensity == null) return false;
+		try {
+			ByteBuffer fdBytes = DensityFunctionWalker.encode(finalDensity);
+			if (fdBytes == null) return false;
+			int fdLen = fdBytes.limit();
+			byte[] fdArr = new byte[fdLen];
+			fdBytes.position(0);
+			fdBytes.get(fdArr);
+
+			// OP_ADD = 0x01; OP_CONSTANT = 0x00 (must match DensityFunctionWalker constants)
+			java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream(fdLen + 16);
+			baos.write(0x01);
+			baos.write(fdArr, 0, fdLen);
+			baos.write(0x00);
+			ByteBuffer dbuf = ByteBuffer.allocate(8).order(ByteOrder.nativeOrder()).putDouble(0.0);
+			baos.write(dbuf.array(), 0, 8);
+			byte[] composed = baos.toByteArray();
+
+			ByteBuffer composedBuf = ByteBuffer.allocateDirect(composed.length).order(ByteOrder.nativeOrder());
+			composedBuf.put(composed);
+			composedBuf.flip();
+
+			String name = "ferrite:synthetic/full_noise_density";
+			byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
+			ByteBuffer nameBuf = ByteBuffer.allocateDirect(nameBytes.length).order(ByteOrder.nativeOrder());
+			nameBuf.put(nameBytes); nameBuf.flip();
+
+			if (!RustBridge.registerDensityFunction(nameBuf, nameBytes.length, composedBuf, composed.length)) {
+				return false;
+			}
+			StringBuilder fp = new StringBuilder(composed.length * 2);
+			for (byte b : composed) {
+				fp.append(Character.forDigit((b >> 4) & 0xF, 16));
+				fp.append(Character.forDigit(b & 0xF, 16));
+			}
+			fpMap.putIfAbsent(fp.toString(), name);
+			return true;
+		} catch (RuntimeException e) {
+			ExampleMod.LOGGER.warn(
+					"[worldgen-init] cellCache synthetic registration failed: {}", e.toString());
+			return false;
+		}
 	}
 
 	/** Names of registered biomes, parallel to Rust's i32 IDs (slot
