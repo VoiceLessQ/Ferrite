@@ -24,11 +24,12 @@ public final class BulkChunkDensityFill {
 	private BulkChunkDensityFill() {}
 
 	/** Default OFF — opt in via {@code -Dferrite.bulkChunkDensity=true}.
-	 *  Live measurement showed ~56 ms/chunk JNI cost vs vanilla's ~2 ms
-	 *  steady-state per-block (with JIT + CacheOnce). Architecture is
-	 *  correct (0 fallbacks across 233M buffer hits) but perf-regressed
-	 *  by ~30-90 ms/chunk because eager bulk fill loses to vanilla's
-	 *  lazy per-block evaluation with caching. */
+	 *  Live measurement (post-JIT-strip): noise-sync ~100-118 ms/chunk vs
+	 *  vanilla baseline ~55-79 ms. JIT-optimized hot path closed ~30ms of
+	 *  the original 50-90ms regression. Remaining gap is the upfront ~50ms
+	 *  Rust JNI fill — the Rust DF *interpreter* at the corner-sample
+	 *  stage. Closing it would need a DF *compiler* (mirroring the
+	 *  surface-rule bytecode evaluator approach). */
 	public static volatile boolean ENABLED = Boolean.parseBoolean(
 			System.getProperty("ferrite.bulkChunkDensity", "false"));
 

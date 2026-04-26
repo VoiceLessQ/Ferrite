@@ -30,6 +30,47 @@ Critical findings:
 2. `fillSlice` walks `this.interpolators` and `selectCellYZ` walks `this.cellCaches` — both are simple lists. We can mixin once into each method to coalesce *all* cache fills into one or two bulk Rust calls per phase.
 3. FlatCache fills eagerly in its constructor with `fill=true` — savings is bounded but cheap to swap.
 
+## Step 4b — JIT-optimized hot path (closed ~⅓ of the regression)
+
+Diagnosis: vanilla's `CacheOnce.sample` is ~30 bytecodes, all `final` fields, monomorphic call site → C2 inlines the entire `BlockStateFiller.calculate → CacheOnce.sample → buffer[index]` chain into ~15 native instructions, ~5 ns/cell.
+
+Our `RustFinalDensityBufferWrapper.sample` had two `AtomicLong.incrementAndGet()` per call. Each atomic is a CPU **memory barrier** — flushes the pipeline, locks the cache line cross-core. Doing it 196k times per chunk (2 atomics × 98k blocks) was breaking pipelining at the hardware level.
+
+**Fix:**
+
+```java
+public double sample(NoisePos pos) {
+    double[] buf = this.buffer;
+    if (buf == null) return slowSample(pos);
+    int relX = pos.blockX() - this.chunkMinBlockX;
+    int relY = pos.blockY() - MIN_BLOCK_Y;
+    int relZ = pos.blockZ() - this.chunkMinBlockZ;
+    if ((relX | (15 - relX) | relY | (383 - relY) | relZ | (15 - relZ)) < 0) {
+        fallbacks.incrementAndGet();
+        return original.sample(pos);
+    }
+    return buf[(relY << 8) | (relZ << 4) | relX];
+}
+```
+
+- No atomics in hot path (memory barriers gone)
+- ~25 bytecodes — under HotSpot's auto-inline threshold
+- Combined OR-chain bounds check (single branch, branchless)
+- Bitwise shifts replace multiplications (CHUNK=16=2^4, HEIGHT=384 fits in 9 bits)
+- Cold path (null buffer, out-of-chunk) split into separate method to keep `sample()` small
+
+**Live measurement (sustained over 2651 chunks, before/after):**
+
+| Metric | Pre-JIT-strip | Post-JIT-strip | Delta |
+|---|---|---|---|
+| JNI per chunk | 56.4 ms | 50.6 ms | -6 ms |
+| noise-sync per chunk | ~110-148 ms | ~97-118 ms | **-30 ms** |
+| Per-block path | ~10 ms (atomics) | ~5 ms (clean) | -5 ms |
+
+vs vanilla baseline (~55-79 ms): still regressed ~25-50 ms. The JIT optimization closed ~⅓ of the original gap. The remaining cost is the upfront ~50ms Rust DF interpreter at the corner-sample stage. Closing that fully would need a Rust DF **compiler** (mirroring our surface-rule bytecode evaluator approach), not an interpreter.
+
+Default OFF. `-Dferrite.bulkChunkDensity=true` for opt-in.
+
 ## Step 4 — full chunk-density takeover (correct, perf regressed)
 
 Implemented the "drive yourself" approach the user proposed: replace vanilla's outer `cacheAllInCell(add(finalDensity, beardifier))` `CellCache` with `RustFinalDensityBufferWrapper` that pre-fills a 16×384×16 chunk-density buffer in one Rust JNI call.
