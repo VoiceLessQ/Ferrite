@@ -81,13 +81,22 @@ public abstract class BulkChunkDensityMixin {
 		// mixin's "FLAT_CACHE".equals comparison was never verified
 		// to actually fire (its identity-lookup gate also bailed).
 		BulkChunkDensityFill.recordTypeNameOnce(typeName);
-		// Yarn 1.21.11 overrides Wrapping.Type.toString to return camelCase
-		// (verified via one-shot diag: "Cache2D", "FlatCache", "CacheOnce",
-		// "Interpolated", "CacheAllInCell"). Underlying field name is
-		// CACHE_ALL_IN_CELL but that's not what reflective toString gives us.
-		boolean isCellCache = "CacheAllInCell".equals(typeName)
-				|| "CACHE_ALL_IN_CELL".equals(typeName)  // defensive: future yarn drift
-				|| "cache_all_in_cell".equals(typeName);
+		// IMPORTANT: do NOT remove "CacheAllInCell" thinking it's dead code.
+		// 1.21.11 yarn-decompiled source shows Wrapping.Type as a plain
+		// enum with constants UPPER_SNAKE (CACHE_ALL_IN_CELL etc.) and NO
+		// toString override — by Java spec, default Enum.toString() should
+		// return name() = "CACHE_ALL_IN_CELL". HOWEVER, empirical runtime
+		// observation (one-shot diagnostic, see git history) shows
+		// typeObj.toString() returning "CacheAllInCell" (CamelCase) for
+		// every Wrapping.Type encountered during chunkgen. Source/runtime
+		// drift, possibly from yarn's tiny mappings being newer than the
+		// published sources jar. The CamelCase form is THE actual runtime
+		// value; "CACHE_ALL_IN_CELL" + "cache_all_in_cell" are defensive
+		// fallbacks for future yarn drift. Removing CamelCase = 0
+		// substitutions, breaking the mixin entirely.
+		boolean isCellCache = "CacheAllInCell".equals(typeName)        // actual runtime
+				|| "CACHE_ALL_IN_CELL".equals(typeName)                 // theoretical Java enum default
+				|| "cache_all_in_cell".equals(typeName);                // asString form, defensive
 		if (!isCellCache) {
 			BulkChunkDensityFill.nonCellCacheSeen.incrementAndGet();
 			return;
