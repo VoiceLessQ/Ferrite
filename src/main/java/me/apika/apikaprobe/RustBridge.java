@@ -417,4 +417,68 @@ public class RustBridge {
       int factorySeedCount,
       java.nio.ByteBuffer results,
       int columnCount);
+
+  // ==========================================================================
+  // Aquifer port — per-chunk handle-based JNI.
+  //
+  // Lifecycle: initAquifer → many applyAquifer → freeAquifer.
+  // The handle is an opaque jlong (boxed Rust pointer); 0 indicates
+  // failure (e.g. worldgen state not finalized).
+  //
+  // Surface-height grid: see rust/mod/src/aquifer_jni.rs. Java
+  // pre-computes a sparse 2D grid by calling vanilla's
+  // chunkNoiseSampler.estimateSurfaceHeight at grid points; Rust
+  // does nearest-neighbor lookup with a fallback to the construction-
+  // time scalar estimate when out of range.
+  // ==========================================================================
+
+  /**
+   * Allocate per-chunk aquifer state and return a handle. Returns 0 on
+   * failure. Pair every successful call with a {@link #freeAquifer}.
+   *
+   * @param surfaceGridBuf direct ByteBuffer of i32 LE values, row-major
+   *                       {@code [gz * gridSideX + gx]}.
+   * @param gridStrideBlocks block-spacing between grid points.
+   */
+  public static native long initAquifer(
+      int seaLevel,
+      int chunkMinBlockX,
+      int chunkMinBlockZ,
+      int chunkMaxBlockX,
+      int chunkMaxBlockZ,
+      int minY,
+      int height,
+      int surfaceHeightEstimate,
+      java.nio.ByteBuffer surfaceGridBuf,
+      int gridOriginBlockX,
+      int gridOriginBlockZ,
+      int gridSideX,
+      int gridSideZ,
+      int gridStrideBlocks);
+
+  /**
+   * Per-block aquifer query. Returns a packed jlong:
+   * <ul>
+   *   <li>Low 8 bits: result enum
+   *     <ul>
+   *       <li>0 = NONE (no aquifer override; vanilla density wins)</li>
+   *       <li>1 = AIR (very-deep no-fluid)</li>
+   *       <li>2 = WATER</li>
+   *       <li>3 = LAVA</li>
+   *     </ul>
+   *   </li>
+   *   <li>Bit 8: needsFluidTick (1 = should be ticked, 0 = static)</li>
+   * </ul>
+   *
+   * <p>Mirrors vanilla's
+   * {@code AquiferSampler.Impl.apply(NoisePos, double)} return.
+   */
+  public static native long applyAquifer(
+      long handle, int blockX, int blockY, int blockZ, double density);
+
+  /**
+   * Free the aquifer state. MUST be called when the chunk's aquifer
+   * goes out of scope, otherwise we leak ~16 KB per chunk forever.
+   */
+  public static native void freeAquifer(long handle);
 }

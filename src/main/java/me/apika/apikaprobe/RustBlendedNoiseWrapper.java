@@ -37,12 +37,14 @@ import net.minecraft.world.gen.densityfunction.DensityFunction;
 public final class RustBlendedNoiseWrapper implements DensityFunction.Base {
 	public static volatile boolean ENABLED = false;
 
-	public static final AtomicLong sampleCalls = new AtomicLong();
-	public static final AtomicLong cornerAlignedCalls = new AtomicLong();
-	public static final AtomicLong subBlockCalls = new AtomicLong();
+	// Diagnostic counters live on the COLD path only (per-chunk JNI fill,
+	// wrapper construction, fallbacks). Per-block sample is JIT-critical
+	// AND multi-thread-hot under vanilla's parallel chunkgen worker pool;
+	// hot-path AtomicLong incrs become CPU memory barriers AND cause
+	// cache-line ping-pong across Worker-Main-N cores. Same fix template
+	// as RustFinalDensityBufferWrapper. See docs/PARALLELISM_AUDIT.md.
 	public static final AtomicLong bulkJniCalls = new AtomicLong();
 	public static final AtomicLong bulkJniTotalNs = new AtomicLong();
-	public static final AtomicLong cacheHits = new AtomicLong();
 	public static final AtomicLong fallbacks = new AtomicLong();
 	public static final AtomicLong wrapperConstructCount = new AtomicLong();
 
@@ -86,14 +88,9 @@ public final class RustBlendedNoiseWrapper implements DensityFunction.Base {
 
 	@Override
 	public double sample(NoisePos pos) {
-		sampleCalls.incrementAndGet();
 		int blockX = pos.blockX();
 		int blockY = pos.blockY();
 		int blockZ = pos.blockZ();
-
-		boolean cornerAligned = (blockX & 3) == 0 && (blockZ & 3) == 0 && (blockY & 7) == 0;
-		if (cornerAligned) cornerAlignedCalls.incrementAndGet();
-		else subBlockCalls.incrementAndGet();
 
 		if (registeredName == null) {
 			fallbacks.incrementAndGet();
@@ -146,7 +143,6 @@ public final class RustBlendedNoiseWrapper implements DensityFunction.Base {
 		double l11 = v011 + fx * (v111 - v011);
 		double l0 = l00 + fy * (l10 - l00);
 		double l1 = l01 + fy * (l11 - l01);
-		cacheHits.incrementAndGet();
 		return l0 + fz * (l1 - l0);
 	}
 
@@ -209,34 +205,21 @@ public final class RustBlendedNoiseWrapper implements DensityFunction.Base {
 	}
 
 	public static String diagSummary() {
-		long calls = sampleCalls.get();
 		long jni = bulkJniCalls.get();
 		long jniNs = bulkJniTotalNs.get();
 		long wrappers = wrapperConstructCount.get();
-		long corners = cornerAlignedCalls.get();
-		long subBlocks = subBlockCalls.get();
-		long hits = cacheHits.get();
 		long fbs = fallbacks.get();
 
 		double jniAvgMs = jni == 0 ? 0 : (double) jniNs / jni / 1_000_000.0;
-		double callsPerChunk = wrappers == 0 ? 0 : (double) calls / wrappers;
-		double cornerPct = calls == 0 ? 0 : 100.0 * corners / calls;
 
 		return String.format(
-				"[blended-rust diag] enabled=%s wrappers=%d calls=%d (%.0f/chunk) "
-						+ "corner=%.1f%% subBlock=%d hits=%d fallbacks=%d "
-						+ "jni=%d (%.2fms avg)",
-				ENABLED, wrappers, calls, callsPerChunk, cornerPct, subBlocks,
-				hits, fbs, jni, jniAvgMs);
+				"[blended-rust diag] enabled=%s wrappers=%d fallbacks=%d jni=%d (%.2fms avg)",
+				ENABLED, wrappers, fbs, jni, jniAvgMs);
 	}
 
 	public static void resetDiag() {
-		sampleCalls.set(0);
-		cornerAlignedCalls.set(0);
-		subBlockCalls.set(0);
 		bulkJniCalls.set(0);
 		bulkJniTotalNs.set(0);
-		cacheHits.set(0);
 		fallbacks.set(0);
 		wrapperConstructCount.set(0);
 	}

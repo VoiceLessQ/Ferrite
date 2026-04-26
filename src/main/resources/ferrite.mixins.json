@@ -45,7 +45,9 @@
 		"ChunkNoiseSamplerMixin",
 		"CacheRouteCaptureMixin",
 		"BulkSampleDensityMixin",
-		"BulkChunkDensityMixin"
+		"BulkChunkDensityMixin",
+		"FerriteDispatcherProbeMixin",
+		"AquiferRouteMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

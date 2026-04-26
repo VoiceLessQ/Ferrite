@@ -28,11 +28,16 @@ public final class RustBiomeRouter {
 	 *  Rust biome ID; entry = the live holder vanilla would have returned. */
 	private static volatile RegistryEntry<Biome>[] holdersById = null;
 
-	private static final java.util.concurrent.atomic.AtomicLong hitCount =
-			new java.util.concurrent.atomic.AtomicLong();
+	// Diagnostic counters live on the COLD path only. Per-call hit
+	// tracking was removed: under vanilla's parallel chunkgen worker pool,
+	// hot-path AtomicLong incrs cause cache-line ping-pong across
+	// Worker-Main-N cores. JNI cost (fired once per 16-cell slab refill)
+	// remains tracked. See docs/PARALLELISM_AUDIT.md.
 	private static final java.util.concurrent.atomic.AtomicLong missCount =
 			new java.util.concurrent.atomic.AtomicLong();
 	private static final java.util.concurrent.atomic.AtomicLong totalNs =
+			new java.util.concurrent.atomic.AtomicLong();
+	private static final java.util.concurrent.atomic.AtomicLong slabRefillCount =
 			new java.util.concurrent.atomic.AtomicLong();
 
 	@SuppressWarnings("unchecked")
@@ -79,7 +84,6 @@ public final class RustBiomeRouter {
 		// skip JNI entirely.
 		int prewarmId = ChunkPrewarmer.lookup(blockX, blockY, blockZ);
 		if (prewarmId >= 0 && prewarmId < table.length) {
-			hitCount.incrementAndGet();
 			return table[prewarmId];
 		}
 
@@ -102,6 +106,7 @@ public final class RustBiomeRouter {
 					c.buf);
 			long elapsed = System.nanoTime() - t0;
 			totalNs.addAndGet(elapsed);
+			slabRefillCount.incrementAndGet();
 			if (written != 16) {
 				missCount.incrementAndGet();
 				return null;
@@ -120,7 +125,6 @@ public final class RustBiomeRouter {
 			missCount.incrementAndGet();
 			return null;
 		}
-		hitCount.incrementAndGet();
 		return table[id];
 	}
 
@@ -129,12 +133,15 @@ public final class RustBiomeRouter {
 		return table == null ? 0 : table.length;
 	}
 
-	/** Returns {hits, misses, totalNs} and resets counters. Called by the
-	 *  ChunkGenMonitor 5-second reporter so windows are independent. */
+	/** Returns {slabRefills, misses, totalNs} and resets counters.
+	 *  Per-call hit count was removed because hot-path AtomicLong incrs
+	 *  cause cache-line ping-pong under vanilla's parallel chunkgen
+	 *  worker pool. Slab-refill count gives a useful diagnostic at
+	 *  ~1/16 the call rate without touching the hot path. */
 	public static long[] drainStats() {
-		long h = hitCount.getAndSet(0);
+		long r = slabRefillCount.getAndSet(0);
 		long m = missCount.getAndSet(0);
 		long t = totalNs.getAndSet(0);
-		return new long[]{h, m, t};
+		return new long[]{r, m, t};
 	}
 }

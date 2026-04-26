@@ -107,7 +107,9 @@ public final class FerriteCommand {
 								.then(CommandManager.argument("name", StringArgumentType.greedyString())
 										.executes(FerriteCommand::densityDump)))
 						.then(CommandManager.literal("bench-region")
-								.executes(FerriteCommand::densityBenchRegion)))
+								.executes(FerriteCommand::densityBenchRegion))
+						.then(CommandManager.literal("bench-buffer")
+								.executes(FerriteCommand::densityBenchBuffer)))
 				.then(CommandManager.literal("biome")
 						.then(CommandManager.literal("validate")
 								.executes(ctx -> biomeValidate(ctx, 1000))
@@ -178,7 +180,22 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("dispatch")
 								.then(CommandManager.literal("on").executes(FerriteCommand::enableSurfaceDispatch))
 								.then(CommandManager.literal("off").executes(FerriteCommand::disableSurfaceDispatch))
-								.then(CommandManager.literal("status").executes(FerriteCommand::statusSurfaceDispatch)))));
+								.then(CommandManager.literal("status").executes(FerriteCommand::statusSurfaceDispatch))))
+				.then(CommandManager.literal("aquifer")
+						.then(CommandManager.literal("rust")
+								.then(CommandManager.literal("on").executes(FerriteCommand::aquiferRustOn))
+								.then(CommandManager.literal("off").executes(FerriteCommand::aquiferRustOff))
+								.then(CommandManager.literal("status").executes(FerriteCommand::aquiferRustStatus)))
+						.then(CommandManager.literal("parity")
+								.then(CommandManager.literal("on").executes(FerriteCommand::aquiferParityOn))
+								.then(CommandManager.literal("off").executes(FerriteCommand::aquiferParityOff))
+								.then(CommandManager.literal("reset").executes(FerriteCommand::aquiferParityReset))))
+				.then(CommandManager.literal("probe")
+						.then(CommandManager.literal("dispatcher")
+								.then(CommandManager.literal("on").executes(FerriteCommand::dispatcherProbeOn))
+								.then(CommandManager.literal("off").executes(FerriteCommand::dispatcherProbeOff))
+								.then(CommandManager.literal("status").executes(FerriteCommand::dispatcherProbeStatus))
+								.then(CommandManager.literal("reset").executes(FerriteCommand::dispatcherProbeReset)))));
 	}
 
 	/**
@@ -767,6 +784,86 @@ public final class FerriteCommand {
 	 *  compute, both over a chunk-sized region of ferrite:terrain/
 	 *  final_density. Reports per-cell µs and total ms each side.
 	 *  Sanity-checks Rust output against Java at a few sample cells. */
+	/** Phase 2 bench: time the bulk per-chunk density buffer JNI. The
+	 *  output should match what vanilla's per-block compute would
+	 *  produce; we sample-check 16 random positions for parity. */
+	private static int densityBenchBuffer(CommandContext<ServerCommandSource> ctx) {
+		final String name = "ferrite:terrain/final_density";
+		final int chunkMinX = 0;
+		final int chunkMinZ = 0;
+		final int chunkSize = 16;
+		final int height = 384;
+		final int total = chunkSize * height * chunkSize;
+
+		byte[] nameBytes = name.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+		java.nio.ByteBuffer nameBuf = java.nio.ByteBuffer.allocateDirect(nameBytes.length)
+				.order(java.nio.ByteOrder.nativeOrder());
+		nameBuf.put(nameBytes); nameBuf.flip();
+		java.nio.ByteBuffer outBuf = java.nio.ByteBuffer.allocateDirect(total * 8)
+				.order(java.nio.ByteOrder.nativeOrder());
+
+		// Warmup
+		int written = RustBridge.populateNoiseBufferRust(
+				nameBuf, nameBytes.length, chunkMinX, chunkMinZ, outBuf);
+		if (written != total) {
+			sendFeedback(ctx, "[noise-buffer] Rust returned " + written + ", expected " + total
+					+ " (state finalized? name registered?)", false);
+			return Command.SINGLE_SUCCESS;
+		}
+
+		int iters = 5;
+		long rustNs = 0;
+		for (int i = 0; i < iters; i++) {
+			outBuf.position(0);
+			long t0 = System.nanoTime();
+			RustBridge.populateNoiseBufferRust(
+					nameBuf, nameBytes.length, chunkMinX, chunkMinZ, outBuf);
+			rustNs += System.nanoTime() - t0;
+		}
+
+		// Sample-check 16 random block positions for parity with vanilla
+		// computeVanilla(finalDensity). At cell-corner-aligned positions
+		// the lerp degenerates; at sub-cell positions Rust does the lerp
+		// matching vanilla's NoiseInterpolator pattern.
+		outBuf.position(0);
+		java.nio.DoubleBuffer rustDoubles = outBuf.asDoubleBuffer();
+		java.util.Random rng = new java.util.Random(0xCAFEBABEL);
+		int mismatch = 0;
+		double maxDiff = 0.0;
+		StringBuilder worst = new StringBuilder();
+		for (int s = 0; s < 16; s++) {
+			int bx = rng.nextInt(16);
+			int by = rng.nextInt(384);
+			int bz = rng.nextInt(16);
+			int idx = (by * 16 + bz) * 16 + bx;
+			double rust = rustDoubles.get(idx);
+			Double yarn = DensityParity.sampleVanilla(
+					ctx.getSource().getServer(), name,
+					chunkMinX + bx, -64 + by, chunkMinZ + bz);
+			if (yarn == null || Double.isNaN(yarn)) continue;
+			double d = Math.abs(rust - yarn);
+			if (d > maxDiff) {
+				maxDiff = d;
+				worst.setLength(0);
+				worst.append("(").append(bx).append(",").append(by - 64).append(",").append(bz)
+						.append(") rust=").append(String.format("%.6f", rust))
+						.append(" yarn=").append(String.format("%.6f", yarn));
+			}
+			if (d > 1.0e-9) mismatch++;
+		}
+
+		double rustMs = rustNs / iters / 1_000_000.0;
+		double rustUsCell = rustNs / (double) iters / total / 1_000.0;
+		String line = String.format(
+				"[noise-buffer] %s, %d cells: rust=%.2fms (%.2fµs/cell, avg of %d) "
+						+ "mismatch=%d/16 maxDiff=%.3e %s",
+				name, total, rustMs, rustUsCell, iters, mismatch, maxDiff,
+				maxDiff > 1.0e-9 ? "worst=" + worst : "");
+		ExampleMod.LOGGER.info(line);
+		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
 	private static int densityBenchRegion(CommandContext<ServerCommandSource> ctx) {
 		final String name = "ferrite:terrain/final_density";
 		// Cell-corner grid: 4 × 97 × 4. Y range -64..320 at step 4 = 97
@@ -1149,31 +1246,35 @@ public final class FerriteCommand {
 	}
 
 	private static int noiseRustOn(CommandContext<ServerCommandSource> ctx) {
-		RustBlendedNoiseWrapper.ENABLED = true;
-		sendFeedback(ctx, "[noise-rust] ENABLED — newly-generated chunks substitute BlendedNoise leaves with Rust corner cache. Existing chunks unaffected.", false);
+		RustFinalDensityBufferWrapper.ENABLED = true;
+		sendFeedback(ctx, "[noise-rust] ENABLED — newly-generated chunks bulk-prefill density via Rust (Phase 2). Existing chunks unaffected. Math may drift ~0.02 at sub-cell positions; toggle off if visual artifacts appear.", false);
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int noiseRustOff(CommandContext<ServerCommandSource> ctx) {
-		RustBlendedNoiseWrapper.ENABLED = false;
-		sendFeedback(ctx, "[noise-rust] disabled — newly-generated chunks use vanilla BlendedNoise.", false);
+		RustFinalDensityBufferWrapper.ENABLED = false;
+		sendFeedback(ctx, "[noise-rust] disabled — newly-generated chunks use vanilla finalDensity.", false);
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int noiseRustStatus(CommandContext<ServerCommandSource> ctx) {
-		sendFeedback(ctx, "[noise-rust] enabled=" + RustBlendedNoiseWrapper.ENABLED, false);
+		sendFeedback(ctx, "[noise-rust] enabled=" + RustFinalDensityBufferWrapper.ENABLED, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int noiseRustDiag(CommandContext<ServerCommandSource> ctx) {
-		String line = RustBlendedNoiseWrapper.diagSummary();
-		ExampleMod.LOGGER.info(line);
-		sendFeedback(ctx, line, false);
+		String bufferLine = RustFinalDensityBufferWrapper.diagSummary();
+		String flatLine = RustFlatCache.diagSummary();
+		ExampleMod.LOGGER.info(bufferLine);
+		ExampleMod.LOGGER.info(flatLine);
+		sendFeedback(ctx, bufferLine, false);
+		sendFeedback(ctx, flatLine, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int noiseRustReset(CommandContext<ServerCommandSource> ctx) {
-		RustBlendedNoiseWrapper.resetDiag();
+		RustFinalDensityBufferWrapper.resetDiag();
+		RustFlatCache.resetDiag();
 		sendFeedback(ctx, "[noise-rust] diagnostic counters reset", false);
 		return Command.SINGLE_SUCCESS;
 	}
@@ -1195,6 +1296,93 @@ public final class FerriteCommand {
 		String line = String.format("[biome-compare] (%d,%d,%d) rust=%s vanilla=%s [%s]",
 				x, y, z, predicted, actual, status);
 		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int aquiferRustOn(
+			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		RustAquiferDispatch.ENABLED = true;
+		String msg = "[aquifer-rust] enabled — wrappers will be constructed for newly-loaded chunks (existing chunks unchanged)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int aquiferRustOff(
+			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		RustAquiferDispatch.ENABLED = false;
+		String msg = "[aquifer-rust] disabled — vanilla AquiferSampler.Impl path active for newly-loaded chunks";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int aquiferRustStatus(
+			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		String msg = RustAquiferDispatch.diagSummary();
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int aquiferParityOn(
+			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		RustAquiferDispatch.PARITY_MODE = true;
+		String msg = "[aquifer-parity] enabled — every Rust apply will also call vanilla and compare (~2x cost). Mismatches log to [aquifer-parity] tag.";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int aquiferParityOff(
+			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		RustAquiferDispatch.PARITY_MODE = false;
+		sendFeedback(ctx, "[aquifer-parity] disabled", true);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int aquiferParityReset(
+			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		RustAquiferDispatch.parityCompared.set(0);
+		RustAquiferDispatch.parityBlockMismatch.set(0);
+		RustAquiferDispatch.parityTickMismatch.set(0);
+		sendFeedback(ctx, "[aquifer-parity] counters reset", true);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int dispatcherProbeOn(
+			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		FerriteDispatcherProbe.ENABLED = true;
+		FerriteDispatcherProbe.resetDiag();
+		String msg = "[ferrite/dispatcher-probe] enabled (samples reset; status with /ferrite probe dispatcher status)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int dispatcherProbeOff(
+			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		FerriteDispatcherProbe.ENABLED = false;
+		String msg = "[ferrite/dispatcher-probe] disabled";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int dispatcherProbeStatus(
+			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		String msg = FerriteDispatcherProbe.diagSummary();
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int dispatcherProbeReset(
+			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		FerriteDispatcherProbe.resetDiag();
+		String msg = "[ferrite/dispatcher-probe] reset";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
 	}
 
