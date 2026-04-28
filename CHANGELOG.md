@@ -7,6 +7,66 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Performance
+
+- **Noise-sync chunkgen phase: ~8-10 ms/chunk faster** for everyone.
+  JFR profiler session (2026-04-28) identified two diagnostic mixins
+  firing during the noise-fill phase that contributed combined
+  ~8-10 ms/chunk of pure observation overhead in normal play:
+  - `CacheRouteCaptureMixin` was running a reflective DF tree walk
+    (`DensityFunctionWalker.fingerprint`) per Marker wrap during
+    `ChunkNoiseSampler` init — diagnostic for the Phase 2.5 step 2a/2b
+    bulk-density experiments which are themselves default-off.
+  - `AquiferMonitor` was wrapping every `AquiferSampler.apply` call
+    (~98K per chunk) with `@Inject HEAD/RETURN` — pure timing overhead.
+
+  Both gated behind default-off flags (`CacheRouteStats.ENABLED`,
+  `AquiferMonitor.ENABLED`). Re-enable only when actively debugging
+  density or aquifer work. Cumulative win across exploration,
+  pre-gen runs, and new-area loads — every chunk generated.
+
+### Changed
+
+- **Surface dispatcher hot path: biome supplier cache + reused
+  `BlockPos.Mutable` + `Identifier.toString` intern.** Dispatcher-
+  internal optimisation. Eliminates the duplicated supplier-chain
+  resolution and ~30K `BlockPos` allocations per chunk that fired
+  per-Y position. Parity validated: 99.9% match vs vanilla,
+  java=rust=100%, divergences=0. Measured savings on the dispatcher
+  path: ~0.7 ms/chunk (17.7 → 17.0 ms median). Smaller than projected
+  because HotSpot had already inlined most of the supplier chain.
+  Surface dispatcher remains default-OFF — see `docs/PIANO_STATUS.md`
+  "diagnostic gating" section for the full finding and why a
+  surface-specific profiler pass is needed before flipping default-on.
+
+### Added
+
+- **`[ferrite] SIMD: avx512f={} avx2={} sse4.2={}` startup log line.**
+  One-shot probe at engine init reports the host CPU's SIMD
+  capabilities. Decides whether a future SIMD-Perlin port targets
+  f64x4 (AVX2) or f64x8 (AVX-512). Diagnostic only — no behaviour
+  change today.
+
+- **`PhysicsOracle` parity validator.** Mirrors the aquifer/redstone
+  oracle pattern. When `PARITY_MODE=true` (default false), every
+  `PhysicsDispatcher.adjust` call shadow-runs the Rust path against
+  vanilla and logs `[physics-parity]` mismatches per 5-second window.
+  Validated: 100.0000% match across 700K+ dispatches at 1000-mob
+  scale; physics dispatcher itself stays default-OFF (would regress
+  perf vs vanilla's JIT-inlined path under load).
+
+### Internal
+
+- **Java package layout reorganised into 7 subpackages** (`bridge/`,
+  `command/`, `entity/`, `monitor/`, `worldgen/`, `worldgen/chunk/`,
+  plus the existing `surface/`, `redstone/`, `mixin/`). Only
+  `RustBridge.java` remains at the root package — JNI symbol
+  stability (the 30 `Java_me_apika_apikaprobe_RustBridge_*` exports
+  in `rust/mod/src/` would all need renaming if it moved). Six
+  refactor commits, every commit verified by `compileJava` clean +
+  `runClient` confirming `[ferrite] Loaded rust_mod` on boot.
+  No behaviour change.
+
 ### Added
 
 - **Surface rule dispatcher** (`/ferrite surface dispatch on|off|status`).
