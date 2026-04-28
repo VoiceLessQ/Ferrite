@@ -9,6 +9,36 @@ under low-end hardware constraints.
 project equivalent in scope to C2ME. The PoC is complete and sealed —
 further work is a different project, not a continuation.
 
+## 2026-04-28 update — JFR session, diagnostic gating shipped
+
+A profiler-driven session replaced the earlier estimate-from-source
+approach. Key findings:
+
+- **JFR built into JDK 21** (no async-profiler install needed on
+  Windows). Launch with `JAVA_TOOL_OPTIONS="-XX:StartFlightRecording=
+  duration=120s,filename=ferrite.jfr,settings=profile,dumponexit=true,
+  disk=true"` then `jfr print --events jdk.ExecutionSample` for
+  parsing.
+- **Aggregate-by-frame-count is misleading.** The first JFR pass
+  ranked frames by total stack-appearance count across all chunkgen
+  workers — which surfaced `CacheRouteCaptureMixin` and
+  `AquiferMonitor` as #1 cost contributors. Both were correctly
+  identified as expensive (~8-10 ms/chunk combined) but they fired
+  during `noise-sync`, not `surface-buildSurface`. Gating them
+  saved ~8-10 ms on the `noise-sync` band (real win, shipped
+  default-on, commit `c91a12b`) but did **not** move the surface
+  dispatcher band. Phase-aware filtering of JFR samples is required
+  for per-band cost analysis.
+- **Audit-by-reading was wrong about supplier chain cost.** A
+  pre-profiler "biome cache eliminates duplicated supplier-chain
+  resolution" change was estimated at ~12-15 ms savings; actual
+  measurement showed ~0.7 ms (commit `29975e7`). HotSpot had already
+  inlined the supplier chain. **Lesson: estimate cost from the
+  profiler, not from reading the code.**
+
+See `PIANO_STATUS.md` "diagnostic gating" section for the full
+JFR-data → finding → action chain.
+
 ## Test environment
 
 - MC 1.21.11 / Fabric 0.18.4 / Yarn mappings

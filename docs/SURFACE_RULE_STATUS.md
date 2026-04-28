@@ -4,6 +4,34 @@ Snapshot as of commit `8822605`. Companion to the forward-looking
 `SURFACE_RULE_BATCH_PLAN.md` and `SURFACE_RULE_BUFFER_SPEC.md` — this
 doc captures what's actually built and runnable today.
 
+## 2026-04-28 update — dispatcher gap is intrinsic, stays default-OFF
+
+JFR profiler session under live chunkgen pinpointed where the surface
+dispatcher's ON-vs-OFF gap lives. Three takeaways:
+
+- **Biome cache + Mutable BlockPos + Identifier intern shipped**
+  (commit `29975e7`). Eliminates duplicated supplier-chain resolution
+  and ~30K BlockPos allocations per chunk. Parity clean
+  (`match=99.9%`, `java=rust=100%`, divergences=0). Measured savings:
+  **~0.7 ms** (17.7 → 17.0 ms median ON), much smaller than the
+  source-reading audit projected (~12-15 ms) — JIT had already
+  inlined most of the supplier chain.
+- **Surface band ON ≈ 17 ms** vs OFF ≈ 9-10 ms is now confirmed to
+  be **intrinsic to the dispatch path itself** (per-position context
+  capture, per-thread array writes, JNI crossing, post-dispatch
+  writeback loop). Diagnostic gating (`CacheRouteCaptureMixin` +
+  `AquiferMonitor`, commit `c91a12b`) saved ~8-10 ms in the
+  `noise-sync` phase but did not move the surface band — those mixins
+  fired in different chunkgen phases.
+- **Dispatcher stays default-OFF.** No path to surface-band parity
+  with vanilla without a surface-specific profiler pass that filters
+  JFR samples to the `SurfaceBuilder.buildSurface` subtree only —
+  general chunkgen profiles aggregate across phases and miss the
+  dispatch-internal hot frames.
+
+See `PIANO_STATUS.md` "diagnostic gating" section for the full JFR
+data and reasoning chain.
+
 ## Headline (current)
 
 - **99.8% match** between the bytecode evaluator and vanilla

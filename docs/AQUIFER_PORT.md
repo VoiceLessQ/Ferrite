@@ -10,6 +10,16 @@ overridden by water/lava from a local aquifer cell.
 artifacts in-world**. Recommended setting: `/ferrite aquifer rust off`
 until per-column surface estimates land (next-pass plan below).
 
+**Update (2026-04-28):** `AquiferMonitor` is now **gated behind
+`AquiferMonitor.ENABLED` (default false)** — commit `c91a12b`. JFR
+profiler showed the per-block `@Inject HEAD/RETURN` pair on
+`AquiferSampler$Impl.apply` (~98K calls/chunk) contributing **~3-5 ms
+of pure observation overhead** to the `noise-sync` phase even when
+the Rust aquifer port itself was off. Re-enable with
+`AquiferMonitor.ENABLED = true` only when actively measuring aquifer
+per-block cost. See `PIANO_STATUS.md` "diagnostic gating" section for
+the full finding.
+
 ## TL;DR
 
 - **Rust algorithm body fully ported**, ~770 lines, 9 unit tests passing.
