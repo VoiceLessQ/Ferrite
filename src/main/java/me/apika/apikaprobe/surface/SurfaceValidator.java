@@ -154,10 +154,25 @@ public final class SurfaceValidator {
 		final double[]  secondaryDepths   = new double[256];
 		final int[]     surfaceHeights    = new int[256];
 		double[]        noiseSlab         = null; // 256 × channelCount; sized lazily
+
+		// Per-column biome cache. Identity-keyed on the biome supplier
+		// instance — vanilla swaps suppliers when crossing a cave-biome
+		// boundary, so reference equality is the correct invalidation
+		// signal. Eliminates the duplicated supplier-chain resolution
+		// (fastReadObjectField + Supplier.get + RegistryEntry chain)
+		// that fired twice per Y position before — once for biome name,
+		// once for isCold. ~30K positions × ~150ns saved = ~4-5 ms/chunk.
+		final Object[] cachedSuppliers    = new Object[256];
+		final String[] cachedBiomeNames   = new String[256];
+		final Object[] cachedBiomes       = new Object[256];
+
 		int             channelCount      = 0;
 
 		void reset(int channels) {
 			java.util.Arrays.fill(valid, false);
+			java.util.Arrays.fill(cachedSuppliers, null);
+			java.util.Arrays.fill(cachedBiomeNames, null);
+			java.util.Arrays.fill(cachedBiomes, null);
 			if (noiseSlab == null || channelCount != channels) {
 				noiseSlab = new double[256 * Math.max(1, channels)];
 				channelCount = channels;
@@ -172,6 +187,32 @@ public final class SurfaceValidator {
 	 *  the dispatch path doesn't allocate a fresh double[] per (x, y, z). */
 	private static final ThreadLocal<double[]> noiseScratch =
 			ThreadLocal.withInitial(() -> new double[16]);
+
+	/** Per-thread scratch BlockPos.Mutable reused for the per-Y
+	 *  biome.isCold(pos, seaLevel) call. Replaces ~30K
+	 *  {@code new BlockPos(x, y, z)} allocations per chunk that were
+	 *  going straight to the eden generation. Vanilla's isCold only
+	 *  reads the pos's coords — doesn't store the reference — so a
+	 *  reused mutable is safe. */
+	private static final ThreadLocal<net.minecraft.util.math.BlockPos.Mutable> scratchPos =
+			ThreadLocal.withInitial(net.minecraft.util.math.BlockPos.Mutable::new);
+
+	/** Identifier → string intern cache. Vanilla {@link
+	 *  net.minecraft.util.Identifier} instances are themselves interned,
+	 *  so identity-based lookup is sufficient. Eliminates ~30K
+	 *  {@code id.toString()} string-allocation calls per chunk on the
+	 *  dispatch hot path. ConcurrentHashMap because chunkgen workers
+	 *  populate the cache in parallel. */
+	private static final java.util.concurrent.ConcurrentHashMap<net.minecraft.util.Identifier, String>
+			idStringCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+	private static String internIdentifierToString(net.minecraft.util.Identifier id) {
+		String cached = idStringCache.get(id);
+		if (cached != null) return cached;
+		String s = id.toString();
+		String prev = idStringCache.putIfAbsent(id, s);
+		return prev != null ? prev : s;
+	}
 
 	/** Called from {@link SurfaceDispatcher#beginChunk} so each chunk
 	 *  starts with a clean per-thread cache. */
@@ -346,10 +387,51 @@ public final class SurfaceValidator {
 			System.arraycopy(cc.noiseSlab, cellIdx * channels, noise, 0, channels);
 		}
 
-		// Per-Y reads (biome supplier is set in vanilla's updateY, so it can
-		// vary by Y for cave-biome boundaries — keep these per-Y for safety).
-		String biome   = fastReadBiomeName(liveCtx);
-		boolean isCold = fastReadIsCold(liveCtx, x, y, z, biome);
+		// Combined biome + isCold resolve. The biome supplier is set in
+		// vanilla's updateY and CAN change across Y for cave-biome
+		// boundaries, so we still read it every Y — but only re-resolve
+		// the chain (Supplier.get + RegistryEntry → name + Biome instance)
+		// when the supplier object identity changes vs the per-column
+		// cache. isCold is computed per Y on the cached Biome instance
+		// using a reused Mutable BlockPos (no per-call allocation).
+		Object supplier = fastReadObjectField(liveCtx, mhBiomeSupplier, fldBiomeSupplier);
+		String biome;
+		Object biomeInstance;
+		if (supplier != null && supplier == cc.cachedSuppliers[cellIdx]) {
+			biome = cc.cachedBiomeNames[cellIdx];
+			biomeInstance = cc.cachedBiomes[cellIdx];
+		} else {
+			biome = "unknown";
+			biomeInstance = null;
+			if (supplier instanceof java.util.function.Supplier<?> s) {
+				try {
+					Object entry = s.get();
+					if (entry instanceof net.minecraft.registry.entry.RegistryEntry<?> regEntry) {
+						java.util.Optional<? extends net.minecraft.registry.RegistryKey<?>> keyOpt = regEntry.getKey();
+						if (keyOpt.isPresent()) {
+							net.minecraft.util.Identifier id = keyOpt.get().getValue();
+							if (id != null) biome = internIdentifierToString(id);
+						}
+						Object raw = regEntry.value();
+						if (raw instanceof net.minecraft.world.biome.Biome b) biomeInstance = b;
+					}
+				} catch (RuntimeException ignored) { /* defaults stand */ }
+			}
+			cc.cachedSuppliers[cellIdx] = supplier;
+			cc.cachedBiomeNames[cellIdx] = biome;
+			cc.cachedBiomes[cellIdx] = biomeInstance;
+		}
+
+		boolean isCold = false;
+		java.lang.invoke.MethodHandle mhSea = mhGetSeaLevel;
+		if (biomeInstance instanceof net.minecraft.world.biome.Biome biomeImpl && mhSea != null) {
+			try {
+				int seaLevel = (int) mhSea.invokeExact(liveCtx);
+				net.minecraft.util.math.BlockPos.Mutable pos = scratchPos.get();
+				pos.set(x, y, z);
+				isCold = biomeImpl.isCold(pos, seaLevel);
+			} catch (Throwable ignored) { /* keep false on any error */ }
+		}
 
 		return SurfaceDispatcher.enqueue(
 				x, y, z,
