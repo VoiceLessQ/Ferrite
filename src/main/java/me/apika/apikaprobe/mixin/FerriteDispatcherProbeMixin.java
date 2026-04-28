@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 import net.minecraft.server.world.ChunkTaskScheduler;
 import net.minecraft.util.thread.TaskExecutor;
 
-import me.apika.apikaprobe.FerriteDispatcherProbe;
+import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
 
 /**
  * Wraps the {@link Runnable} payload of every

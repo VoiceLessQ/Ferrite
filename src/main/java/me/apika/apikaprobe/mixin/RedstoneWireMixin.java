@@ -5,7 +5,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import me.apika.apikaprobe.RedstonePhaseMonitor;
+import me.apika.apikaprobe.monitor.RedstonePhaseMonitor;
 
 import net.minecraft.block.BlockState;
 import net.minecraft.block.RedstoneWireBlock;

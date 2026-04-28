@@ -5,7 +5,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import me.apika.apikaprobe.NoiseStageMonitor;
+import me.apika.apikaprobe.monitor.NoiseStageMonitor;
 
 import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
 

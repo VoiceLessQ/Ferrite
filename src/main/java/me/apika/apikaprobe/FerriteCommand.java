@@ -23,6 +23,7 @@ import me.apika.apikaprobe.surface.SurfaceRuleDisassembler;
 import me.apika.apikaprobe.surface.ColumnContext;
 import me.apika.apikaprobe.surface.SurfaceRuleEvaluator;
 import me.apika.apikaprobe.surface.SurfaceValidator;
+import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
 
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;

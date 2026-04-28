@@ -609,7 +609,7 @@ public class WireHandler {
 			throw t;
 		} finally {
 			if (cascadeWires > 0) {
-				me.apika.apikaprobe.RedstonePhaseMonitor.onCascade(
+				me.apika.apikaprobe.monitor.RedstonePhaseMonitor.onCascade(
 						cascadeWires, System.nanoTime() - cascadeStart, batched);
 			}
 		}
@@ -708,7 +708,7 @@ public class WireHandler {
 			rustWires[i].rustIndex = -1;
 			rustWires[i] = null;
 		}
-		me.apika.apikaprobe.RedstonePhaseMonitor.onRustBfsActivation();
+		me.apika.apikaprobe.monitor.RedstonePhaseMonitor.onRustBfsActivation();
 		return true;
 	}
 

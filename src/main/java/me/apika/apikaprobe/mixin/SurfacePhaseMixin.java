@@ -5,7 +5,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import me.apika.apikaprobe.SurfacePhaseMonitor;
+import me.apika.apikaprobe.monitor.SurfacePhaseMonitor;
 
 import net.minecraft.world.gen.surfacebuilder.SurfaceBuilder;
 

@@ -1,4 +1,4 @@
-package me.apika.apikaprobe;
+package me.apika.apikaprobe.monitor;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 

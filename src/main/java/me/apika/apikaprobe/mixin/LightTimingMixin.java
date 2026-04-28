@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import net.minecraft.server.world.ServerLightingProvider;
 import net.minecraft.world.chunk.Chunk;
 
-import me.apika.apikaprobe.LightTimingMonitor;
+import me.apika.apikaprobe.monitor.LightTimingMonitor;
 
 /**
  * Times the {@code INITIALIZE_LIGHT} and {@code LIGHT} chunkgen phases

@@ -1,4 +1,6 @@
-package me.apika.apikaprobe;
+package me.apika.apikaprobe.monitor;
+
+import me.apika.apikaprobe.ExampleMod;
 
 import java.util.HashMap;
 import java.util.UUID;

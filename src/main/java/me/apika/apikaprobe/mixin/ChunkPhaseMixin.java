@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import org.slf4j.LoggerFactory;
 
-import me.apika.apikaprobe.ChunkGenMonitor;
+import me.apika.apikaprobe.monitor.ChunkGenMonitor;
 
 import net.minecraft.world.ChunkRegion;
 import net.minecraft.world.chunk.Chunk;

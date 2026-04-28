@@ -5,7 +5,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import me.apika.apikaprobe.AquiferMonitor;
+import me.apika.apikaprobe.monitor.AquiferMonitor;
 
 import net.minecraft.block.BlockState;
 import net.minecraft.world.gen.densityfunction.DensityFunction;

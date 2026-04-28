@@ -5,7 +5,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import me.apika.apikaprobe.ServerTickPhaseMonitor;
+import me.apika.apikaprobe.monitor.ServerTickPhaseMonitor;
 
 import net.minecraft.server.world.ServerWorld;
 

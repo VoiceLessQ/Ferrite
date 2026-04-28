@@ -6,6 +6,21 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import me.apika.apikaprobe.monitor.AquiferMonitor;
+import me.apika.apikaprobe.monitor.ChunkGenMonitor;
+import me.apika.apikaprobe.monitor.EntityTickMonitor;
+import me.apika.apikaprobe.monitor.LightTimingMonitor;
+import me.apika.apikaprobe.monitor.MonsterPhaseMonitor;
+import me.apika.apikaprobe.monitor.MovementInternalsMonitor;
+import me.apika.apikaprobe.monitor.NoiseStageMonitor;
+import me.apika.apikaprobe.monitor.PreChunkDispatcher;
+import me.apika.apikaprobe.monitor.PreChunkMonitor;
+import me.apika.apikaprobe.monitor.RedstonePhaseMonitor;
+import me.apika.apikaprobe.monitor.ServerTickPhaseMonitor;
+import me.apika.apikaprobe.monitor.SurfacePhaseMonitor;
+import me.apika.apikaprobe.monitor.TpsMonitor;
+import me.apika.apikaprobe.monitor.WorldTickMonitor;
+
 public class ExampleMod implements ModInitializer {
 	public static final String MOD_ID = "ferrite";
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);

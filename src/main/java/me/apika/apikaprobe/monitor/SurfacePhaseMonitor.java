@@ -1,4 +1,4 @@
-package me.apika.apikaprobe;
+package me.apika.apikaprobe.monitor;
 
 import java.util.concurrent.atomic.AtomicLong;
 
