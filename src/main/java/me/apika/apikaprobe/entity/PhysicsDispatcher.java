@@ -1,4 +1,4 @@
-package me.apika.apikaprobe;
+package me.apika.apikaprobe.entity;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -10,6 +10,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import me.apika.apikaprobe.RustBridge;
 import me.apika.apikaprobe.mixin.EntityAdjustInvoker;
 
 import net.minecraft.entity.Entity;

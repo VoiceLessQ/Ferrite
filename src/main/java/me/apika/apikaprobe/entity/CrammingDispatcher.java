@@ -1,10 +1,12 @@
-package me.apika.apikaprobe;
+package me.apika.apikaprobe.entity;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import me.apika.apikaprobe.RustBridge;
 
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;

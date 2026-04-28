@@ -15,7 +15,7 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import me.apika.apikaprobe.BiomeParity;
 import me.apika.apikaprobe.ChunkForcer;
 import me.apika.apikaprobe.ChunkPrewarmer;
-import me.apika.apikaprobe.CrammingDispatcher;
+import me.apika.apikaprobe.entity.CrammingDispatcher;
 import me.apika.apikaprobe.DensityParity;
 import me.apika.apikaprobe.ExampleMod;
 import me.apika.apikaprobe.RedstoneHandoff;

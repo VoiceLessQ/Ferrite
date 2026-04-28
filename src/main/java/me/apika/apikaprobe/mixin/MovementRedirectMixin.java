@@ -4,7 +4,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
-import me.apika.apikaprobe.PhysicsDispatcher;
+import me.apika.apikaprobe.entity.PhysicsDispatcher;
 
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.mob.MobEntity;

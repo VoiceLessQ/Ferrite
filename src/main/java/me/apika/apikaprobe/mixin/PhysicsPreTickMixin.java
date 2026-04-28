@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import me.apika.apikaprobe.PhysicsDispatcher;
+import me.apika.apikaprobe.entity.PhysicsDispatcher;
 
 import net.minecraft.server.world.ServerWorld;
 

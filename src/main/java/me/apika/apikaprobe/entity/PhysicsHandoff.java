@@ -1,4 +1,4 @@
-package me.apika.apikaprobe;
+package me.apika.apikaprobe.entity;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

@@ -7,6 +7,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import me.apika.apikaprobe.command.FerriteCommand;
+import me.apika.apikaprobe.entity.CrammingDispatcher;
+import me.apika.apikaprobe.entity.PhysicsDispatcher;
+import me.apika.apikaprobe.entity.PhysicsOracle;
 import me.apika.apikaprobe.monitor.AquiferMonitor;
 import me.apika.apikaprobe.monitor.ChunkGenMonitor;
 import me.apika.apikaprobe.monitor.EntityTickMonitor;
