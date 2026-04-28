@@ -11,7 +11,7 @@ import net.minecraft.world.gen.chunk.AquiferSampler;
 import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
 import net.minecraft.world.gen.noise.NoiseRouter;
 
-import me.apika.apikaprobe.ExampleMod;
+import me.apika.apikaprobe.bridge.ExampleMod;
 import me.apika.apikaprobe.worldgen.RustAquiferDispatch;
 import me.apika.apikaprobe.worldgen.RustAquiferSampler;
 

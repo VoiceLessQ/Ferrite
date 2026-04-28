@@ -14,7 +14,7 @@ import net.minecraft.world.gen.densityfunction.DensityFunction;
 
 import me.apika.apikaprobe.worldgen.BulkChunkDensityFill;
 import me.apika.apikaprobe.worldgen.DensityFunctionWalker;
-import me.apika.apikaprobe.ExampleMod;
+import me.apika.apikaprobe.bridge.ExampleMod;
 import me.apika.apikaprobe.worldgen.RustFinalDensityBufferWrapper;
 import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
 

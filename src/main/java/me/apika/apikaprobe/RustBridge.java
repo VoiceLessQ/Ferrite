@@ -1,5 +1,7 @@
 package me.apika.apikaprobe;
 
+import me.apika.apikaprobe.bridge.ExampleMod;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;

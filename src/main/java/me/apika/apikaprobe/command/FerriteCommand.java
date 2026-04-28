@@ -17,7 +17,7 @@ import me.apika.apikaprobe.ChunkForcer;
 import me.apika.apikaprobe.ChunkPrewarmer;
 import me.apika.apikaprobe.entity.CrammingDispatcher;
 import me.apika.apikaprobe.worldgen.DensityParity;
-import me.apika.apikaprobe.ExampleMod;
+import me.apika.apikaprobe.bridge.ExampleMod;
 import me.apika.apikaprobe.RedstoneHandoff;
 import me.apika.apikaprobe.worldgen.RustAquiferDispatch;
 import me.apika.apikaprobe.worldgen.RustBiomeRouter;

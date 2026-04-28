@@ -1,6 +1,6 @@
 package me.apika.apikaprobe.surface;
 
-import me.apika.apikaprobe.ExampleMod;
+import me.apika.apikaprobe.bridge.ExampleMod;
 import net.minecraft.block.BlockState;
 import net.minecraft.util.math.BlockPos;
 

@@ -1,6 +1,6 @@
 package me.apika.apikaprobe.monitor;
 
-import me.apika.apikaprobe.ExampleMod;
+import me.apika.apikaprobe.bridge.ExampleMod;
 
 import java.util.concurrent.atomic.AtomicLong;
 

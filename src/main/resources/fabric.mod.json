@@ -15,7 +15,7 @@
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"me.apika.apikaprobe.ExampleMod"
+			"me.apika.apikaprobe.bridge.ExampleMod"
 		],
 		"client": [
 			"me.apika.apikaprobe.ExampleModClient"

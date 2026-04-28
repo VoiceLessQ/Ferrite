@@ -2,7 +2,7 @@ package me.apika.apikaprobe.surface;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-import me.apika.apikaprobe.ExampleMod;
+import me.apika.apikaprobe.bridge.ExampleMod;
 
 /**
  * Live diff-and-log validator for the bytecode evaluator.
