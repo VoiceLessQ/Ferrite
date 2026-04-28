@@ -1,4 +1,4 @@
-package me.apika.apikaprobe;
+package me.apika.apikaprobe.command;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -12,6 +12,20 @@ import com.mojang.brigadier.context.CommandContext;
 
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 
+import me.apika.apikaprobe.BiomeParity;
+import me.apika.apikaprobe.ChunkForcer;
+import me.apika.apikaprobe.ChunkPrewarmer;
+import me.apika.apikaprobe.CrammingDispatcher;
+import me.apika.apikaprobe.DensityParity;
+import me.apika.apikaprobe.ExampleMod;
+import me.apika.apikaprobe.RedstoneHandoff;
+import me.apika.apikaprobe.RustAquiferDispatch;
+import me.apika.apikaprobe.RustBiomeRouter;
+import me.apika.apikaprobe.RustBridge;
+import me.apika.apikaprobe.RustFinalDensityBufferWrapper;
+import me.apika.apikaprobe.RustFlatCache;
+import me.apika.apikaprobe.WorldgenParity;
+import me.apika.apikaprobe.WorldgenStateBootstrap;
 import me.apika.apikaprobe.redstone.FerriteWireConfig;
 import me.apika.apikaprobe.redstone.RedstoneQueueBench;
 import me.apika.apikaprobe.surface.CompiledRuleTree;
