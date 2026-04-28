@@ -49,6 +49,7 @@
 		"FerriteDispatcherProbeMixin",
 		"AquiferRouteMixin",
 		"MaterialRuleContextInvoker",
+		"MaterialRuleContextAccessor",
 		"BlockStateRuleInvoker"
 	],
 	"injectors": {

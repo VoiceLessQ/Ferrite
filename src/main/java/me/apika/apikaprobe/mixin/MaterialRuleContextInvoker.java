@@ -29,4 +29,17 @@ public interface MaterialRuleContextInvoker {
 	void ferrite$invokeInitVerticalContext(
 			int stoneDepthAbove, int stoneDepthBelow, int fluidHeight,
 			int blockX, int blockY, int blockZ);
+
+	// Per-position reads from SurfaceValidator.dispatchEnqueue. JFR
+	// (2026-04-28) attributed ~4.5% of in-buildSurface samples to
+	// Invokers.checkCustomized — MethodHandle dispatch overhead on
+	// these three calls. Direct @Invoker is JIT-inlinable.
+	@Invoker("getSecondaryDepth")
+	double ferrite$invokeGetSecondaryDepth();
+
+	@Invoker("estimateSurfaceHeight")
+	int ferrite$invokeEstimateSurfaceHeight();
+
+	@Invoker("getSeaLevel")
+	int ferrite$invokeGetSeaLevel();
 }

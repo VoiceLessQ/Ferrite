@@ -3,6 +3,8 @@ package me.apika.apikaprobe.surface;
 import java.util.concurrent.atomic.AtomicLong;
 
 import me.apika.apikaprobe.bridge.ExampleMod;
+import me.apika.apikaprobe.mixin.MaterialRuleContextAccessor;
+import me.apika.apikaprobe.mixin.MaterialRuleContextInvoker;
 
 /**
  * Live diff-and-log validator for the bytecode evaluator.
@@ -358,9 +360,11 @@ public final class SurfaceValidator {
 			secondary = cc.secondaryDepths[cellIdx];
 			surfaceH  = cc.surfaceHeights[cellIdx];
 		} else {
-			runDepth  = fastReadIntField(liveCtx);
-			secondary = fastReadDoubleMH(liveCtx, mhGetSecondaryDepth);
-			surfaceH  = fastReadIntMH(liveCtx, mhEstimateSurfaceHeight, y);
+			MaterialRuleContextAccessor acc = (MaterialRuleContextAccessor) liveCtx;
+			MaterialRuleContextInvoker inv = (MaterialRuleContextInvoker) liveCtx;
+			runDepth  = acc.ferrite$getRunDepth();
+			secondary = inv.ferrite$invokeGetSecondaryDepth();
+			surfaceH  = inv.ferrite$invokeEstimateSurfaceHeight();
 
 			// Sample noise channels into the cache slab. Vanilla samples
 			// at y=0 → identical for every Y in this column.
@@ -394,7 +398,7 @@ public final class SurfaceValidator {
 		// when the supplier object identity changes vs the per-column
 		// cache. isCold is computed per Y on the cached Biome instance
 		// using a reused Mutable BlockPos (no per-call allocation).
-		Object supplier = fastReadObjectField(liveCtx, mhBiomeSupplier, fldBiomeSupplier);
+		Object supplier = ((MaterialRuleContextAccessor) liveCtx).ferrite$getBiomeSupplier();
 		String biome;
 		Object biomeInstance;
 		if (supplier != null && supplier == cc.cachedSuppliers[cellIdx]) {
@@ -423,14 +427,11 @@ public final class SurfaceValidator {
 		}
 
 		boolean isCold = false;
-		java.lang.invoke.MethodHandle mhSea = mhGetSeaLevel;
-		if (biomeInstance instanceof net.minecraft.world.biome.Biome biomeImpl && mhSea != null) {
-			try {
-				int seaLevel = (int) mhSea.invokeExact(liveCtx);
-				net.minecraft.util.math.BlockPos.Mutable pos = scratchPos.get();
-				pos.set(x, y, z);
-				isCold = biomeImpl.isCold(pos, seaLevel);
-			} catch (Throwable ignored) { /* keep false on any error */ }
+		if (biomeInstance instanceof net.minecraft.world.biome.Biome biomeImpl) {
+			int seaLevel = ((MaterialRuleContextInvoker) liveCtx).ferrite$invokeGetSeaLevel();
+			net.minecraft.util.math.BlockPos.Mutable pos = scratchPos.get();
+			pos.set(x, y, z);
+			isCold = biomeImpl.isCold(pos, seaLevel);
 		}
 
 		return SurfaceDispatcher.enqueue(
