@@ -289,6 +289,74 @@ this investigation, but apply it to scalar-vs-SIMD.
 
 The Piano model is right. The instrument needs SIMD strings.
 
+## diagnostic gating — real noise-sync win shipped (2026-04-28)
+
+After AVX2-only hardware ruled out the SIMD path, ran a JFR profiler
+session under live chunkgen with surface dispatch on. Two findings:
+
+1. **The audit-by-reading approach was wrong about where the surface
+   dispatcher's overhead lives.** A "biome cache + Mutable BlockPos +
+   Identifier intern" change (commit `29975e7`) projected ~12-15 ms of
+   savings; actual measurement showed ~0.7 ms (17.7 → 17.0 ms median).
+   JIT had already inlined the duplicated supplier chain that the
+   audit estimated at ~250 ns/call. Real cost was much lower than
+   the source-reading estimate.
+2. **Two diagnostic mixins were eating ~8-10 ms/chunk in the
+   `noise-sync` phase**, unrelated to the surface dispatcher itself:
+   - `CacheRouteCaptureMixin` fired reflective `DensityFunctionWalker.fingerprint`
+     per Marker wrap during `ChunkNoiseSampler.getActualDensityFunctionImpl`.
+     Diagnostic for the Phase 2.5 step 2a/2b bulk-density experiments —
+     both of which are themselves default-off.
+   - `AquiferMonitor` wrapped every `AquiferSampler.apply` call (~98K
+     per chunk) with `@Inject HEAD/RETURN` — pure observation cost.
+
+   Both gated behind default-off flags in commit `c91a12b`
+   (`CacheRouteStats.ENABLED` and `AquiferMonitor.ENABLED`). Flip
+   true only when actively debugging density/aquifer work.
+
+### Measured impact
+
+| Phase | Pre-gating | Post-gating | Δ |
+|---|---|---|---|
+| `[chunkgen] noise-sync` | ~60 ms steady | **~50 ms steady** | **−8 to −10 ms ✓** |
+| `[chunkgen] surface` (dispatch ON) | ~17 ms | ~17.6 ms | flat (the diagnostics weren't on this path) |
+
+**That's a real win for everyone running Ferrite.** ~8-10 ms/chunk
+saved on every chunk generated — cumulative across exploration,
+pre-gen runs, and new-area loads. Default-on, no flag flip required,
+no parity risk.
+
+### What this confirms about the surface dispatcher
+
+The surface dispatcher's ~17 ms gap to vanilla baseline (~9 ms) is
+**intrinsic to the dispatch path itself** — per-position context
+capture, per-thread array writes, JNI crossing, post-dispatch
+writeback loop. It is not contaminated by unrelated diagnostics.
+
+The JFR aggregate-by-frame-count approach was misleading because it
+didn't isolate which chunkgen phase each frame burned time in.
+`CacheRouteCaptureMixin` and `AquiferMonitor` had high stack-appearance
+counts during chunkgen overall, but neither fires during
+`SurfaceBuilder.buildSurface` — the phase the surface band measures.
+
+A future surface-specific profiler pass would need to filter samples
+to only the `SurfaceBuilder.buildSurface` subtree per worker thread
+to identify the actual dispatch hot frames. JFR's per-event stack
+data supports this; the parser used in this session aggregated only
+the top-of-stack and top-N anywhere-in-stack frames, which conflated
+phases.
+
+### Surface dispatcher status
+
+- **Stays default-OFF.** Surface band ON ~17.6 ms vs vanilla baseline
+  ~9 ms = ~+8 ms regression that diagnostic gating did not address.
+- **Biome cache + Mutable BlockPos + Identifier intern (commit
+  `29975e7`) ships as-is** — small but real (~0.7 ms), parity-clean
+  (99.9% match, java=rust=100%), no risk to leave in tree even though
+  dispatcher is off.
+- **Diagnostics gating (commit `c91a12b`) ships as-is** — ~8-10 ms
+  saving on noise-sync regardless of dispatcher state.
+
 ### What the data says about the rest of the chunkgen / tick-time map
 
 Across density, aquifer, structure-placement scoring, decoration,
