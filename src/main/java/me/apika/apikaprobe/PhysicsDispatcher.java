@@ -39,6 +39,28 @@ public final class PhysicsDispatcher {
 
 	public static volatile boolean ENABLED = false;
 
+	/** When true, every {@link #adjust} call ALWAYS returns vanilla's
+	 *  result (so the live world is unaffected) but ALSO shadow-runs
+	 *  the Rust path and feeds the (vanilla, rust) pair to
+	 *  {@link PhysicsOracle#record}. Independent of {@link #ENABLED}.
+	 *
+	 *  <p>Used to validate the Rust port against vanilla under live
+	 *  load before flipping {@link #ENABLED}. Phase plan:
+	 *  <ul>
+	 *    <li>Phase 1: {@code PARITY_MODE=true, ENABLED=false} — collect
+	 *        parity dataset.</li>
+	 *    <li>Phase 2: {@code PARITY_MODE=false, ENABLED=true} — measure
+	 *        adjustColl band perf delta vs vanilla baseline.</li>
+	 *  </ul>
+	 *
+	 *  <p>Default {@code false}: parity has been validated (2026-04-28,
+	 *  100.0000% match across 700K+ dispatches at 1000-mob scale, 0
+	 *  mismatches). Phase 2 measurement showed the Rust path regresses
+	 *  perf vs JIT-inlined vanilla under load, so {@link #ENABLED} also
+	 *  ships off — see docs/PIANO_STATUS.md. Flip both to {@code true}
+	 *  + {@code false} respectively only for re-validation runs. */
+	public static volatile boolean PARITY_MODE = false;
+
 	// --- Per-tick state (server tick is single-threaded) --------------------
 	private static final Map<Long, List<Entity>> BUCKETS = new HashMap<>(64);
 	private static final Deque<List<Entity>> LIST_POOL = new ArrayDeque<>();
@@ -72,7 +94,9 @@ public final class PhysicsDispatcher {
 		currentlyLoadedBucketKey = BUCKET_KEY_NONE;
 		currentWorld = world;
 
-		if (!ENABLED || !RustBridge.NATIVE_AVAILABLE) {
+		// Bucket build is needed when ENABLED OR PARITY_MODE is on — the
+		// shadow path in adjust() reads BUCKETS regardless of ENABLED.
+		if (!RustBridge.NATIVE_AVAILABLE || (!ENABLED && !PARITY_MODE)) {
 			maybeLogDiag();
 			return;
 		}
@@ -101,19 +125,51 @@ public final class PhysicsDispatcher {
 	// =========================================================================
 
 	public static Vec3d adjust(Entity self, Vec3d motion) {
+		if (PARITY_MODE) {
+			// Always run vanilla — that's what we return.
+			Vec3d vanillaResult = ((EntityAdjustInvoker) self).ferrite$invokeAdjust(motion);
+			// Shadow-run Rust if eligible. Unaffected by ENABLED — parity
+			// validation happens with ENABLED=false so the live world stays
+			// on vanilla while we collect the dataset.
+			if (RustBridge.NATIVE_AVAILABLE && currentWorld != null) {
+				Vec3d rustResult = runRust(self, motion);
+				if (rustResult != null) {
+					PhysicsOracle.record(self, motion, vanillaResult, rustResult);
+				}
+				// Ineligible / fallback paths bump their own counters inside runRust.
+			}
+			return vanillaResult;
+		}
+
 		if (!ENABLED || !RustBridge.NATIVE_AVAILABLE || currentWorld == null) {
 			return ((EntityAdjustInvoker) self).ferrite$invokeAdjust(motion);
 		}
 
+		Vec3d result = runRust(self, motion);
+		if (result == null) {
+			diagFallback++;
+			return ((EntityAdjustInvoker) self).ferrite$invokeAdjust(motion);
+		}
+		diagDispatched++;
+		return result;
+	}
+
+	/**
+	 * Runs the Rust adjust path for one mob. Returns the adjusted motion,
+	 * or {@code null} on any ineligibility (bucket miss, snapshot build
+	 * fail, Rust returned FALLBACK flag). Counters get bumped on both the
+	 * existing diag pipe ({@link #diagBucketMisses} etc.) AND the
+	 * {@link PhysicsOracle} side counters so PARITY_MODE captures the
+	 * eligibility breakdown without mutating the existing diag log shape.
+	 */
+	private static Vec3d runRust(Entity self, Vec3d motion) {
 		long key = chunkKey(self);
 		List<Entity> bucket = BUCKETS.get(key);
 		if (bucket == null) {
-			// Mob not in any pre-tick bucket (spawned mid-tick, or cross-world
-			// corner case) — fall back. No counter bump; it's not a dispatch.
-			return ((EntityAdjustInvoker) self).ferrite$invokeAdjust(motion);
+			PhysicsOracle.recordBucketMiss();
+			return null;
 		}
 
-		// Lazy snapshot rebuild on bucket miss.
 		if (key != currentlyLoadedBucketKey) {
 			diagBucketMisses++;
 			int newTickId = currentlyLoadedTickId + 1;
@@ -126,7 +182,8 @@ public final class PhysicsDispatcher {
 			} else {
 				currentlyLoadedBucketKey = BUCKET_KEY_NONE;
 				diagBuildsFailed++;
-				return ((EntityAdjustInvoker) self).ferrite$invokeAdjust(motion);
+				PhysicsOracle.recordBuildFail();
+				return null;
 			}
 		}
 
@@ -144,10 +201,8 @@ public final class PhysicsDispatcher {
 
 		Vec3d result = PhysicsHandoff.readSingleResult();
 		if (result == null) {
-			diagFallback++;
-			return ((EntityAdjustInvoker) self).ferrite$invokeAdjust(motion);
+			PhysicsOracle.recordRustFallback();
 		}
-		diagDispatched++;
 		return result;
 	}
 

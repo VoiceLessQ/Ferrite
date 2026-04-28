@@ -35,6 +35,7 @@ public class ExampleMod implements ModInitializer {
 		// MonsterPhaseMonitor.getMovementSelfNs() before that monitor resets.
 		MovementInternalsMonitor.register();
 		MonsterPhaseMonitor.register();
+		PhysicsOracle.register();
 		// PreChunkMonitor must register BEFORE PreChunkDispatcher so its
 		// END_SERVER_TICK report handler fires first and reads the window
 		// before the dispatcher's handler increments it further.
