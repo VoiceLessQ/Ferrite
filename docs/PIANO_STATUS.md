@@ -180,10 +180,102 @@ Neither is "small" — both are multi-session investments. Per the same
 discipline that closed the bulk-chunk-density thread, walking away is
 the right call until someone has a specific reason to invest.
 
+## surface dispatcher noise routing — investigated, reverted (2026-04-28)
+
+Attempted to push the surface dispatcher closer to the Piano model by
+having Rust sample noise channels itself from `WorldgenState` instead of
+receiving vanilla-fed noise values via the existing per-channel JNI
+loop. Parity passed cleanly; perf regressed.
+
+### The plan that didn't work
+
+Step 1 (parity validator) shadow-sampled every (column × channel) on
+the Rust side and compared to the vanilla-fed buffer Java already
+packed. **100.0000% match across 81,445,189 samples** — Rust
+`NormalNoise.get_value(x, 0, z)` is byte-identical to Java's
+`DoublePerlinNoiseSampler.sample(x, 0, z)` for every registered
+channel. Math was never the question.
+
+Step 3 (route via `WorldgenState`) deleted the Java reflection +
+per-channel JNI loop and had Rust sample inside the per-column closure
+of `evaluateSurfaceRuleBatch` — eager 7-channel sampling, then eval.
+
+### What the breakdown showed
+
+Surface band measured at ~28 ms/chunk steady-state with dispatch ON,
+vs ~9.3 ms vanilla baseline (~+18 ms regression). Per-chunk Rust
+breakdown over ~3000 chunks of live flight:
+
+| Phase | Per chunk |
+|---|---|
+| Noise buffer alloc | ~15 µs |
+| Noise sampling (parallelised, ~31K cols × 7 channels) | **~9.3 ms** |
+| Bytecode eval (parallelised) | ~280 µs |
+| Per-column noise (all 7 channels) | **~285 ns** |
+| Per-column eval | ~9 ns |
+
+### The finding
+
+**Rust `NormalNoise.get_value` ≈ 285 ns/column. Java JIT-compiled
+`DoublePerlinNoiseSampler.sample` ≈ 50 ns/column.** Rust scalar Perlin
+is **~6× slower** than JIT on this specific math because HotSpot
+inlines and vectorises the smoothstep + lerp3 + gradient-table lookups
+in ways the Rust scalar implementation doesn't match.
+
+Same JIT wall as bulk-chunk-density. Rust scalar Perlin cannot beat
+JIT-compiled Java on per-column sequential access.
+
+The ~28ms surface band breaks down as:
+
+- **~9.3 ms** Rust noise sampling (eager all-channels, parallelised)
+- **~0.3 ms** Rust bytecode eval
+- **~18 ms** everything else (Java-side per-position reflection for
+  biome/depth context, JNI overhead for the dispatch crossing,
+  per-position chunk writeback)
+
+Even if Rust noise sampling went to zero, the ~18 ms of Java-side
+dispatch overhead still leaves the surface band well above the ~9.3 ms
+vanilla baseline. The dispatcher's existing per-channel
+`sampleWorldgenNoise` JNI loop (~17.7 ms ON before this experiment)
+turned out to be the local optimum — JIT samples the noise faster than
+Rust does, and the existing reflection cost is lower than the
+two-pass-with-allocation we replaced it with.
+
+### Decision
+
+- **Reverted** all Step 1 + Step 3 + Step 3.5 changes. Codebase back to
+  the pre-investigation state (per-channel `sampleWorldgenNoise` JNI
+  loop, ~17.7 ms ON / ~9.3 ms OFF baseline).
+- **Surface dispatcher stays default-OFF.** No new "ship it" change.
+- **Parity validator JNI removed too** — served its purpose
+  (proved math equivalence), no further use without a reason to
+  re-validate.
+
+### Next viable angle (if revisited)
+
+A win on this seam requires *not* doing per-column scalar Perlin in
+Rust. Real options:
+
+1. **SIMD batch noise eval across all columns at once.** Vectorise
+   smoothstep + lerp3 over (8, 16, 32) columns using `std::simd` or
+   intrinsics. Theoretical 4-8× on the noise loop, which would put
+   Rust noise sampling under 2 ms/chunk. Multi-week investment.
+2. **Lazy noise sampling driven by bytecode reads.** Most columns
+   probably hit only 1-3 of 7 channels; eager 7-channel sampling
+   wastes ~50-70% of the cost. Pass channel refs into evaluator,
+   sample only when `OP_NOISE_THRESH` actually fires for that column.
+   Bounded scope, unknown win without measurement.
+3. **Accept current state.** Surface dispatcher is correct, parity-
+   validated, ships default-off because it doesn't beat vanilla. Move
+   on.
+
+The Piano model is right. The instrument needs SIMD strings.
+
 ### What the data says about the rest of the chunkgen / tick-time map
 
-Across density, aquifer, structure-placement scoring, decoration, and
-now physics: **the per-call JIT-vs-JNI wall is the dominant pattern**.
+Across density, aquifer, structure-placement scoring, decoration,
+physics, and now surface noise sampling: **the per-call JIT-vs-JNI
+wall is the dominant pattern**.
 Vanilla's cheap-per-call hot paths beat Rust+JNI roundtrip at any
 realistic call frequency, regardless of how clean the Piano shape looks.
 The Piano wins (cramming, AC redstone, surface rules) all share a
