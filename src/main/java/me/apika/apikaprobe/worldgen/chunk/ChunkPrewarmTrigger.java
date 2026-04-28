@@ -1,4 +1,4 @@
-package me.apika.apikaprobe;
+package me.apika.apikaprobe.worldgen.chunk;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.server.network.ServerPlayerEntity;

@@ -1,4 +1,6 @@
-package me.apika.apikaprobe;
+package me.apika.apikaprobe.worldgen.chunk;
+
+import me.apika.apikaprobe.RustBridge;
 
 import me.apika.apikaprobe.bridge.ExampleMod;
 

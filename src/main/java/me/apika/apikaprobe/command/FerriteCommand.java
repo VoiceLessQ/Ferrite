@@ -13,12 +13,12 @@ import com.mojang.brigadier.context.CommandContext;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 
 import me.apika.apikaprobe.worldgen.BiomeParity;
-import me.apika.apikaprobe.ChunkForcer;
-import me.apika.apikaprobe.ChunkPrewarmer;
+import me.apika.apikaprobe.worldgen.chunk.ChunkForcer;
+import me.apika.apikaprobe.worldgen.chunk.ChunkPrewarmer;
 import me.apika.apikaprobe.entity.CrammingDispatcher;
 import me.apika.apikaprobe.worldgen.DensityParity;
 import me.apika.apikaprobe.bridge.ExampleMod;
-import me.apika.apikaprobe.RedstoneHandoff;
+import me.apika.apikaprobe.redstone.RedstoneHandoff;
 import me.apika.apikaprobe.worldgen.RustAquiferDispatch;
 import me.apika.apikaprobe.worldgen.RustBiomeRouter;
 import me.apika.apikaprobe.RustBridge;

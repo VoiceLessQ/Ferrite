@@ -1,4 +1,6 @@
-package me.apika.apikaprobe;
+package me.apika.apikaprobe.redstone;
+
+import me.apika.apikaprobe.RustBridge;
 
 import java.util.ArrayDeque;
 import java.util.Arrays;

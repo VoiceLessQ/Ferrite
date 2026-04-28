@@ -1,4 +1,4 @@
-package me.apika.apikaprobe;
+package me.apika.apikaprobe.redstone;
 
 import java.util.ArrayDeque;
 import java.util.HashSet;

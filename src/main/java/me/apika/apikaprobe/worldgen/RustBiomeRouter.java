@@ -1,6 +1,6 @@
 package me.apika.apikaprobe.worldgen;
 
-import me.apika.apikaprobe.ChunkPrewarmer;
+import me.apika.apikaprobe.worldgen.chunk.ChunkPrewarmer;
 import me.apika.apikaprobe.bridge.ExampleMod;
 import me.apika.apikaprobe.RustBridge;
 

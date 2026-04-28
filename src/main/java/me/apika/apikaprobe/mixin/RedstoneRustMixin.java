@@ -4,8 +4,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
-import me.apika.apikaprobe.RedstoneHandoff;
-import me.apika.apikaprobe.RedstoneRustDispatcher;
+import me.apika.apikaprobe.redstone.RedstoneHandoff;
+import me.apika.apikaprobe.redstone.RedstoneRustDispatcher;
 
 import net.minecraft.block.BlockState;
 import net.minecraft.block.RedstoneWireBlock;

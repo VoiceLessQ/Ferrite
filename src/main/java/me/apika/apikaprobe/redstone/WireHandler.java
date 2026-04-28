@@ -21,7 +21,7 @@ package me.apika.apikaprobe.redstone;
 import java.util.Iterator;
 import java.util.Queue;
 
-import me.apika.apikaprobe.RedstoneHandoff;
+import me.apika.apikaprobe.redstone.RedstoneHandoff;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap.Entry;

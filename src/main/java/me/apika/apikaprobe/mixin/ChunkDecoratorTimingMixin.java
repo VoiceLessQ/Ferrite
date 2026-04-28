@@ -10,7 +10,7 @@ import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.gen.StructureAccessor;
 import net.minecraft.world.gen.chunk.ChunkGenerator;
 
-import me.apika.apikaprobe.ChunkDecoratorTiming;
+import me.apika.apikaprobe.worldgen.chunk.ChunkDecoratorTiming;
 
 /**
  * Times the FEATURES (decoration) phase per chunk and routes the result
