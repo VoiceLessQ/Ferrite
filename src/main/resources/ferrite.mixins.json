@@ -47,7 +47,9 @@
 		"BulkSampleDensityMixin",
 		"BulkChunkDensityMixin",
 		"FerriteDispatcherProbeMixin",
-		"AquiferRouteMixin"
+		"AquiferRouteMixin",
+		"MaterialRuleContextInvoker",
+		"BlockStateRuleInvoker"
 	],
 	"injectors": {
 		"defaultRequire": 1

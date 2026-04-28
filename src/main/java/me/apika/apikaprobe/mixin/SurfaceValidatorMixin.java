@@ -132,12 +132,10 @@ public abstract class SurfaceValidatorMixin {
 	}
 
 	private static BlockState invokeTryApply(Object rule, int x, int y, int z) {
-		try {
-			java.lang.reflect.Method m = rule.getClass().getMethod("tryApply", int.class, int.class, int.class);
-			return (BlockState) m.invoke(rule, x, y, z);
-		} catch (ReflectiveOperationException e) {
-			throw new RuntimeException("tryApply invocation failed", e);
-		}
+		// Direct interface call via @Invoker — replaces per-call reflection
+		// (~300ns: getMethod lookup + Method.invoke) with a virtual call
+		// (~5ns, JIT-inlinable). See BlockStateRuleInvoker.
+		return ((BlockStateRuleInvoker) rule).ferrite$invokeTryApply(x, y, z);
 	}
 
 	/**
@@ -159,13 +157,11 @@ public abstract class SurfaceValidatorMixin {
 		if (SurfaceValidator.isEnabled()) {
 			SurfaceValidator.captureVerticalContext(ctx, a, b, c, d, e, f);
 		}
-		// Call through to vanilla via reflection.
-		try {
-			java.lang.reflect.Method m = ctx.getClass().getMethod("initVerticalContext",
-					int.class, int.class, int.class, int.class, int.class, int.class);
-			m.invoke(ctx, a, b, c, d, e, f);
-		} catch (ReflectiveOperationException ex) {
-			throw new RuntimeException("initVerticalContext invocation failed", ex);
-		}
+		// Direct typed call via @Invoker — replaces per-call reflection
+		// (~300ns/call × ~30K per-Y positions per chunk = ~9-10ms/chunk
+		// of pure overhead identified by JFR profile 2026-04-28) with a
+		// direct virtual call (~5ns, JIT-inlinable).
+		// See MaterialRuleContextInvoker + docs/PIANO_STATUS.md.
+		((MaterialRuleContextInvoker) ctx).ferrite$invokeInitVerticalContext(a, b, c, d, e, f);
 	}
 }
