@@ -1,4 +1,8 @@
-package me.apika.apikaprobe;
+package me.apika.apikaprobe.worldgen;
+
+import me.apika.apikaprobe.ChunkPrewarmer;
+import me.apika.apikaprobe.ExampleMod;
+import me.apika.apikaprobe.RustBridge;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

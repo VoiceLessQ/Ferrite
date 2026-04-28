@@ -10,7 +10,7 @@ import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.source.MultiNoiseBiomeSource;
 import net.minecraft.world.biome.source.util.MultiNoiseUtil;
 
-import me.apika.apikaprobe.RustBiomeRouter;
+import me.apika.apikaprobe.worldgen.RustBiomeRouter;
 
 /**
  * Routes per-cell biome lookups to {@link RustBiomeRouter}. Targets the

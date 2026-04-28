@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import net.minecraft.world.biome.source.MultiNoiseBiomeSource;
 
-import me.apika.apikaprobe.BiomeParity;
+import me.apika.apikaprobe.worldgen.BiomeParity;
 
 /**
  * Captures the live {@link MultiNoiseBiomeSource} into

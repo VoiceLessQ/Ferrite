@@ -10,10 +10,10 @@ import net.minecraft.world.gen.densityfunction.DensityFunction;
 
 import java.lang.reflect.Method;
 
-import me.apika.apikaprobe.CacheRouteStats;
-import me.apika.apikaprobe.DensityFunctionWalker;
-import me.apika.apikaprobe.InterpolatorNameRegistry;
-import me.apika.apikaprobe.WorldgenStateBootstrap;
+import me.apika.apikaprobe.worldgen.CacheRouteStats;
+import me.apika.apikaprobe.worldgen.DensityFunctionWalker;
+import me.apika.apikaprobe.worldgen.InterpolatorNameRegistry;
+import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
 
 /**
  * Phase 2.5 step 2a — pure-observational mixin.

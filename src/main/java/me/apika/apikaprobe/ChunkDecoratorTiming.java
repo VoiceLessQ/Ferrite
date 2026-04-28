@@ -6,6 +6,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
+import me.apika.apikaprobe.worldgen.BiomeParity;
+
 /**
  * Per-chunk timing of the FEATURES (decoration) phase, bucketed by
  * the chunk's center biome.

@@ -10,6 +10,8 @@ import me.apika.apikaprobe.command.FerriteCommand;
 import me.apika.apikaprobe.entity.CrammingDispatcher;
 import me.apika.apikaprobe.entity.PhysicsDispatcher;
 import me.apika.apikaprobe.entity.PhysicsOracle;
+import me.apika.apikaprobe.worldgen.TerrainBulkHandoff;
+import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
 import me.apika.apikaprobe.monitor.AquiferMonitor;
 import me.apika.apikaprobe.monitor.ChunkGenMonitor;
 import me.apika.apikaprobe.monitor.EntityTickMonitor;

@@ -11,7 +11,7 @@ import java.util.List;
 
 import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
 
-import me.apika.apikaprobe.BulkInterpolatorFill;
+import me.apika.apikaprobe.worldgen.BulkInterpolatorFill;
 
 /**
  * Phase 2.5 step 2b — bulk-fill the slice arrays in

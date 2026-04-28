@@ -12,11 +12,11 @@ import java.lang.reflect.Method;
 import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
 import net.minecraft.world.gen.densityfunction.DensityFunction;
 
-import me.apika.apikaprobe.BulkChunkDensityFill;
-import me.apika.apikaprobe.DensityFunctionWalker;
+import me.apika.apikaprobe.worldgen.BulkChunkDensityFill;
+import me.apika.apikaprobe.worldgen.DensityFunctionWalker;
 import me.apika.apikaprobe.ExampleMod;
-import me.apika.apikaprobe.RustFinalDensityBufferWrapper;
-import me.apika.apikaprobe.WorldgenStateBootstrap;
+import me.apika.apikaprobe.worldgen.RustFinalDensityBufferWrapper;
+import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 

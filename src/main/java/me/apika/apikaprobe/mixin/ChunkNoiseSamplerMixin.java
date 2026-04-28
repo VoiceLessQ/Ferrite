@@ -10,9 +10,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
 import net.minecraft.world.gen.densityfunction.DensityFunction;
 
-import me.apika.apikaprobe.RustFlatCache;
-import me.apika.apikaprobe.RustFinalDensityBufferWrapper;
-import me.apika.apikaprobe.WorldgenStateBootstrap;
+import me.apika.apikaprobe.worldgen.RustFlatCache;
+import me.apika.apikaprobe.worldgen.RustFinalDensityBufferWrapper;
+import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
 
 /**
  * Phase 2.5 — "become the cache". When vanilla's wrap chain encounters

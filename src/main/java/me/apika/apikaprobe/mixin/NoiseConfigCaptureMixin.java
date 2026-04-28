@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import net.minecraft.world.gen.noise.NoiseConfig;
 
-import me.apika.apikaprobe.WorldgenParity;
+import me.apika.apikaprobe.worldgen.WorldgenParity;
 
 /**
  * Captures every constructed {@link NoiseConfig} into a static slot on
