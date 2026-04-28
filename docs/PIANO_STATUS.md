@@ -346,16 +346,84 @@ data supports this; the parser used in this session aggregated only
 the top-of-stack and top-N anywhere-in-stack frames, which conflated
 phases.
 
+### JFR frame-count overstates recoverable cost — three-strike rule
+
+This pattern has now repeated three times. Treat it as a permanent
+constraint on how JFR data drives Ferrite work:
+
+1. **Biome supplier-chain caching (commit `29975e7`).** Read of source
+   suggested ~12-15 ms recoverable from caching duplicated supplier
+   chain resolution. Measured: ~0.7 ms. HotSpot had already inlined
+   the supplier chain.
+2. **Phase-blind frame aggregation (commit `c91a12b`).** First JFR
+   pass ranked `CacheRouteCaptureMixin` + `AquiferMonitor` as #1 cost
+   contributors by total frame count. Gating them shipped a real
+   ~8-10 ms noise-sync win, but **zero impact on the surface band** —
+   those frames burned time during noise-sync, not surface. Frame
+   count without phase filtering conflates unrelated work.
+3. **MethodHandle micro-opt (commits `4ed0d89` + `2beaa5b`).**
+   Surface-filtered JFR showed `Invokers.checkCustomized` at 4.5%
+   and `fastReadObjectField` at 3.5% of in-buildSurface samples,
+   projected ~1-1.5 ms recoverable. Replaced with @Accessor/@Invoker
+   typed calls. Measured surface band: no movement (within ±0.5 ms
+   noise). HotSpot specializes warm MethodHandle callsites; the
+   sampler caught frames that weren't actually wall-time bottlenecks.
+
+**Why this happens.** JFR's `jdk.ExecutionSample` is a stack snapshot
+on each sample tick. Frames near the leaf are over-represented because
+shallow native-transition stalls and JIT-deopt slow paths catch the
+sampler's eye more than steady-state JIT-inlined work. Frame count
+correlates with sampler attention, not always with wall time.
+
+**Working rules going forward:**
+- A JFR-attributed cost is a hypothesis, not a measurement. Validate
+  by removing the frame and re-measuring the band that contains it.
+  If the band doesn't move, the frame wasn't on the critical path.
+- Reserve micro-opts for cases where one window of measurement gives
+  a strong directional signal (~3+ ms band movement). For sub-2 ms
+  changes, the noise floor of the chunkgen pipeline (~±1 ms) eats
+  the signal — multiple runs needed to detect, often not worth it.
+- For the surface dispatcher specifically: the gap is structural.
+  Further reflection/MH/cache tuning will not close it. Architectural
+  change (skip vanilla's setBlockState write loop) is the only path.
+
 ### Surface dispatcher status
 
-- **Stays default-OFF.** Surface band ON ~17.6 ms vs vanilla baseline
-  ~9 ms = ~+8 ms regression that diagnostic gating did not address.
+- **Stays default-OFF.** Surface band ON ~16.0 ms vs vanilla baseline
+  ~6.3 ms = ~+9.7 ms structural gap. Two follow-up reflection-removal
+  fixes confirmed the gap is **not** reflection — it is intrinsic to
+  the dispatch path (per-position context capture, JNI crossing, and
+  the post-flush writeback loop on top of vanilla's setBlockState).
 - **Biome cache + Mutable BlockPos + Identifier intern (commit
   `29975e7`) ships as-is** — small but real (~0.7 ms), parity-clean
   (99.9% match, java=rust=100%), no risk to leave in tree even though
   dispatcher is off.
 - **Diagnostics gating (commit `c91a12b`) ships as-is** — ~8-10 ms
   saving on noise-sync regardless of dispatcher state.
+- **@Invoker on `MaterialRuleContext.initVerticalContext` and
+  `BlockStateRule.tryApply` (commit `4ed0d89`) ships as-is** —
+  universal ~3 ms win on the vanilla path (baseline dropped from
+  ~9.3 ms to ~6-7 ms). The `captureContext` redirect was hitting
+  vanilla too, so killing its reflection helped the vanilla baseline,
+  not just the dispatcher path.
+- **@Accessor on `MaterialRuleContext` hot fields + @Invoker on three
+  more methods (commit `2beaa5b`) ships as-is** — clean code,
+  parity-clean (99.9% match, java=rust=100%), zero measurable perf
+  movement on the surface band. See "JFR frame-count overstates
+  recoverable cost" below.
+
+### Next move (when this thread reopens)
+
+Stop micro-opting the dispatcher. The path forward is **architectural:
+bypass vanilla's `setBlockState` loop entirely**. Currently the
+dispatcher captures per-position context, runs eval in Rust, and then
+writes results back via `Chunk.setBlockState` — duplicating vanilla's
+own write loop. The structural gap is the cost of that duplicate work.
+A bypass would mean the dispatcher writes directly to the chunk's
+internal block storage (or has the redirect cancel vanilla's write
+entirely so only one write happens). That is a different design, not
+a tuning pass — it requires touching `ProtoChunk` internals and proving
+parity at the storage level, not the rule level.
 
 ### What the data says about the rest of the chunkgen / tick-time map
 
