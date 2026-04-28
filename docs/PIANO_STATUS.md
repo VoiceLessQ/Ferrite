@@ -251,23 +251,41 @@ two-pass-with-allocation we replaced it with.
   (proved math equivalence), no further use without a reason to
   re-validate.
 
-### Next viable angle (if revisited)
+### SIMD batch noise — the only viable path to surface dispatcher default-on
 
-A win on this seam requires *not* doing per-column scalar Perlin in
-Rust. Real options:
+Root cause confirmed: Rust scalar `NormalNoise.get_value()` = ~290 ns/col
+vs Java JIT ~50 ns/col. **6× slower. JIT wall, not algorithm problem.**
 
-1. **SIMD batch noise eval across all columns at once.** Vectorise
-   smoothstep + lerp3 over (8, 16, 32) columns using `std::simd` or
-   intrinsics. Theoretical 4-8× on the noise loop, which would put
-   Rust noise sampling under 2 ms/chunk. Multi-week investment.
-2. **Lazy noise sampling driven by bytecode reads.** Most columns
-   probably hit only 1-3 of 7 channels; eager 7-channel sampling
-   wastes ~50-70% of the cost. Pass channel refs into evaluator,
-   sample only when `OP_NOISE_THRESH` actually fires for that column.
-   Bounded scope, unknown win without measurement.
-3. **Accept current state.** Surface dispatcher is correct, parity-
-   validated, ships default-off because it doesn't beat vanilla. Move
-   on.
+**Why SIMD works here:**
+
+- 256 columns per chunk are fully independent (no cross-column dependencies)
+- Same 7 noise channels, same Perlin math, applied to each column
+- Perfect SIMD shape: same instruction, N independent inputs
+
+**Target hardware:** RTX 4090 machine = AVX2 minimum (8-wide f64).
+
+**Math:**
+
+```
+290 ns × 256 cols                = 74 ms scalar
+290 ns × 32 groups of 8          = ~9 ms with AVX2 8-wide
+Result: surface dispatcher ON drops from ~28 ms to ~10 ms
+        At or below vanilla baseline of ~9.3 ms
+```
+
+**Implementation path:**
+
+- Port `NormalNoise` math to operate on `f64x8` (AVX2) or `f64x4`
+- Use Rust `wide` crate or `std::simd` (nightly)
+- Process 256 columns in 32 batches of 8
+- Everything else (bytecode eval, JNI) unchanged
+
+**Pre-condition:** one focused session dedicated to SIMD Perlin only.
+
+**Gate:** SIMD noise must produce bit-identical results to scalar path
+before replacing it. Same parity discipline as every other port —
+mirror the validator that proved 81M-sample equivalence in Step 1 of
+this investigation, but apply it to scalar-vs-SIMD.
 
 The Piano model is right. The instrument needs SIMD strings.
 
