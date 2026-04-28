@@ -384,8 +384,10 @@ correlates with sampler attention, not always with wall time.
   changes, the noise floor of the chunkgen pipeline (~±1 ms) eats
   the signal — multiple runs needed to detect, often not worth it.
 - For the surface dispatcher specifically: the gap is structural.
-  Further reflection/MH/cache tuning will not close it. Architectural
-  change (skip vanilla's setBlockState write loop) is the only path.
+  Further reflection/MH/cache tuning will not close it. The one
+  remaining recoverable optimization (~2-3 ms) is **batched heightmap
+  updates in flushChunk** — see "Surface dispatcher source-level
+  audit" below. There is no clean setBlockState bypass.
 
 ### Surface dispatcher status
 
@@ -393,7 +395,8 @@ correlates with sampler attention, not always with wall time.
   ~6.3 ms = ~+9.7 ms structural gap. Two follow-up reflection-removal
   fixes confirmed the gap is **not** reflection — it is intrinsic to
   the dispatch path (per-position context capture, JNI crossing, and
-  the post-flush writeback loop on top of vanilla's setBlockState).
+  flushChunk's per-write `ProtoChunk.setBlockState` calls including
+  per-write heightmap `trackUpdate`).
 - **Biome cache + Mutable BlockPos + Identifier intern (commit
   `29975e7`) ships as-is** — small but real (~0.7 ms), parity-clean
   (99.9% match, java=rust=100%), no risk to leave in tree even though
@@ -412,18 +415,78 @@ correlates with sampler attention, not always with wall time.
   movement on the surface band. See "JFR frame-count overstates
   recoverable cost" below.
 
+### Surface dispatcher source-level audit (2026-04-28)
+
+Read of yarn 1.21.11 `SurfaceBuilder.buildSurface` + `ProtoChunk.setBlockState`
+to design the bypass. Result: **the bypass framing was wrong, and there
+is no clean architectural change available.** Findings:
+
+**1. There is no duplicate write.** `tryApply` returns `null` when no
+rule matches; vanilla's loop guards on this and skips `setBlockState`
+entirely (`SurfaceBuilder.java:158`). When Ferrite's `@Redirect` returns
+null in batch mode, vanilla never calls `setBlockState`. The dispatcher
+then writes via `flushChunk` → `ProtoChunk.setBlockState`. **Net write
+count is identical to vanilla** — the dispatcher pays the full vanilla
+write cost, just relocated from the inline column loop into flushChunk.
+The earlier "structural duplication" framing was wrong.
+
+**2. The 23.3% `ProtoChunk.setBlockState` JFR frames are entirely
+flushChunk's own writes**, not vanilla duplicating work. Confirmed at
+[`SurfaceDispatcher.java:204`](../src/main/java/me/apika/apikaprobe/surface/SurfaceDispatcher.java#L204).
+
+**3. The 18.7% `SurfaceBuilder.isDefaultBlock` JFR frames are vanilla's
+column-boundary scanner** (yarn `SurfaceBuilder.java:144-150`), which
+fires per Y-down step regardless of dispatcher state. Pure vanilla
+cost the dispatcher cannot touch.
+
+**4. `ProtoChunk.setBlockState` cost decomposition** (per call, yarn
+`ProtoChunk.java:113-167`):
+
+| Step | Skippable for surface rule writes? |
+|---|---|
+| section lookup (`getSection`) | yes — cluster batch by section, ~24 lookups vs ~16K |
+| palette write (`chunkSection.setBlockState`) | **no** — this is the data change |
+| lighting flag flip (`setSectionStatus`) | no — fires on empty↔non-empty transitions |
+| skylight check + light queue | usually no-op for surface rule swaps (default→default opacity unchanged) |
+| heightmap presence loop | cheap, leave |
+| per-heightmap `trackUpdate` | **yes** — dispatcher knows the whole batch; heightmap only cares about top-Y per (x,z) |
+
+**5. The one real recoverable optimization: batched heightmap updates.**
+Vanilla calls `trackUpdate` once per write because it processes one
+position at a time. The dispatcher knows the full batch up-front, so
+it can write to `ChunkSection` directly (skipping the per-write
+heightmap loop) and then call `trackUpdate` ONCE per (x,z) column with
+the highest changed Y. Estimated saving: **~2-3 ms** (~16K → ~256
+heightmap calls per chunk). Brings dispatcher from ~14 ms toward
+~11 ms — still above the ~6.3 ms vanilla baseline but the gap closes
+to ~5 ms.
+
+### Honest ceiling
+
+Even with batched heightmap updates fully realized, the dispatcher
+cannot beat vanilla baseline. Irreducible per-chunk cost (~6-7 ms
+floor): palette writes (~2-3 ms) + vanilla's `isDefaultBlock` column
+scan that fires regardless of dispatcher (~2-3 ms) + biome supplier
+chain in vanilla's surface rule machinery (~1 ms) + ferrite dispatch
+overhead even with all wins (~1-2 ms). The dispatcher's structural
+purpose — running rule evaluation in Rust — does not reduce any of
+these.
+
 ### Next move (when this thread reopens)
 
-Stop micro-opting the dispatcher. The path forward is **architectural:
-bypass vanilla's `setBlockState` loop entirely**. Currently the
-dispatcher captures per-position context, runs eval in Rust, and then
-writes results back via `Chunk.setBlockState` — duplicating vanilla's
-own write loop. The structural gap is the cost of that duplicate work.
-A bypass would mean the dispatcher writes directly to the chunk's
-internal block storage (or has the redirect cancel vanilla's write
-entirely so only one write happens). That is a different design, not
-a tuning pass — it requires touching `ProtoChunk` internals and proving
-parity at the storage level, not the rule level.
+**Scope batched heightmap updates as a separate session** with its
+own correctness validator. Required: a parity check at the heightmap
+level (not the BlockState level) — write per-position via vanilla,
+then write per-batch via the batched update path, diff the resulting
+heightmap arrays for `WORLD_SURFACE_WG`, `OCEAN_FLOOR_WG`, and the
+other types vanilla tracks during SURFACE phase. Without that
+validator, the optimization risks breaking carvers and decoration
+that read heightmaps downstream.
+
+**Do not pursue further reflection/cache micro-opts on this path.**
+The three-strike rule is documented above; it has held for three
+consecutive attempts. The remaining gap is structural floor, not
+overhead.
 
 ### What the data says about the rest of the chunkgen / tick-time map
 
