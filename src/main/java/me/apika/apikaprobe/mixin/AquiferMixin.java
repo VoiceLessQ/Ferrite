@@ -30,6 +30,7 @@ public abstract class AquiferMixin {
 			DensityFunction.NoisePos pos,
 			double density,
 			CallbackInfoReturnable<BlockState> cir) {
+		if (!AquiferMonitor.ENABLED) return;
 		AquiferMonitor.onApplyBegin();
 	}
 
@@ -41,6 +42,7 @@ public abstract class AquiferMixin {
 			DensityFunction.NoisePos pos,
 			double density,
 			CallbackInfoReturnable<BlockState> cir) {
+		if (!AquiferMonitor.ENABLED) return;
 		AquiferMonitor.onApplyEnd();
 	}
 }

@@ -38,6 +38,13 @@ public abstract class CacheRouteCaptureMixin {
 	)
 	private void ferrite$captureCacheRoute(DensityFunction function,
 			CallbackInfoReturnable<DensityFunction> cir) {
+		// Default-OFF gate. Per JFR profile (2026-04-28) the reflective
+		// DF tree walk inside fingerprint() contributed ~6-8 ms/chunk of
+		// overhead. The capture infrastructure is diagnostic for the
+		// Phase 2.5 step 2a/2b experiments — both default-off — so this
+		// runs idle in normal play. Flip CacheRouteStats.ENABLED only
+		// when actively investigating cache-fill routing.
+		if (!CacheRouteStats.ENABLED) return;
 		DensityFunction returned = cir.getReturnValue();
 		if (returned == null || returned == function) return;
 		String cls = returned.getClass().getSimpleName();

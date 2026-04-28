@@ -30,6 +30,15 @@ import org.slf4j.LoggerFactory;
 public final class AquiferMonitor {
 	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
 
+	/** Default OFF — JFR profile (2026-04-28) showed the per-block
+	 *  AquiferMixin onApplyBegin/End mixin pair contributing ~3-5 ms/chunk
+	 *  of overhead to chunkgen workers. Pure observation cost. The
+	 *  AquiferMixin checks this flag at @Inject HEAD and returns
+	 *  immediately when off, skipping the call into onApplyBegin/End
+	 *  entirely. Flip to true only when actively measuring aquifer
+	 *  per-block cost. */
+	public static volatile boolean ENABLED = false;
+
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 	private static final int SAMPLE_EVERY = 100;
 
@@ -56,6 +65,7 @@ public final class AquiferMonitor {
 	 * Only every SAMPLE_EVERY-th call will actually start a timer.
 	 */
 	public static void onApplyBegin() {
+		if (!ENABLED) return;
 		long n = CALL_COUNT.getAndIncrement();
 		if (n % SAMPLE_EVERY == 0) {
 			APPLY_TS.set(System.nanoTime());
@@ -68,6 +78,7 @@ public final class AquiferMonitor {
 	 * Otherwise a no-op.
 	 */
 	public static void onApplyEnd() {
+		if (!ENABLED) return;
 		long start = APPLY_TS.get();
 		if (start == 0L) {
 			return;

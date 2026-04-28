@@ -6,6 +6,10 @@ import me.apika.apikaprobe.RustBridge;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+// CACHE_ROUTE_CAPTURE flag below — must stay near the top of the file
+// because the CacheRouteCaptureMixin checks it as the first statement
+// of its @Inject method.
+
 /**
  * Pure-observational counters for the Phase 2.5 step 2a checkpoint.
  *
@@ -30,6 +34,17 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class CacheRouteStats {
 	private CacheRouteStats() {}
+
+	/** Default OFF — JFR profile (2026-04-28) showed
+	 *  CacheRouteCaptureMixin firing reflective DF tree walk
+	 *  ({@link DensityFunctionWalker#fingerprint}) per Marker wrap during
+	 *  chunkgen, contributing ~6-8 ms/chunk of overhead. The
+	 *  capture-route work was diagnostic for the Phase 2.5 step 2a/2b
+	 *  bulk-density experiments which are themselves default-off. The
+	 *  CacheRouteCaptureMixin checks this flag as the first statement of
+	 *  its @Inject method and returns immediately when off. Flip true
+	 *  only when actively re-investigating cache-fill routing. */
+	public static volatile boolean ENABLED = false;
 
 	public static final AtomicLong flatCacheMatched = new AtomicLong();
 	public static final AtomicLong flatCacheUnmatched = new AtomicLong();
