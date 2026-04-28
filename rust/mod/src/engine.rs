@@ -42,6 +42,24 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_initEngine<'local>(
             .num_threads(threads)
             .build_global();
 
+        // Probe SIMD capability for the SIMD-noise port plan
+        // (see docs/PIANO_STATUS.md → SIMD batch noise). Decides whether
+        // we target f64x4 (AVX2, ~4× win) or f64x8 (AVX-512, ~8× win).
+        #[cfg(target_arch = "x86_64")]
+        {
+            let avx512f = std::arch::is_x86_feature_detected!("avx512f");
+            let avx2 = std::arch::is_x86_feature_detected!("avx2");
+            let sse42 = std::arch::is_x86_feature_detected!("sse4.2");
+            eprintln!(
+                "[ferrite] SIMD: avx512f={} avx2={} sse4.2={}",
+                avx512f, avx2, sse42
+            );
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            eprintln!("[ferrite] SIMD: non-x86_64 host (target_arch={})", std::env::consts::ARCH);
+        }
+
         EngineConfig {
             thread_count: threads,
         }
