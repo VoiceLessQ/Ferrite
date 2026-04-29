@@ -7,6 +7,8 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.5.1-alpha] — 2026-04-29
+
 ### Performance
 
 - **Vanilla surface phase ~3 ms faster — applies to every user, no toggle.**
