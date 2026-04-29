@@ -185,12 +185,11 @@ public final class MovementInternalsMonitor {
 			return;
 		}
 
-		// other = movement_self − (cramming + blockCollision + navigator + move + travel + gravity)
-		// Computed on TOTALS (not per-tick avgs) so the arithmetic is clean.
-		// Note: travel() wraps applyGravity() and calls move() — the three overlap.
-		// Subtracting all three from movement_self double-counts overlap; see the
-		// "nesting note" below when interpreting other.
-		long accountedTotal = crammingTotal + collisionTotal + navTotal + moveTotal + travelTotal + gravityTotal;
+		// other = movement_self − (cramming + blockCollision + navigator + travel + adjustColl)
+		// move and gravity fire inside travel's probe window — they are already
+		// counted inside travelTotal. Subtracting them separately would
+		// double-deduct and make other artificially small.
+		long accountedTotal = crammingTotal + collisionTotal + navTotal + travelTotal + adjustTotal;
 		long otherTotal = Math.max(0L, movementSelfNs - accountedTotal);
 
 		LOGGER.info("[movement-internals] cramming: avg={} max={}  blockCollision: avg={} max={}  navigator: avg={} max={}  move: avg={} max={}  adjustColl: avg={} max={}  travel: avg={} max={}  gravity: avg={} max={}  other: avg={}  n={} ticks",
