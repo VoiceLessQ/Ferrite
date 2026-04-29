@@ -414,6 +414,18 @@ correlates with sampler attention, not always with wall time.
   parity-clean (99.9% match, java=rust=100%), zero measurable perf
   movement on the surface band. See "JFR frame-count overstates
   recoverable cost" below.
+- **Heightmap parity validator + batched flushChunk (commits `e4e7a41`
+  + `a26e2ee`) shipped** — replaces per-write `ProtoChunk.setBlockState`
+  with raw `ChunkSection.setBlockState` grouped by section + per-column
+  `trackUpdate` post-pass (~32K → ~512 trackUpdate calls per chunk;
+  ~16K → ~24 section lookups). Parity validator confirmed bit-identical
+  output across 21,012 + 2,192 chunks (100% match, 0 cell mismatches
+  for both `WORLD_SURFACE_WG` and `OCEAN_FLOOR_WG`). Validator stays
+  in tree as a regression check via `/ferrite surface heightmap-parity
+  on|off|stats|reset`. **Clean perf measurement (validator off): ON
+  path 15.6 ms → 13.4 ms (-2.2 ms recovered). Gap to baseline closed
+  from ~9.2 ms to ~7.0 ms.** Projection from source audit was 2-3 ms;
+  actual landed within band — see "source-audit projections" below.
 
 ### Surface dispatcher source-level audit (2026-04-28)
 
@@ -461,32 +473,80 @@ heightmap calls per chunk). Brings dispatcher from ~14 ms toward
 ~11 ms — still above the ~6.3 ms vanilla baseline but the gap closes
 to ~5 ms.
 
-### Honest ceiling
+**Shipped in commits `e4e7a41` (parity validator) + `a26e2ee` (batched
+path).** Clean perf measurement post-ship: ON path 15.6 ms → 13.4 ms
+(-2.2 ms), within the projected band. Parity 100% across 23K+ chunks.
 
-Even with batched heightmap updates fully realized, the dispatcher
-cannot beat vanilla baseline. Irreducible per-chunk cost (~6-7 ms
-floor): palette writes (~2-3 ms) + vanilla's `isDefaultBlock` column
-scan that fires regardless of dispatcher (~2-3 ms) + biome supplier
-chain in vanilla's surface rule machinery (~1 ms) + ferrite dispatch
-overhead even with all wins (~1-2 ms). The dispatcher's structural
-purpose — running rule evaluation in Rust — does not reduce any of
-these.
+### Honest ceiling — measured
+
+Post-batched-heightmap measurement: dispatcher ON ~13.4 ms vs vanilla
+baseline ~6.4 ms = **~7.0 ms structural floor**. Decomposition (from
+JFR + source audit, post-Step 2):
+
+- Palette writes (`ChunkSection.setBlockState` × ~16K) — ~2-3 ms
+- Vanilla's `isDefaultBlock` column-boundary scanner that fires
+  regardless of dispatcher state — ~2-3 ms
+- Biome supplier chain in vanilla's surface rule machinery
+  (`Suppliers$NonSerializableMemoizingSupplier.get` + downstream) —
+  ~1-2 ms
+- Ferrite dispatch ceremony even with all wins (`dispatchEnqueue`
+  per-position context capture + JNI crossing + `internIdentifierToString`)
+  — ~1-2 ms
+
+The dispatcher's structural purpose — running rule evaluation in Rust —
+does not reduce any of these. **Without an architectural change that
+either eliminates palette write overhead or bypasses the biome
+supplier chain entirely, ~7 ms is the floor.**
+
+### Source-audit O(N) projections vs JFR frame-count guesses
+
+A second pattern emerged from the batched-heightmap work that's
+worth contrasting against the JFR three-strike rule above:
+
+- **Three JFR-frame-count micro-opts (29975e7, c91a12b, 4ed0d89/2beaa5b):**
+  projected savings ranged 1-15 ms. Actual savings on the surface
+  band: 0-0.7 ms each. Frame counts overstated wall-time cost.
+- **Batched heightmap (e4e7a41 + a26e2ee):** projected 2-3 ms based
+  on a counted O(N) reduction (vanilla makes 32K trackUpdate calls
+  per chunk; batched path makes 512 = 60× reduction). Actual: 2.2 ms.
+  Within the projected band on the first try.
+
+**The difference isn't profiler vs no profiler — it's whether the
+projection has a counted floor.** "60× fewer calls and each call has
+this much overhead" is a verifiable arithmetic claim. "This frame
+shows up at 8% in the sampler" is an inference about wall-time that
+HotSpot's specialization, sampler bias, or phase confusion can
+invalidate. Reserve micro-opt budget for the former; treat the latter
+as a hypothesis until removed-and-remeasured.
 
 ### Next move (when this thread reopens)
 
-**Scope batched heightmap updates as a separate session** with its
-own correctness validator. Required: a parity check at the heightmap
-level (not the BlockState level) — write per-position via vanilla,
-then write per-batch via the batched update path, diff the resulting
-heightmap arrays for `WORLD_SURFACE_WG`, `OCEAN_FLOOR_WG`, and the
-other types vanilla tracks during SURFACE phase. Without that
-validator, the optimization risks breaking carvers and decoration
-that read heightmaps downstream.
+The dispatcher gap is now structural floor, not optimization debt.
+Closing the remaining ~7 ms requires architectural work:
+
+- **Option A: bypass palette write overhead.** Write directly to the
+  `PalettedContainer`'s underlying storage instead of going through
+  `ChunkSection.setBlockState`. Risks: palette resize semantics, block
+  entity/state interaction, light recompute correctness.
+  Validator-required (palette-level parity).
+- **Option B: eliminate the biome supplier chain.** Replace vanilla's
+  `Suppliers.memoize(() -> posToBiome.apply(pos))` per-position chain
+  with a precomputed (x,z) → Biome cache populated once at chunk
+  start. ~1-2 ms recoverable. Lower risk than (A) but smaller win.
+- **Option C: combine A + B + further dispatch ceremony cleanup.**
+  Theoretical ceiling ~3-4 ms, dispatcher would land at ~10 ms vs
+  ~6 ms baseline = ~4 ms gap. Still does not beat vanilla.
+
+**Honest assessment: even (C) leaves the dispatcher above baseline.
+Without a fundamentally different design (e.g. SurfaceBuilder fully
+ported to Rust including the column-boundary scanner), the dispatcher
+cannot ship default-on.** The Piano model's per-call dispatch cost
+exceeds the savings on this workload.
 
 **Do not pursue further reflection/cache micro-opts on this path.**
-The three-strike rule is documented above; it has held for three
-consecutive attempts. The remaining gap is structural floor, not
-overhead.
+The three-strike rule is documented above; it has held. Source-audit
+projections are reliable when the win is counted-O(N), not inferred
+from JFR frames.
 
 ### What the data says about the rest of the chunkgen / tick-time map
 
