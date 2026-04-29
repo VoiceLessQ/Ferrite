@@ -195,7 +195,12 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("dispatch")
 								.then(CommandManager.literal("on").executes(FerriteCommand::enableSurfaceDispatch))
 								.then(CommandManager.literal("off").executes(FerriteCommand::disableSurfaceDispatch))
-								.then(CommandManager.literal("status").executes(FerriteCommand::statusSurfaceDispatch))))
+								.then(CommandManager.literal("status").executes(FerriteCommand::statusSurfaceDispatch)))
+						.then(CommandManager.literal("heightmap-parity")
+								.then(CommandManager.literal("on").executes(FerriteCommand::heightmapParityOn))
+								.then(CommandManager.literal("off").executes(FerriteCommand::heightmapParityOff))
+								.then(CommandManager.literal("stats").executes(FerriteCommand::heightmapParityStats))
+								.then(CommandManager.literal("reset").executes(FerriteCommand::heightmapParityReset))))
 				.then(CommandManager.literal("aquifer")
 						.then(CommandManager.literal("rust")
 								.then(CommandManager.literal("on").executes(FerriteCommand::aquiferRustOn))
@@ -505,6 +510,37 @@ public final class FerriteCommand {
 			"[surface-dispatch] ENABLED=%s treeInstalled=%s  (watch [surface-phase] tryApply slot for perf delta)",
 			SurfaceDispatcher.ENABLED, SurfaceValidator.isEnabled());
 		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int heightmapParityOn(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		me.apika.apikaprobe.surface.SurfaceHeightmapValidator.ENABLED = true;
+		String msg = "[surface-heightmap-parity] ENABLED — diffing path-A (vanilla per-write trackUpdate) vs path-B (per-column batched) per chunk; requires /ferrite surface dispatch on";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int heightmapParityOff(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		me.apika.apikaprobe.surface.SurfaceHeightmapValidator.ENABLED = false;
+		String msg = "[surface-heightmap-parity] disabled";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int heightmapParityStats(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		String msg = me.apika.apikaprobe.surface.SurfaceHeightmapValidator.statsLine();
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int heightmapParityReset(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		me.apika.apikaprobe.surface.SurfaceHeightmapValidator.resetCounters();
+		String msg = "[surface-heightmap-parity] counters reset";
+		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
 	}

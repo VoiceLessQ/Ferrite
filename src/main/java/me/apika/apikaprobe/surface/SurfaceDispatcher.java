@@ -80,6 +80,10 @@ public final class SurfaceDispatcher {
 
 		final SurfaceBatchHandoff handoff = new SurfaceBatchHandoff();
 
+		// Allocated lazily on first chunk where SurfaceHeightmapValidator is ON.
+		// Entries parallel xs/ys/zs; null means no write happened at index i.
+		BlockState[] writtenStates = null;
+
 		void resetForChunk(Object protoChunk, CompiledRuleTree tree) {
 			this.protoChunk = protoChunk;
 			this.tree = tree;
@@ -188,6 +192,25 @@ public final class SurfaceDispatcher {
 
 		handoff.dispatch();
 
+		// Heightmap parity validator (Step 1 of batched-heightmap design).
+		// When ON, snapshot pre-flush heightmaps, record per-write states,
+		// then diff Path A (current) vs Path B (per-column batched) after
+		// the write loop. Off-path: zero overhead — null array, null
+		// snapshots, no fill, no validate call.
+		boolean validating = SurfaceHeightmapValidator.ENABLED
+				&& st.protoChunk instanceof net.minecraft.world.chunk.Chunk;
+		long[] preWSWG = null;
+		long[] preOFWG = null;
+		if (validating) {
+			net.minecraft.world.chunk.Chunk c = (net.minecraft.world.chunk.Chunk) st.protoChunk;
+			preWSWG = SurfaceHeightmapValidator.snapshot(c, net.minecraft.world.Heightmap.Type.WORLD_SURFACE_WG);
+			preOFWG = SurfaceHeightmapValidator.snapshot(c, net.minecraft.world.Heightmap.Type.OCEAN_FLOOR_WG);
+			if (st.writtenStates == null) {
+				st.writtenStates = new BlockState[CAPACITY];
+			}
+			java.util.Arrays.fill(st.writtenStates, 0, n, null);
+		}
+
 		// Walk results, write to chunk via a pre-bound MethodHandle
 		// (signature erased to (chunk, pos, state) -> void; any optional
 		// 3rd flag arg is already bound to 0/false). invokeExact ~30ns
@@ -203,9 +226,16 @@ public final class SurfaceDispatcher {
 			try {
 				setBlockStateMH.invokeExact((Object) st.protoChunk, (Object) pos, (Object) bs);
 				written++;
+				if (validating) st.writtenStates[i] = bs;
 			} catch (Throwable t) {
 				// Best-effort write; if it fails, vanilla's terrain block stays.
 			}
+		}
+
+		if (validating) {
+			net.minecraft.world.chunk.Chunk c = (net.minecraft.world.chunk.Chunk) st.protoChunk;
+			SurfaceHeightmapValidator.validate(c, st.xs, st.ys, st.zs,
+					st.writtenStates, n, preWSWG, preOFWG);
 		}
 
 		batchesProcessed++;
