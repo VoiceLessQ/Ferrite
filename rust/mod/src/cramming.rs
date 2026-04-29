@@ -36,8 +36,10 @@ pub const FLAG_NO_PHYSICS: u8 = 1 << 3;
 const CONTACT_MIN: f64 = 0.01;
 // Vanilla's magic scale factor inside Entity.push(Entity).
 const PUSH_SCALE: f64 = 0.05;
-// Spatial hash cell size in blocks.
-const CELL_SIZE: f64 = 2.0;
+// Minimum spatial hash cell size. Safe for vanilla's widest pushable mob
+// (Ravager, half-width ≈ 0.975). Grows at runtime when a batch contains
+// a wider entity — see compute_cramming.
+const CELL_SIZE_MIN: f64 = 2.0;
 
 // ============================================================================
 // Request / Result structs — #[repr(C)] for direct ByteBuffer mapping
@@ -81,12 +83,11 @@ const _: [(); 32] = [(); std::mem::size_of::<CrammingResult>()];
 // Spatial hash
 // ============================================================================
 
-/// 2D hash of entity indices into 2-block cells on the XZ plane.
-/// Cell key is (floor(x/2), floor(z/2)) packed into i64.
+/// 2D hash of entity indices into `cell_size`-block cells on the XZ plane.
 #[inline]
-fn cell_key(x: f64, z: f64) -> (i32, i32) {
-    let cx = (x / CELL_SIZE).floor() as i32;
-    let cz = (z / CELL_SIZE).floor() as i32;
+fn cell_key(x: f64, z: f64, cell_size: f64) -> (i32, i32) {
+    let cx = (x / cell_size).floor() as i32;
+    let cz = (z / cell_size).floor() as i32;
     (cx, cz)
 }
 
@@ -127,10 +128,18 @@ pub fn compute_cramming(inputs: &[CrammingInput], results: &mut [CrammingResult]
         return;
     }
 
+    // --- Derive cell size from widest entity in this batch -------------------
+    // Two AABBs can overlap when |dx| < half_a + half_b. Worst case across
+    // the batch is 2 * max_half. The 3×3 neighbourhood covers all pairs
+    // whose centres are within one cell of each other; so cell_size must be
+    // at least that maximum sum to guarantee no overlapping pair is skipped.
+    let max_half = inputs.iter().map(|e| e.aabb_half_width).fold(0.0f32, f32::max);
+    let cell_size = (2.0 * max_half as f64).max(CELL_SIZE_MIN);
+
     // --- Build hash ----------------------------------------------------------
     let mut cells: HashMap<(i32, i32), Vec<u32>> = HashMap::with_capacity(n);
     for (i, input) in inputs.iter().enumerate() {
-        let key = cell_key(input.x, input.z);
+        let key = cell_key(input.x, input.z, cell_size);
         cells.entry(key).or_insert_with(|| Vec::with_capacity(8)).push(i as u32);
     }
 
@@ -140,7 +149,7 @@ pub fn compute_cramming(inputs: &[CrammingInput], results: &mut [CrammingResult]
         if (a.flags & FLAG_NO_PHYSICS) != 0 {
             continue;
         }
-        let (cx, cz) = cell_key(a.x, a.z);
+        let (cx, cz) = cell_key(a.x, a.z, cell_size);
 
         for dcx in -1..=1i32 {
             for dcz in -1..=1i32 {
@@ -455,6 +464,35 @@ mod tests {
             assert_eq!(r.accum_dx, 0.0);
             assert_eq!(r.accum_dz, 0.0);
         }
+    }
+
+    #[test]
+    fn wide_mob_pair_found_across_cell_boundary() {
+        // half_width = 1.5 → two mobs overlap when |dx| < 3.0.
+        // With the old hardcoded CELL_SIZE=2.0 a pair at |dx|=2.5 lands in
+        // cells 2 apart and is silently never tested. The dynamic cell size
+        // must grow to ≥ 3.0 so the 3×3 neighbourhood covers this pair.
+        let mut a = CrammingInput {
+            entity_id: 1, flags: FLAG_PUSHABLE, _pad0: [0; 3],
+            x: 0.0, z: 0.0, aabb_half_width: 1.5,
+            aabb_min_y: 64.0, aabb_max_y: 66.0, root_vehicle_id: -1,
+        };
+        let mut b = CrammingInput {
+            entity_id: 2, flags: FLAG_PUSHABLE, _pad0: [0; 3],
+            x: 2.5, z: 0.0, aabb_half_width: 1.5,
+            aabb_min_y: 64.0, aabb_max_y: 66.0, root_vehicle_id: -1,
+        };
+        // Confirm they actually overlap: |dx|=2.5 < half_sum=3.0.
+        let _ = (&mut a, &mut b);
+        let inputs = [a, b];
+        let mut results = [CrammingResult::default(); 2];
+        compute_cramming(&inputs, &mut results);
+
+        // Both should be pushed — pair was found and |dx|=2.5 ≥ CONTACT_MIN.
+        assert!(results[0].accum_dx < 0.0, "wide mob A must be pushed; got {}", results[0].accum_dx);
+        assert!(results[1].accum_dx > 0.0, "wide mob B must be pushed; got {}", results[1].accum_dx);
+        assert_eq!(results[0].neighbor_count, 1);
+        assert_eq!(results[1].neighbor_count, 1);
     }
 
     #[test]
