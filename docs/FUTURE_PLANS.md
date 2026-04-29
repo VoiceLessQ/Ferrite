@@ -131,14 +131,36 @@ per tick at various simulation distances. If >2ms/tick, apply four checks.
 **Uncertainty:** spawn cap check reads chunk entity counts — world state
 access. Sampling itself may be separable. Needs source audit.
 
-### Block entity ticks — hoppers, furnaces
-`[worldtick] blockEntities` exists but not broken down by type. Hoppers
-at scale do `getEntitiesOfClass(ItemEntity, bbox)` — O(N) scan per tick.
-Furnaces are cheap per-tick. Never profiled at scale.
+### Block entity ticks — hoppers (partial measurement 2026-04-29, mob farm scenario pending)
 
-**Next step:** add per-type breakdown to block entity monitor. Measure
-on a world with active hopper sorter + furnace array. If hoppers dominate,
-the spatial hash reuse plan from `docs/SPATIAL_HASH_REUSE_PLAN.md` applies.
+Measured sorter chains (inventory-to-inventory transfer):
+
+| setup | scans/tick | avg/scan | itemsFound |
+|---|---|---|---|
+| 10 hoppers | 10.0 | 0.13µs | 0 |
+| 204 hoppers | 26.3 | 0.08µs | 0 |
+| 300 hoppers | — | 0.11µs | 0 |
+
+All runs showed `itemsFound=0` — only the empty-scan fast path was
+exercised. Sorter chains transfer inventory-to-inventory, so the entity
+scan rarely fires with items present.
+
+**Not yet measured: mob farm collection layer.**
+
+- 200+ uncovered hoppers under a darkroom or drop chute.
+- Items constantly present in the 1×1×1 pickup bbox (mob drops).
+- `itemsFound > 0` every scan — the slow path.
+- This is the scenario players actually report lag from.
+
+Event-driven wakeup (skip scan when nothing found last tick, wake on
+nearby item-entity spawn) still a valid design if collection-layer scan
+cost is significant at scale. The empty-path numbers above don't rule
+it out; they just don't motivate it on their own.
+
+**Next step:** measure 100+ uncovered hoppers with constant item drops
+above them (`PickupDelay:200` to force item accumulation). If the
+items-present scan cost crosses ~1ms aggregate at realistic scale,
+revisit the spatial hash reuse plan.
 
 ---
 
