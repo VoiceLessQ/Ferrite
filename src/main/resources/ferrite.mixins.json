@@ -23,6 +23,8 @@
 		"TravelMixin",
 		"GravityMixin",
 		"AdjustCollisionsMixin",
+		"TickHandSwingMixin",
+		"TickNewAiMixin",
 		"EntityAdjustInvoker",
 		"MovementRedirectMixin",
 		"PhysicsPreTickMixin",

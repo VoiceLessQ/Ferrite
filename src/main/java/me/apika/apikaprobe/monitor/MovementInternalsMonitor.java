@@ -43,7 +43,9 @@ public final class MovementInternalsMonitor {
 	private static final int PHASE_TRAVEL = 4;
 	private static final int PHASE_GRAVITY = 5;
 	private static final int PHASE_ADJUST_COLLISIONS = 6;
-	private static final int PHASE_COUNT = 7;
+	private static final int PHASE_HAND_SWING = 7;
+	private static final int PHASE_TICK_NEW_AI = 8;
+	private static final int PHASE_COUNT = 9;
 
 	private static final ThreadLocal<long[]> PHASE_START = ThreadLocal.withInitial(() -> new long[PHASE_COUNT]);
 	private static final long[] THIS_TICK_NS = new long[PHASE_COUNT];
@@ -125,6 +127,22 @@ public final class MovementInternalsMonitor {
 		recordPhaseEnd(PHASE_ADJUST_COLLISIONS);
 	}
 
+	public static void onHandSwingBegin() {
+		PHASE_START.get()[PHASE_HAND_SWING] = System.nanoTime();
+	}
+
+	public static void onHandSwingEnd() {
+		recordPhaseEnd(PHASE_HAND_SWING);
+	}
+
+	public static void onTickNewAiBegin() {
+		PHASE_START.get()[PHASE_TICK_NEW_AI] = System.nanoTime();
+	}
+
+	public static void onTickNewAiEnd() {
+		recordPhaseEnd(PHASE_TICK_NEW_AI);
+	}
+
 	// --- Internals ----------------------------------------------------------
 
 	private static void recordPhaseEnd(int phase) {
@@ -178,6 +196,10 @@ public final class MovementInternalsMonitor {
 		long gravityMax = MAX_TICK_NS[PHASE_GRAVITY].getAndSet(0L);
 		long adjustTotal = TOTAL_NS[PHASE_ADJUST_COLLISIONS].getAndSet(0L);
 		long adjustMax = MAX_TICK_NS[PHASE_ADJUST_COLLISIONS].getAndSet(0L);
+		long handSwingTotal = TOTAL_NS[PHASE_HAND_SWING].getAndSet(0L);
+		long handSwingMax = MAX_TICK_NS[PHASE_HAND_SWING].getAndSet(0L);
+		long tickNewAiTotal = TOTAL_NS[PHASE_TICK_NEW_AI].getAndSet(0L);
+		long tickNewAiMax = MAX_TICK_NS[PHASE_TICK_NEW_AI].getAndSet(0L);
 
 		lastReportNs = now;
 
@@ -185,14 +207,15 @@ public final class MovementInternalsMonitor {
 			return;
 		}
 
-		// other = movement_self − (cramming + blockCollision + navigator + travel + adjustColl)
-		// move and gravity fire inside travel's probe window — they are already
-		// counted inside travelTotal. Subtracting them separately would
-		// double-deduct and make other artificially small.
-		long accountedTotal = crammingTotal + collisionTotal + navTotal + travelTotal + adjustTotal;
+		// other = movement_self − (cramming + blockCollision + navigator + travel + adjustColl + handSwing)
+		// move and gravity fire inside travel's probe window — already counted inside
+		// travelTotal, so excluded to avoid double-deduction.
+		// tickNewAi contains navigator (already counted) so it is NOT subtracted from
+		// other; it is reported as an informational breakdown of the AI block.
+		long accountedTotal = crammingTotal + collisionTotal + navTotal + travelTotal + adjustTotal + handSwingTotal;
 		long otherTotal = Math.max(0L, movementSelfNs - accountedTotal);
 
-		LOGGER.info("[movement-internals] cramming: avg={} max={}  blockCollision: avg={} max={}  navigator: avg={} max={}  move: avg={} max={}  adjustColl: avg={} max={}  travel: avg={} max={}  gravity: avg={} max={}  other: avg={}  n={} ticks",
+		LOGGER.info("[movement-internals] cramming: avg={} max={}  blockCollision: avg={} max={}  navigator: avg={} max={}  move: avg={} max={}  adjustColl: avg={} max={}  travel: avg={} max={}  gravity: avg={} max={}  handSwing: avg={} max={}  tickNewAi: avg={} max={}  other: avg={}  n={} ticks",
 				formatMs(crammingTotal / ticks),
 				formatMs(crammingMax),
 				formatMs(collisionTotal / ticks),
@@ -207,6 +230,10 @@ public final class MovementInternalsMonitor {
 				formatMs(travelMax),
 				formatMs(gravityTotal / ticks),
 				formatMs(gravityMax),
+				formatMs(handSwingTotal / ticks),
+				formatMs(handSwingMax),
+				formatMs(tickNewAiTotal / ticks),
+				formatMs(tickNewAiMax),
 				formatMs(otherTotal / ticks),
 				ticks);
 	}

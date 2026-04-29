@@ -43,6 +43,42 @@ near-zero. Wrong target regardless of whether the fingerprint would match.
 
 Total ~6.5ms vs cramming 0.01ms. The cramming work is done.
 
+### Entity tick goal selectors + controls (hostile mobs)
+**Hypothesis:** the ~1.79ms "other" bucket in `[movement-internals]` might
+be potion effects, hand-swing animation, or water-state detection — areas
+with a possible pure-math slice.
+
+**Result:** All three hypothesized methods live in `baseTick()`, outside
+`tickMovement()`. They cannot contribute to `movement_self`. The "other"
+bucket was fully explained by adding `tickNewAi` instrumentation:
+
+- `tickNewAi` avg: 1.90ms
+- minus navigator (0.02ms, already probed) and mobTick (0.01ms, excluded from movement_self)
+- implies goal selectors + move/look/jump controls + visibilityCache.clear: ~1.87ms
+
+This matches "other" (1.47-1.83ms, accounting for the adjustColl overlap
+in `accountedTotal`). No mystery remains.
+
+**Port verdict, by bucket:**
+
+| bucket | avg | verdict |
+|---|---|---|
+| goal selectors + controls | ~1.87ms | world reads per call — fails check 2 |
+| travel | 1.63ms | JNI boundary cost > compute win — fails check 3 |
+| adjustColl | 1.07ms | inside travel, same wall |
+| blockCollision | 0.31ms | world reads per step, too small |
+| handSwing | 0.03ms | trivial |
+| navigator | 0.02ms | trivial |
+| cramming | 0.01ms | shipped, done |
+
+Goal selectors fail check 2: `goalSelector.tick()` drives `LookAtEntityGoal`
+(calls `world.getClosestEntity()`), `ActiveTargetGoal` (scans for targets),
+`WanderAroundFarGoal` (queries path availability). No pure-math slice exists.
+
+**Entity tick seam is fully worked.** Cramming was the one clean algorithmic
+win. Everything else has world reads mid-compute or hits the JNI boundary.
+Instrumentation is complete; no further entity-tick ports are expected.
+
 ---
 
 ## Instrumented but never ported
