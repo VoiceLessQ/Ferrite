@@ -76,16 +76,38 @@ in this subsystem.
 
 ## Instrumented but never ported
 
-### Fluid ticks
-`scheduledTicks` band exists in `[server-tick-phase]` but fluid vs block
-ticks are bundled together. Never isolated. On servers with large water
-systems (kelp farms, water elevators, lava lakes) this could be significant.
+### Fluid ticks (measured 2026-04-29, closed)
 
-**Next step:** split `WorldTickScheduler` into fluid vs block buckets.
-Measure on a world with active fluid systems. Apply four checks.
+Schedulers already split in vanilla — two separate `WorldTickScheduler`
+instances (`blockTickScheduler`, `fluidTickScheduler`). Band split now
+visible in `[fluid-tick]` and `[block-tick]` monitor lines.
 
-**Uncertainty:** fluid spreading reads neighbor block states per step —
-possible snapshot trap. Needs investigation before committing to a port.
+Measured baseline:
+
+| scenario | fluid ticks/5s | µs/tick | share of server tick |
+|---|---|---|---|
+| ocean idle | ~7900 | 10.3µs | 0.135ms |
+| active fill spike | ~2364 | 12.0µs | 0.281ms |
+| ambient tail post-fill | ~300-600 | 14-28µs | 0.06-0.15ms |
+
+Source audit verdict, port dead-on-arrival:
+
+- Per-tick work is almost entirely world I/O (`getBlockState`,
+  `setBlockState`).
+- Snapshot trap: `tryFlow` writes block states mid-tick and immediately
+  reads them back in the same `getSpread` loop.
+- Two structural caches already absorb the expensive parts:
+  identity-keyed LRU (200 entries) on `receivesFlow`, plus per-call
+  `SpreadCache`.
+- JNI per neighbor read would be 50-100x slower than the current cached
+  identity compare.
+
+Even at fill spike: <0.3ms server-tick share. JIT-locked at 10-15µs/tick.
+Linear scaling, more fluid ticks means proportionally more cost, no
+algorithmic win available without replacing world state access.
+
+Port verdict: closed. Instrumentation retained for visibility.
+Next: mob spawning candidate sampling or chunk saving/serialization.
 
 ### Villager AI / Brain ticks
 Zero instrumentation. Known expensive on populated servers — villagers
