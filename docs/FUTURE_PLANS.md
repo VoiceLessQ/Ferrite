@@ -131,9 +131,9 @@ per tick at various simulation distances. If >2ms/tick, apply four checks.
 **Uncertainty:** spawn cap check reads chunk entity counts — world state
 access. Sampling itself may be separable. Needs source audit.
 
-### Block entity ticks — hoppers (partial measurement 2026-04-29, mob farm scenario pending)
+### Block entity ticks — hoppers (active, two-phase plan 2026-04-29)
 
-Measured sorter chains (inventory-to-inventory transfer):
+Measured so far (sorter chains, inventory-to-inventory transfer):
 
 | setup | scans/tick | avg/scan | itemsFound |
 |---|---|---|---|
@@ -141,26 +141,62 @@ Measured sorter chains (inventory-to-inventory transfer):
 | 204 hoppers | 26.3 | 0.08µs | 0 |
 | 300 hoppers | — | 0.11µs | 0 |
 
-All runs showed `itemsFound=0` — only the empty-scan fast path was
-exercised. Sorter chains transfer inventory-to-inventory, so the entity
-scan rarely fires with items present.
+All runs hit the empty-scan fast path (`itemsFound=0`). Sorter chains
+transfer inventory-to-inventory, so the entity scan rarely fires with
+items present. **The scenario that actually causes player-reported lag
+is unmeasured:** mob-farm collection layers (200+ uncovered hoppers
+with items constantly present in the 1×1×1 pickup bbox).
 
-**Not yet measured: mob farm collection layer.**
+**Prior art:**
+- **2No2Name/hopperOptimizations** archived (1.16-only). Used
+  event-driven entity tracker integration, not spatial hash.
+- **Lithium** had the same approach in older versions; in current
+  Lithium (0.24.x for 26.1.x) the dedicated `hopper/` mixin folder
+  appears to have been removed or moved. The remaining `common/hopper/`
+  files are inventory-side caching only. Unconfirmed whether the
+  pickup optimization was retired or relocated; worth verifying before
+  duplicating the work.
 
-- 200+ uncovered hoppers under a darkroom or drop chute.
-- Items constantly present in the 1×1×1 pickup bbox (mob drops).
-- `itemsFound > 0` every scan — the slow path.
-- This is the scenario players actually report lag from.
+#### Two-phase plan
 
-Event-driven wakeup (skip scan when nothing found last tick, wake on
-nearby item-entity spawn) still a valid design if collection-layer scan
-cost is significant at scale. The empty-path numbers above don't rule
-it out; they just don't motivate it on their own.
+Two stackable wins, ordered by cost and ROI:
 
-**Next step:** measure 100+ uncovered hoppers with constant item drops
-above them (`PickupDelay:200` to force item accumulation). If the
-items-present scan cost crosses ~1ms aggregate at realistic scale,
-revisit the spatial hash reuse plan.
+**Phase 1 — Smart Java (event-driven dirty flag).** Pure Java, no JNI.
+Hopper sleeps until an item entity enters its pickup region:
+
+```java
+// Current vanilla:
+List<ItemEntity> items = world.getEntitiesOfClass(ItemEntity, bbox);
+
+// Phase 1:
+if (!regionDirty) return;
+regionDirty = false;
+List<ItemEntity> items = world.getEntitiesOfClass(ItemEntity, bbox);
+```
+
+Eliminates scan for idle collection hoppers entirely. Cost is dirty-bit
+maintenance on item-entity moves into watched regions.
+
+**Phase 2 — Rust spatial hash (replace the scan).** When items ARE
+present, swap `getEntitiesOfClass(ItemEntity, bbox)` for a Rust hash
+query. Same cramming pattern: one hash per chunk per tick over all
+item entities, each hopper queries it in O(1). Per-chunk per-tick
+cost goes from O(hoppers × items) to O(items + hoppers).
+
+#### Order of operations
+
+1. Measure collection layer under real load (`itemsFound > 0` at
+   scale). 100+ uncovered hoppers, `PickupDelay:200` to force item
+   accumulation. Determines whether either phase is worth doing.
+2. If signal is real: build Phase 1 (dirty flag). Pure Java, fast win.
+3. Re-measure. Quantify the residual scan cost on hoppers that *do*
+   have items (which Phase 1 cannot eliminate).
+4. If residual is significant: build Phase 2 (Rust spatial hash).
+   Apply the four checks against measured numbers, not against the
+   architectural argument.
+
+Hopper investigation stays open. Both phases are valid candidates;
+neither is closed.
 
 ---
 
