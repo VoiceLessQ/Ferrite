@@ -81,7 +81,12 @@ public final class FerriteCommand {
 				.then(CommandManager.literal("cramming")
 						.then(CommandManager.literal("on").executes(FerriteCommand::enableCramming))
 						.then(CommandManager.literal("off").executes(FerriteCommand::disableCramming))
-						.then(CommandManager.literal("status").executes(FerriteCommand::statusCramming)))
+						.then(CommandManager.literal("status").executes(FerriteCommand::statusCramming))
+						.then(CommandManager.literal("parity")
+								.then(CommandManager.literal("on").executes(FerriteCommand::crammingParityOn))
+								.then(CommandManager.literal("off").executes(FerriteCommand::crammingParityOff))
+								.then(CommandManager.literal("stats").executes(FerriteCommand::crammingParityStats))
+								.then(CommandManager.literal("reset").executes(FerriteCommand::crammingParityReset))))
 				.then(CommandManager.literal("redstone")
 						.then(CommandManager.literal("rust")
 								.then(CommandManager.literal("on").executes(FerriteCommand::enableRust))
@@ -247,6 +252,37 @@ public final class FerriteCommand {
 			CrammingDispatcher.ENABLED,
 			RustBridge.NATIVE_AVAILABLE ? "available" : "MISSING");
 		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int crammingParityOn(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		me.apika.apikaprobe.entity.CrammingParityValidator.ENABLED = true;
+		String msg = "[cramming-parity] ENABLED — diffing full-compute results against previous tick on fingerprint hits; watch [cramming-parity] in latest.log";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int crammingParityOff(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		me.apika.apikaprobe.entity.CrammingParityValidator.ENABLED = false;
+		String msg = "[cramming-parity] disabled — final stats: " + me.apika.apikaprobe.entity.CrammingParityValidator.statsLine();
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int crammingParityStats(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		String msg = me.apika.apikaprobe.entity.CrammingParityValidator.statsLine();
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int crammingParityReset(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		me.apika.apikaprobe.entity.CrammingParityValidator.resetCounters();
+		String msg = "[cramming-parity] counters reset";
+		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
 	}
