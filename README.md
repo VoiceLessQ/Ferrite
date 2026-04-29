@@ -1,9 +1,13 @@
 ## Ferrite
 
-**What you get:** A performance mod for Minecraft 1.21.11. It's a Fabric (Java) mod that calls into native Rust via JNI for the hot paths — Java handles Minecraft integration and mixins, Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary. Two opt-in optimizations:
+**What you get:** A performance mod for Minecraft 1.21.11. It's a Fabric (Java) mod that calls into native Rust via JNI for the hot paths — Java handles Minecraft integration and mixins, Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary.
+
+**Shipped wins:**
 
 - **Cramming (active by default, toggle with `/ferrite cramming on|off|status`)** — a Rust reimplementation of the mob-vs-mob cramming loop. Cuts the server's entity-tick cost by roughly 65% at high mob density. Lets you keep stable TPS standing next to a 1000+ mob farm. **Vanilla 1:1 parity** — same push math, same `isPassengerOfSameVehicle` skip, same cramming-damage application (gated by `maxEntityCramming` gamerule and per-entity 1-in-4 random, identical to vanilla). Want unbounded farms? Set `/gamerule maxEntityCramming 0` like you would in vanilla — Ferrite makes that scenario stay at 20 TPS. Want to A/B the perf claim? `/ferrite cramming off` falls back to vanilla without restart.
 - **Redstone (`/ferrite redstone ac on`)** — adapts [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current) algorithm into Ferrite. **~10× fewer wire cascades, contraptions run ~6× faster at equivalent server load.** Bit-for-bit correct vs vanilla on 150,000+ oracle checks. Works on existing worlds without toggles or migration. As of 0.4.0-alpha, each cascade's power propagation also runs through a Rust kernel by default (one batched JNI call per cascade) for an additional **~30% wire-cost reduction** on heavy contraptions; disable with `/ferrite redstone bfs off` if needed.
+- **Chunkgen baseline (active automatically, no toggle)** — internal reflection cleanup on `MaterialRules.MaterialRuleContext` (`@Invoker`/`@Accessor` mixins replacing per-call `getMethod()`+`Method.invoke`) shaves **~3 ms off vanilla's per-chunk surface phase**, applied to every chunk regardless of any other Ferrite setting. Diagnostic instrumentation that was contributing ~8-10 ms/chunk overhead is also gated off by default. Both ship invisibly — see [docs/PIANO_STATUS.md](docs/PIANO_STATUS.md) for measurement details.
+- **Surface rule dispatcher (opt-in, default off)** — `/ferrite surface dispatch on` runs surface rule evaluation in Rust with a batched per-column heightmap update. Currently **~13.4 ms ON vs ~6.4 ms vanilla baseline** = ~7 ms structural gap remains; useful for A/B measurement but not recommended for production until the gap closes. Parity-clean (100% match across 23K+ chunks). See [Commands](#commands) below for the full setup sequence.
 
 Every 5 seconds the mod also logs where your game is spending time, so the next optimization can target the next real bottleneck.
 
@@ -62,6 +66,59 @@ A `@Redirect(NEW)` mixin swaps `RedstoneWireBlock`'s `redstoneController` field 
 Pure Java; no JNI. The win is algorithmic — replacing vanilla's per-wire recursive re-evaluation (which can revisit the same wire dozens of times per cascade) with one settle per cascade, plus skipping the redundant block updates a wire would normally emit between intermediate power levels.
 
 A shadow-compute `RedstoneOracle` validates every sampled cascade against vanilla's own `calculateWirePowerAt`, so any algorithm divergence surfaces immediately in `[redstone-oracle]` log lines.
+
+---
+
+## Commands
+
+All Ferrite toggles live under `/ferrite`. Default state is in the rightmost column. Settings are volatile — they persist for the running server session, not across restarts.
+
+### User-facing toggles
+
+| Command | Effect | Default |
+|---|---|---|
+| `/ferrite cramming on\|off\|status` | Rust spatial-hash mob-vs-mob cramming. Vanilla parity, A/B switchable. | **on** |
+| `/ferrite redstone ac on\|off\|status` | Alternate Current wire algorithm (~15× fewer cascades). Turn on for performance; turn off if a contraption relies on quasi-connectivity, 0-tick pulses, or instawire. | off |
+| `/ferrite redstone bfs on\|off\|status` | Per-cascade Rust BFS for power propagation (~30% additional wire-cost reduction). Only effective when AC is on. | **on** |
+| `/ferrite redstone bfs-min <int>` | Minimum cascade size (in wires) before dispatching through Rust. Raise this to skip small cascades where JNI overhead exceeds the win. | 1 |
+| `/ferrite redstone bench` | Run a built-in lag-machine benchmark in the current world. | — |
+
+### Surface dispatcher (opt-in, debug / measurement)
+
+The surface rule dispatcher runs vanilla's `BlockStateRule.tryApply` in a Rust evaluator with a batched heightmap update. Default OFF — currently ~7 ms above vanilla baseline (see lead). Useful for A/B measurement and as a foundation for future architectural work. Setup sequence:
+
+```
+/ferrite surface validate            # compile this world's surface rule into a bytecode tree
+/ferrite surface dispatch on         # turn the dispatcher on (requires a tree from validate)
+... fly through fresh chunks ...
+/ferrite surface validate-stats      # print rolling parity + perf statistics
+/ferrite surface dispatch off        # back to vanilla
+/ferrite surface validate-off        # release the tree
+```
+
+Full reference:
+
+| Command | Effect |
+|---|---|
+| `/ferrite surface validate` | Compile the active world's surface rule into a bytecode tree. Required before `dispatch on` can do anything. |
+| `/ferrite surface validate-off` | Clear the installed tree. |
+| `/ferrite surface validate-stats` | Print rolling validator stats (sample count, vanilla-vs-eval match %, java-vs-rust agreement %). |
+| `/ferrite surface dispatch on\|off\|status` | Toggle the batched dispatcher. |
+| `/ferrite surface heightmap-parity on\|off\|stats\|reset` | Diff the batched heightmap update against vanilla's per-write `trackUpdate` reference. Regression check; ~1 ms/chunk overhead when on. Validated 100% match across 23K+ chunks; turn on if you've changed surface rules and want to confirm the predicate-preserving assumption still holds. |
+
+### Other opt-ins (default off, measurement / experimental)
+
+| Command / flag | Effect |
+|---|---|
+| `/ferrite aquifer rust on\|off\|status` | Toggle the Rust aquifer port. Currently disabled — fine-grain parity gap with vanilla unresolved. |
+| `-Dferrite.bulkChunkDensity=true` (JVM flag) | Enable the bulk chunk density Rust kernel for benchmarking. Confirmed JIT-wall regression at realistic load; use for measurement only. |
+
+### What ships invisibly (no toggle needed)
+
+- **`@Invoker`/`@Accessor` cleanup on `MaterialRules.MaterialRuleContext`** — applied automatically; shaves ~3 ms off vanilla's surface-phase baseline regardless of any other setting.
+- **Diagnostic gating** — `CacheRouteCaptureMixin` and `AquiferMonitor` are gated off by default, removing ~8-10 ms/chunk of instrumentation overhead the early profiling sessions used.
+
+These are "ships to everyone, no opt-in required" because they purely reduce overhead in code paths that run regardless of other Ferrite settings.
 
 ---
 
