@@ -84,6 +84,11 @@ public final class SurfaceDispatcher {
 		// Entries parallel xs/ys/zs; null means no write happened at index i.
 		BlockState[] writtenStates = null;
 
+		// Per-column reduction scratch for the batched heightmap update.
+		// Reused per chunk; sized to 16×16 = 256 columns.
+		final int[] colHighestY = new int[256];
+		final BlockState[] colState = new BlockState[256];
+
 		void resetForChunk(Object protoChunk, CompiledRuleTree tree) {
 			this.protoChunk = protoChunk;
 			this.tree = tree;
@@ -192,17 +197,38 @@ public final class SurfaceDispatcher {
 
 		handoff.dispatch();
 
-		// Heightmap parity validator (Step 1 of batched-heightmap design).
-		// When ON, snapshot pre-flush heightmaps, record per-write states,
-		// then diff Path A (current) vs Path B (per-column batched) after
-		// the write loop. Off-path: zero overhead — null array, null
-		// snapshots, no fill, no validate call.
-		boolean validating = SurfaceHeightmapValidator.ENABLED
-				&& st.protoChunk instanceof net.minecraft.world.chunk.Chunk;
+		// Step 2: batched write path. Replaces per-write
+		// ProtoChunk.setBlockState (which fires Heightmap.trackUpdate per
+		// write × 2 types = ~32K calls/chunk during SURFACE phase) with
+		// raw ChunkSection.setBlockState + per-column heightmap batch
+		// (~512 trackUpdate calls/chunk). Validated bit-identical against
+		// per-write trackUpdate across 21,012 chunks (commit e4e7a41 +
+		// SurfaceHeightmapValidator).
+		//
+		// Three relevant observations from the source audit:
+		//   - SurfaceBuilder.buildSurface's redirect target returns null
+		//     in batch mode; vanilla's setBlockState is therefore never
+		//     called for any enqueued position. flushChunk's writes are
+		//     the *only* writes for these positions.
+		//   - During SURFACE phase, status < INITIALIZE_LIGHT, so
+		//     ProtoChunk.setBlockState's lighting branch is dead — safe
+		//     to skip by going straight to ChunkSection.
+		//   - Surface rule writes are predicate-preserving (always non-
+		//     air, always suffocating), so per-column trackUpdate at the
+		//     highest changed Y produces bit-identical heightmap state
+		//     to per-write trackUpdate.
+
+		net.minecraft.world.chunk.Chunk c = (net.minecraft.world.chunk.Chunk) st.protoChunk;
+
+		// Heightmap parity validator (Step 1 — kept as regression check).
+		// When ON, snapshot pre-flush heightmaps and record per-write
+		// states; the post-flush validate() call diffs Path A (per-write
+		// trackUpdate, simulated as reference) against Path B (the
+		// batched path that actually ran in production).
+		boolean validating = SurfaceHeightmapValidator.ENABLED;
 		long[] preWSWG = null;
 		long[] preOFWG = null;
 		if (validating) {
-			net.minecraft.world.chunk.Chunk c = (net.minecraft.world.chunk.Chunk) st.protoChunk;
 			preWSWG = SurfaceHeightmapValidator.snapshot(c, net.minecraft.world.Heightmap.Type.WORLD_SURFACE_WG);
 			preOFWG = SurfaceHeightmapValidator.snapshot(c, net.minecraft.world.Heightmap.Type.OCEAN_FLOOR_WG);
 			if (st.writtenStates == null) {
@@ -211,29 +237,69 @@ public final class SurfaceDispatcher {
 			java.util.Arrays.fill(st.writtenStates, 0, n, null);
 		}
 
-		// Walk results, write to chunk via a pre-bound MethodHandle
-		// (signature erased to (chunk, pos, state) -> void; any optional
-		// 3rd flag arg is already bound to 0/false). invokeExact ~30ns
-		// per write vs Method.invoke ~300ns.
-		java.lang.invoke.MethodHandle setBlockStateMH =
-				SurfaceValidator.mhSetBlockState(st.protoChunk);
-		BlockPos.Mutable pos = new BlockPos.Mutable();
+		// Lazy heightmap init: replicates ProtoChunk.setBlockState's
+		// missing-types check. By SURFACE phase the NOISE-phase writes
+		// have populated both, so this is normally a no-op (2 cheap
+		// hasHeightmap calls). Required for safety when the first surface
+		// write would have triggered creation in vanilla.
+		java.util.EnumSet<net.minecraft.world.Heightmap.Type> missingTypes = null;
+		if (!c.hasHeightmap(net.minecraft.world.Heightmap.Type.WORLD_SURFACE_WG)) {
+			missingTypes = java.util.EnumSet.of(net.minecraft.world.Heightmap.Type.WORLD_SURFACE_WG);
+		}
+		if (!c.hasHeightmap(net.minecraft.world.Heightmap.Type.OCEAN_FLOOR_WG)) {
+			if (missingTypes == null) missingTypes = java.util.EnumSet.noneOf(net.minecraft.world.Heightmap.Type.class);
+			missingTypes.add(net.minecraft.world.Heightmap.Type.OCEAN_FLOOR_WG);
+		}
+		if (missingTypes != null) net.minecraft.world.Heightmap.populateHeightmaps(c, missingTypes);
+
+		net.minecraft.world.Heightmap hmWS = c.getHeightmap(net.minecraft.world.Heightmap.Type.WORLD_SURFACE_WG);
+		net.minecraft.world.Heightmap hmOF = c.getHeightmap(net.minecraft.world.Heightmap.Type.OCEAN_FLOOR_WG);
+
+		net.minecraft.world.chunk.ChunkSection[] sections = c.getSectionArray();
+
+		// Per-column reduction: highest Y written and the state at that Y.
+		// Index = (localX << 4) | localZ; 256 columns max.
+		int[] colHighestY = st.colHighestY;
+		BlockState[] colState = st.colState;
+		java.util.Arrays.fill(colHighestY, Integer.MIN_VALUE);
+
 		int written = 0;
 		for (int i = 0; i < n; i++) {
 			Object result = handoff.readResult(i);
 			if (!(result instanceof BlockState bs)) continue;
-			pos.set(st.xs[i], st.ys[i], st.zs[i]);
-			try {
-				setBlockStateMH.invokeExact((Object) st.protoChunk, (Object) pos, (Object) bs);
-				written++;
-				if (validating) st.writtenStates[i] = bs;
-			} catch (Throwable t) {
-				// Best-effort write; if it fails, vanilla's terrain block stays.
+
+			int wx = st.xs[i], wy = st.ys[i], wz = st.zs[i];
+			if (c.isOutOfHeightLimit(wy)) continue; // matches vanilla's early return
+
+			net.minecraft.world.chunk.ChunkSection section = sections[c.getSectionIndex(wy)];
+			int localX = wx & 15;
+			int localY = wy & 15;
+			int localZ = wz & 15;
+			section.setBlockState(localX, localY, localZ, bs);
+			written++;
+
+			int colIdx = (localX << 4) | localZ;
+			if (wy > colHighestY[colIdx]) {
+				colHighestY[colIdx] = wy;
+				colState[colIdx] = bs;
 			}
+
+			if (validating) st.writtenStates[i] = bs;
+		}
+
+		// Per-column heightmap update — once per column per type at the
+		// highest changed Y. Replaces ~32K trackUpdate calls with ~512.
+		for (int colIdx = 0; colIdx < 256; colIdx++) {
+			int highestY = colHighestY[colIdx];
+			if (highestY == Integer.MIN_VALUE) continue;
+			int localX = (colIdx >> 4) & 15;
+			int localZ = colIdx & 15;
+			BlockState topState = colState[colIdx];
+			hmWS.trackUpdate(localX, highestY, localZ, topState);
+			hmOF.trackUpdate(localX, highestY, localZ, topState);
 		}
 
 		if (validating) {
-			net.minecraft.world.chunk.Chunk c = (net.minecraft.world.chunk.Chunk) st.protoChunk;
 			SurfaceHeightmapValidator.validate(c, st.xs, st.ys, st.zs,
 					st.writtenStates, n, preWSWG, preOFWG);
 		}

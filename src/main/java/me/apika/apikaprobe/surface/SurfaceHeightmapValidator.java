@@ -10,12 +10,20 @@ import net.minecraft.world.Heightmap;
 import net.minecraft.world.chunk.Chunk;
 
 /**
- * Step 1 of the batched heightmap update: a parity validator that
- * runs the proposed Path B (per-column trackUpdate at highest changed
- * Y) alongside the production Path A (vanilla per-write
- * {@code ProtoChunk.setBlockState} which fires {@code trackUpdate}
- * per write per heightmap type), and diffs the resulting heightmap
- * arrays cell-by-cell.
+ * Heightmap parity regression check for the batched dispatcher path.
+ *
+ * <p>Step 1 (commit e4e7a41) used this to validate that Path B
+ * (per-column {@code trackUpdate} at highest changed Y) was
+ * bit-identical to Path A (vanilla per-write {@code trackUpdate})
+ * before flipping the dispatcher to use Path B in production. Pass
+ * criterion was met: 21,012 chunks, 100% match, 0 cell mismatches.
+ *
+ * <p>Step 2 made Path B the production path. This validator stays in
+ * tree as a regression check: any future surface rule change that
+ * violates the predicate-preserving assumption (writes that flip
+ * {@code NOT_AIR} or {@code SUFFOCATES} for the highest Y in a
+ * column) will produce a Path A vs Path B divergence and be flagged
+ * here.
  *
  * <h3>How it works</h3>
  * Driven by {@link SurfaceDispatcher#flushChunk()}. When
@@ -24,23 +32,17 @@ import net.minecraft.world.chunk.Chunk;
  * <li>Before the write loop fires, {@code flushChunk} captures
  *     pre-flush snapshots of {@code WORLD_SURFACE_WG} and
  *     {@code OCEAN_FLOOR_WG} via {@link #snapshot}.</li>
- * <li>The production Path A runs unchanged, populating heightmaps
- *     per-write via vanilla's {@code trackUpdate}.</li>
- * <li>{@link #validate} captures the post-A heightmap arrays,
- *     temporarily restores the pre-flush snapshot, applies Path B's
- *     batched updates (one {@code trackUpdate} per column at the
- *     highest changed Y per heightmap type), captures Path B's
- *     result, then restores Path A so the chunk stays correct for
- *     downstream phases.</li>
+ * <li>The production Path B runs (raw {@code ChunkSection.setBlockState}
+ *     per write, then per-column {@code trackUpdate} at highest Y).</li>
+ * <li>{@link #validate} captures the post-B heightmap arrays,
+ *     temporarily restores the pre-flush snapshot, applies Path A
+ *     (per-write {@code trackUpdate}) as the reference, captures the
+ *     reference arrays, then restores Path B so the chunk stays
+ *     correct for downstream phases.</li>
  * <li>Cells are diffed via {@link Heightmap#get(int, int)}; any
  *     mismatch is counted by heightmap type and chunks-with-any-mismatch
  *     are tracked.</li>
  * </ol>
- *
- * <h3>Pass criterion</h3>
- * 100% match across 1000+ chunks of varied biomes (overworld + ocean
- * + badlands + frozen) before flipping the dispatcher to use Path B
- * in production.
  *
  * <h3>Cost</h3>
  * Validation adds ~1 ms/chunk: array clones, two {@code setTo} memcpys
@@ -96,25 +98,10 @@ public final class SurfaceHeightmapValidator {
 		Heightmap hmOF = chunk.getHeightmap(Heightmap.Type.OCEAN_FLOOR_WG);
 		if (hmWS == null && hmOF == null) return;
 
-		// Per-column reduction: highest Y written and the state at that Y.
-		// 256 columns max; index = (localX << 4) | localZ.
-		int[] colHighestY = new int[256];
-		BlockState[] colState = new BlockState[256];
-		Arrays.fill(colHighestY, Integer.MIN_VALUE);
-		int columnsWithWrites = 0;
-		for (int i = 0; i < n; i++) {
-			BlockState bs = writtenStates[i];
-			if (bs == null) continue;
-			int idx = ((xs[i] & 15) << 4) | (zs[i] & 15);
-			if (ys[i] > colHighestY[idx]) {
-				if (colHighestY[idx] == Integer.MIN_VALUE) columnsWithWrites++;
-				colHighestY[idx] = ys[i];
-				colState[idx] = bs;
-			}
-		}
-
-		long mmWSWG = diffOne(chunk, hmWS, Heightmap.Type.WORLD_SURFACE_WG, preWSWG, colHighestY, colState);
-		long mmOFWG = diffOne(chunk, hmOF, Heightmap.Type.OCEAN_FLOOR_WG, preOFWG, colHighestY, colState);
+		long mmWSWG = diffOne(chunk, hmWS, Heightmap.Type.WORLD_SURFACE_WG,
+				preWSWG, xs, ys, zs, writtenStates, n);
+		long mmOFWG = diffOne(chunk, hmOF, Heightmap.Type.OCEAN_FLOOR_WG,
+				preOFWG, xs, ys, zs, writtenStates, n);
 
 		chunksValidated.incrementAndGet();
 		if (mmWSWG > 0 || mmOFWG > 0) {
@@ -123,37 +110,38 @@ public final class SurfaceHeightmapValidator {
 			cellMismatchesOFWG.addAndGet(mmOFWG);
 			if (loggedMismatchSamples.getAndIncrement() < MAX_MISMATCH_LOG_LINES) {
 				ExampleMod.LOGGER.warn(
-					"[surface-heightmap-parity] chunk {} cols={} mismatches WSWG={} OFWG={}",
-					chunk.getPos(), columnsWithWrites, mmWSWG, mmOFWG);
+					"[surface-heightmap-parity] chunk {} writes={} mismatches WSWG={} OFWG={}",
+					chunk.getPos(), n, mmWSWG, mmOFWG);
 			}
 		}
 		maybeReport();
 	}
 
-	/** Capture Path A's cells, restore pre-snapshot, apply Path B's
-	 *  per-column updates, capture Path B's cells, restore Path A,
-	 *  return cell-level mismatch count. Returns 0 if heightmap or
-	 *  snapshot is null. */
+	/** Capture Path B's cells (production path already wrote them),
+	 *  restore the pre-flush snapshot, apply Path A reference (per-write
+	 *  {@code trackUpdate}), capture Path A's cells, restore Path B so
+	 *  the chunk stays correct for downstream phases, return cell-level
+	 *  mismatch count. Returns 0 if heightmap or snapshot is null. */
 	private static long diffOne(Chunk chunk, Heightmap hm, Heightmap.Type type,
-			long[] preSnapshot, int[] colHighestY, BlockState[] colState) {
+			long[] preSnapshot, int[] xs, int[] ys, int[] zs,
+			BlockState[] writtenStates, int n) {
 		if (hm == null || preSnapshot == null) return 0;
 
-		// Capture Path A.
-		int[] pathACells = readCells(hm);
-		long[] postA = hm.asLongArray().clone();
-
-		// Restore pre-snapshot, apply Path B.
-		hm.setTo(chunk, type, preSnapshot);
-		for (int colIdx = 0; colIdx < 256; colIdx++) {
-			if (colHighestY[colIdx] == Integer.MIN_VALUE) continue;
-			int localX = (colIdx >> 4) & 15;
-			int localZ = colIdx & 15;
-			hm.trackUpdate(localX, colHighestY[colIdx], localZ, colState[colIdx]);
-		}
+		// Capture Path B (production — already in chunk after batched flush).
 		int[] pathBCells = readCells(hm);
+		long[] postB = hm.asLongArray().clone();
 
-		// Restore Path A so the chunk stays correct for downstream phases.
-		hm.setTo(chunk, type, postA);
+		// Restore pre-snapshot, apply Path A reference (per-write trackUpdate).
+		hm.setTo(chunk, type, preSnapshot);
+		for (int i = 0; i < n; i++) {
+			BlockState bs = writtenStates[i];
+			if (bs == null) continue;
+			hm.trackUpdate(xs[i] & 15, ys[i], zs[i] & 15, bs);
+		}
+		int[] pathACells = readCells(hm);
+
+		// Restore Path B (production) so the chunk stays correct.
+		hm.setTo(chunk, type, postB);
 
 		// Cell-level diff.
 		long diff = 0;
