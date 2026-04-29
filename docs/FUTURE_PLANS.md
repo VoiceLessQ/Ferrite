@@ -79,6 +79,12 @@ Goal selectors fail check 2: `goalSelector.tick()` drives `LookAtEntityGoal`
 win. Everything else has world reads mid-compute or hits the JNI boundary.
 Instrumentation is complete; no further entity-tick ports are expected.
 
+**Steady-state numbers at 254 hostile mobs (Ferrite active):**
+- Tick time (ms/tick): avg ~9-10ms in-game, max spikes ~11-19ms (GC/JIT noise)
+- Entity tick: avg ~4.7ms (all 254 mobs combined, from `[server-tick-phase]`)
+- TPS: 20/20 -- 9-10ms is well under the 50ms budget
+- These numbers were stable across all measurement windows during the session.
+
 ---
 
 ## Instrumented but never ported
