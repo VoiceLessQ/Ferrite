@@ -10,10 +10,16 @@ import org.slf4j.LoggerFactory;
 /**
  * Top-level server-tick composition. Three buckets plus computed other:
  *
- *   scheduledTicks — WorldTickScheduler.tick (blockTicks + fluidTicks, merged)
+ *   scheduledTicks — WorldTickScheduler.tick (blockTicks + fluidTicks, summed
+ *                    from the split block/fluid accumulators below)
  *   chunkTick      — ChunkManager.tick (random-tick loop, chunk updates, etc.)
  *   other          — total - scheduledTicks - chunkTick
  *                    - WorldTickMonitor.entities+blockEntities
+ *
+ * Block and fluid scheduledTicks are also reported separately as
+ * [block-tick] and [fluid-tick] with per-call counts. The split was
+ * added when fluid ticks were proposed as a port target — keeping them
+ * bundled hid whether vanilla was actually bottlenecked there.
  *
  * Total envelope comes from Fabric's START/END_SERVER_TICK events rather
  * than a mixin — avoids touching bytecode for work that's naturally event-
@@ -33,14 +39,22 @@ public final class ServerTickPhaseMonitor {
 	// --- Per-tick phase running sums (reset at END_SERVER_TICK) ------------
 	private static final AtomicLong TOTAL_NS = new AtomicLong();
 	private static final AtomicLong MAX_TICK_NS = new AtomicLong();
-	private static final AtomicLong SCHEDULED_TICKS_NS = new AtomicLong();
+	private static final AtomicLong BLOCK_TICKS_NS = new AtomicLong();
+	private static final AtomicLong FLUID_TICKS_NS = new AtomicLong();
+	private static final AtomicLong BLOCK_TICK_COUNT = new AtomicLong();
+	private static final AtomicLong FLUID_TICK_COUNT = new AtomicLong();
 	private static final AtomicLong TICK_COUNT = new AtomicLong();
 
 	private static volatile long lastReportNs = System.nanoTime();
 
 	// --- Phase hooks (called from ServerTickPhaseMixin) --------------------
+	// Separate ThreadLocals so a future parallel-world dispatch doesn't
+	// collide; today the server tick is single-threaded and these always
+	// pair sequentially (block first, then fluid).
 
-	private static final ThreadLocal<Long> SCHEDULED_START =
+	private static final ThreadLocal<Long> BLOCK_START =
+			ThreadLocal.withInitial(() -> 0L);
+	private static final ThreadLocal<Long> FLUID_START =
 			ThreadLocal.withInitial(() -> 0L);
 
 	private ServerTickPhaseMonitor() {}
@@ -62,15 +76,34 @@ public final class ServerTickPhaseMonitor {
 		});
 	}
 
-	public static void onScheduledTicksBegin() {
-		SCHEDULED_START.set(System.nanoTime());
+	public static void onBlockTicksBegin() {
+		BLOCK_START.set(System.nanoTime());
 	}
 
-	public static void onScheduledTicksEnd() {
-		long start = SCHEDULED_START.get();
+	public static void onBlockTicksEnd() {
+		long start = BLOCK_START.get();
 		if (start == 0L) return;
-		SCHEDULED_START.set(0L);
-		SCHEDULED_TICKS_NS.addAndGet(System.nanoTime() - start);
+		BLOCK_START.set(0L);
+		BLOCK_TICKS_NS.addAndGet(System.nanoTime() - start);
+	}
+
+	public static void onFluidTicksBegin() {
+		FLUID_START.set(System.nanoTime());
+	}
+
+	public static void onFluidTicksEnd() {
+		long start = FLUID_START.get();
+		if (start == 0L) return;
+		FLUID_START.set(0L);
+		FLUID_TICKS_NS.addAndGet(System.nanoTime() - start);
+	}
+
+	public static void incBlockTickCount() {
+		BLOCK_TICK_COUNT.incrementAndGet();
+	}
+
+	public static void incFluidTickCount() {
+		FLUID_TICK_COUNT.incrementAndGet();
 	}
 
 	// --- Report -------------------------------------------------------------
@@ -83,7 +116,11 @@ public final class ServerTickPhaseMonitor {
 		long ticks = TICK_COUNT.getAndSet(0L);
 		long total = TOTAL_NS.getAndSet(0L);
 		long maxTick = MAX_TICK_NS.getAndSet(0L);
-		long scheduled = SCHEDULED_TICKS_NS.getAndSet(0L);
+		long blockNs = BLOCK_TICKS_NS.getAndSet(0L);
+		long fluidNs = FLUID_TICKS_NS.getAndSet(0L);
+		long blockCount = BLOCK_TICK_COUNT.getAndSet(0L);
+		long fluidCount = FLUID_TICK_COUNT.getAndSet(0L);
+		long scheduled = blockNs + fluidNs;
 
 		// WorldTickMonitor also uses a 5s window accumulator with the same
 		// REPORT_INTERVAL_NS. Our handler registers first, so we read its
@@ -111,9 +148,28 @@ public final class ServerTickPhaseMonitor {
 			formatMs(other / ticks),
 			ticks
 		);
+
+		LOGGER.info(
+			"[block-tick] ticks={} total={} avg={}/tick",
+			blockCount,
+			formatMs(blockNs),
+			formatPerTick(blockNs, blockCount)
+		);
+		LOGGER.info(
+			"[fluid-tick] ticks={} total={} avg={}/tick",
+			fluidCount,
+			formatMs(fluidNs),
+			formatPerTick(fluidNs, fluidCount)
+		);
 	}
 
 	private static String formatMs(long nanos) {
 		return String.format("%.2f", nanos / 1_000_000.0) + "ms";
+	}
+
+	private static String formatPerTick(long nanos, long count) {
+		if (count == 0L) return "n/a";
+		double perTickUs = nanos / (double) count / 1_000.0;
+		return String.format("%.2fµs", perTickUs);
 	}
 }

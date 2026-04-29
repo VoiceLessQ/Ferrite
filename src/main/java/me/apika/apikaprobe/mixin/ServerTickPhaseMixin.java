@@ -10,14 +10,17 @@ import me.apika.apikaprobe.monitor.ServerTickPhaseMonitor;
 import net.minecraft.server.world.ServerWorld;
 
 /**
- * Outer-envelope timing for the two biggest non-entity phases of
- * ServerWorld.tick:
- *   - WorldTickScheduler.tick (covers both blockTicks and fluidTicks —
- *     same method, two call sites, both captured)
- *   - ChunkManager.tick (random-tick loop, chunk updates, spawning)
+ * Outer-envelope timing for the two scheduledTicks phases of
+ * ServerWorld.tick. The two WorldTickScheduler.tick INVOKE sites have
+ * the same descriptor; we discriminate by ordinal — vanilla calls
+ * blockTickScheduler.tick first (ordinal 0) and fluidTickScheduler.tick
+ * second (ordinal 1) at ServerWorld.java:399-401.
  *
- * Each hook fires per-world per-tick — ~60 calls/sec on a 3-world server
- * at 20 TPS. Negligible compared to the inner-loop traps we hit earlier.
+ * The two HEAD injects on tickBlock/tickFluid count individual ticks
+ * per 5-second window — same approach already used by
+ * ServerWorldTickMixin for tickEntity. The increment is one AtomicLong
+ * inc per tick (~5 ns), well under the per-tick variance of the work
+ * being measured.
  *
  * ChunkManager.tick is declared on the parent class and inherited by
  * ServerChunkManager. The INVOKE bytecode uses the static type of the
@@ -28,17 +31,18 @@ import net.minecraft.server.world.ServerWorld;
 @Mixin(ServerWorld.class)
 public abstract class ServerTickPhaseMixin {
 
-	// --- scheduledTicks (blockTicks + fluidTicks, same method) -------------
+	// --- blockTicks (ordinal 0) --------------------------------------------
 
 	@Inject(
 		method = "tick(Ljava/util/function/BooleanSupplier;)V",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/world/tick/WorldTickScheduler;tick(JILjava/util/function/BiConsumer;)V"
+			target = "Lnet/minecraft/world/tick/WorldTickScheduler;tick(JILjava/util/function/BiConsumer;)V",
+			ordinal = 0
 		)
 	)
-	private void ferrite$onScheduledBegin(CallbackInfo ci) {
-		ServerTickPhaseMonitor.onScheduledTicksBegin();
+	private void ferrite$onBlockTicksBegin(CallbackInfo ci) {
+		ServerTickPhaseMonitor.onBlockTicksBegin();
 	}
 
 	@Inject(
@@ -46,11 +50,57 @@ public abstract class ServerTickPhaseMixin {
 		at = @At(
 			value = "INVOKE",
 			target = "Lnet/minecraft/world/tick/WorldTickScheduler;tick(JILjava/util/function/BiConsumer;)V",
+			ordinal = 0,
 			shift = At.Shift.AFTER
 		)
 	)
-	private void ferrite$onScheduledEnd(CallbackInfo ci) {
-		ServerTickPhaseMonitor.onScheduledTicksEnd();
+	private void ferrite$onBlockTicksEnd(CallbackInfo ci) {
+		ServerTickPhaseMonitor.onBlockTicksEnd();
+	}
+
+	// --- fluidTicks (ordinal 1) --------------------------------------------
+
+	@Inject(
+		method = "tick(Ljava/util/function/BooleanSupplier;)V",
+		at = @At(
+			value = "INVOKE",
+			target = "Lnet/minecraft/world/tick/WorldTickScheduler;tick(JILjava/util/function/BiConsumer;)V",
+			ordinal = 1
+		)
+	)
+	private void ferrite$onFluidTicksBegin(CallbackInfo ci) {
+		ServerTickPhaseMonitor.onFluidTicksBegin();
+	}
+
+	@Inject(
+		method = "tick(Ljava/util/function/BooleanSupplier;)V",
+		at = @At(
+			value = "INVOKE",
+			target = "Lnet/minecraft/world/tick/WorldTickScheduler;tick(JILjava/util/function/BiConsumer;)V",
+			ordinal = 1,
+			shift = At.Shift.AFTER
+		)
+	)
+	private void ferrite$onFluidTicksEnd(CallbackInfo ci) {
+		ServerTickPhaseMonitor.onFluidTicksEnd();
+	}
+
+	// --- per-tick counts ---------------------------------------------------
+
+	@Inject(
+		method = "tickBlock(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/Block;)V",
+		at = @At("HEAD")
+	)
+	private void ferrite$countBlockTick(CallbackInfo ci) {
+		ServerTickPhaseMonitor.incBlockTickCount();
+	}
+
+	@Inject(
+		method = "tickFluid(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/fluid/Fluid;)V",
+		at = @At("HEAD")
+	)
+	private void ferrite$countFluidTick(CallbackInfo ci) {
+		ServerTickPhaseMonitor.incFluidTickCount();
 	}
 
 	// chunkTick hook removed intentionally. BEFORE+AFTER @Inject on the
