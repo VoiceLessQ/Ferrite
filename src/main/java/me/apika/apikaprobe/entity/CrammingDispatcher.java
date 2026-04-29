@@ -110,16 +110,12 @@ public final class CrammingDispatcher {
 
 		// 2–4. Build, dispatch, read.
 		CrammingHandoff.buildRequests(MOB_SCRATCH);
-		long fingerprint = CrammingParityValidator.ENABLED
-				? CrammingParityValidator.fingerprint(CrammingHandoff.REQUEST_BUF, count)
-				: 0L;
 		RustBridge.computeCramming(
 			CrammingHandoff.REQUEST_BUF,
 			CrammingHandoff.RESULT_BUF,
 			count
 		);
 		CrammingHandoff.readResults(count, ACCUM_DX, ACCUM_DZ, NEIGHBOR_COUNT, CROWDED_COUNT);
-		CrammingParityValidator.validate(fingerprint, count, ACCUM_DX, ACCUM_DZ, CROWDED_COUNT);
 
 		// 5. Apply pushes + cramming damage. Damage gate mirrors vanilla
 		//    LivingEntity.pushEntities (Yarn: tickCramming):

@@ -19,6 +19,32 @@ can Rust take it in one handoff?
 
 ---
 
+## Dead ends — investigated, hypothesis killed by data
+
+### Cramming fingerprint cache
+**Hypothesis:** mob positions stable tick-to-tick on a cramming pile →
+fingerprint matches → skip hash build + pair iteration.
+
+**Result:** `fpHits=0` across 7400+ ticks on a 254-mob pile. A cramming
+pile is by definition a moving pile — cramming physics applies velocity
+deltas to ~54% of mobs every tick, positions change, fingerprint never
+matches. The only ticks where the fingerprint would match are ticks
+where cramming did nothing — nothing to cache.
+
+**Secondary finding:** cramming is already 0.01ms/tick after the spatial
+hash port. Cache would save fractions of 0.01ms on a path that's already
+near-zero. Wrong target regardless of whether the fingerprint would match.
+
+**Real hot paths** at 254 mobs (from `[movement-internals]`):
+- `move`: 1.67ms
+- `travel`: 1.81ms
+- `adjustColl`: 1.17ms
+- `other`: 1.89ms
+
+Total ~6.5ms vs cramming 0.01ms. The cramming work is done.
+
+---
+
 ## Instrumented but never ported
 
 ### Fluid ticks
