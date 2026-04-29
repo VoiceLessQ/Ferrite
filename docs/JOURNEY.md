@@ -56,6 +56,68 @@ full 1:1 parity with vanilla (damage application, same-vehicle skip,
 everything). Shipped default-on with a live `/ferrite cramming on|off`
 toggle for user-side A/B validation.
 
+### Cramming post-ship: entity tick seam fully characterized
+
+After cramming shipped, two correctness fixes and a full instrumentation pass
+completed the entity tick picture.
+
+**Dynamic cell size (correctness fix).** The original spatial hash used a
+hardcoded `CELL_SIZE=2.0`, which works for vanilla mobs (max half-width ~0.9)
+but silently misses pairs when modded mobs have wider bounding boxes. The fix:
+compute `cell_size = max(2.0, 2.0 * max_half_width_in_batch)` per batch. No
+performance change; pure correctness.
+
+**Fingerprint cache (dead end).** Hypothesis: mob positions are stable
+tick-to-tick on a cramming pile, so a hash of the input buffer would match
+from tick to tick and let the spatial hash be skipped. Built a parity
+validator, ran it on a 254-mob pile for 7400+ ticks. Result: `fpHits=0`. The
+pile is moving because cramming physics itself applies velocity deltas to
+roughly half the mobs each tick. The only ticks where the fingerprint would
+repeat are ticks where cramming did nothing -- nothing to cache. The cache is
+self-defeating by construction. Reverted; documented.
+
+**Movement internals monitor formula (correctness fix).** The monitor
+computing the "other" bucket had two errors that partially cancelled: it
+subtracted `move` and `gravity` even though both fire inside `travel()`'s
+probe window (double-deduction), and it omitted `adjustColl` from
+`accountedTotal` (under-deduction). Net effect was a misleadingly
+plausible-looking "other" of ~1.89ms when the true formula gives ~1.79ms.
+Fixed; formula is now documented in comments with explicit nesting note.
+
+**"other" bucket investigation.** After the formula fix, the 1.79ms "other"
+bucket was the last unaccounted cost inside `tickMovement`. The three initial
+suspects (potion effects, hand-swing animation, water-state detection) were
+all found in `LivingEntity.baseTick()` or `Entity.baseTick()`, which fire
+before `tickMovement()` is entered. They cannot contribute to
+`movement_self`. Two probes were added instead: `tickHandSwing` (which does
+fire inside `HostileEntity.tickMovement()` before the `super` call) and
+`tickNewAi` (the full AI block: goal selectors, navigation, mob tick,
+move/look/jump controls).
+
+`tickNewAi` averaged 1.90ms. Subtract navigator (0.02ms, already probed
+separately) and mobTick (0.01ms, already excluded from `movement_self`) and
+goal selectors plus controls account for roughly 1.87ms -- the full "other"
+budget. No mystery remains.
+
+**Final entity tick picture at 254 hostile mobs (Ferrite active):**
+
+| bucket | avg ms | verdict |
+|---|---|---|
+| goal selectors + controls | ~1.87 | world reads per call, fails check 2 |
+| travel | 1.63 | JNI boundary cost exceeds win, fails check 3 |
+| adjustColl | 1.07 | inside travel, same wall |
+| blockCollision | 0.31 | world reads per step, too small |
+| handSwing | 0.03 | trivial |
+| navigator | 0.02 | trivial |
+| cramming | 0.01 | shipped |
+
+Total entity tick: ~4.7ms. Tick time ~9-10ms at 20 TPS. Goal selectors fail
+check 2 because `goalSelector.tick()` calls `world.getClosestEntity()` and
+`ActiveTargetGoal` scans for targets; no pure-math slice exists.
+
+Cramming was the one clean algorithmic win in the entity tick. The seam is
+fully worked.
+
 ### Alternate Current in Java (v0.3.0-alpha)
 
 The redstone work started with the discipline that C2ME-class projects
@@ -305,6 +367,14 @@ aggressive defaults on features users cannot easily debug themselves.
 
 Listed so that future us, having forgotten why, does not re-open them:
 
+- **Entity tick goal selectors.** `goalSelector.tick()` and
+  `targetSelector.tick()` account for roughly 1.87ms at 254 hostile mobs
+  and look like the biggest remaining prize inside `movement_self`. They
+  fail check 2 immediately: `LookAtEntityGoal.canStart()` calls
+  `world.getClosestEntity()`, `ActiveTargetGoal` scans for live targets,
+  `WanderAroundFarGoal` queries path availability. Every goal evaluation
+  touches world state. There is no pure-math slice to hand to Rust.
+  Measured, documented, closed.
 - **Batch-all-redstone-per-tick.** Semantically broken. Observers,
   comparators, pistons, and 0-tick pulses read wire state mid-cascade.
   No amount of clever batching preserves that.
