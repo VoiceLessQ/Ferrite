@@ -9,6 +9,45 @@ marks pre-release research builds.
 
 ### Performance
 
+- **Vanilla surface phase ~3 ms faster — applies to every user, no toggle.**
+  Replaced the per-call `getClass().getMethod(...).invoke(...)` reflection
+  in `SurfaceValidatorMixin`'s `captureContext` redirect (firing ~30K
+  times per chunk during SURFACE phase, on every chunk regardless of
+  Ferrite settings) with `@Invoker` mixins on
+  `MaterialRules.MaterialRuleContext.initVerticalContext` and
+  `BlockStateRule.tryApply` (commit `4ed0d89`). Vanilla's per-chunk
+  surface baseline drops from ~9.3 ms to ~6.4 ms across the same
+  measurement methodology — universal win, ships invisibly.
+  Subsequent `@Accessor` cleanup on hot fields + three more
+  `@Invoker`s for protected methods on the same class (commit
+  `2beaa5b`) shipped clean code with parity-clean output but no
+  additional measurable perf movement (HotSpot was already
+  specializing the MethodHandle callsites under JIT).
+  See `docs/PIANO_STATUS.md` "JFR frame-count overstates recoverable
+  cost" for the three-strike-rule context.
+
+- **Surface dispatcher (when enabled): -2.2 ms per chunk via batched
+  heightmap updates.** Replaced per-write `ProtoChunk.setBlockState`
+  in `SurfaceDispatcher.flushChunk` (which fires
+  `Heightmap.trackUpdate` per write × 2 heightmap types = ~32K calls
+  per chunk during SURFACE phase) with a section-grouped raw
+  `ChunkSection.setBlockState` loop plus a per-column `trackUpdate`
+  post-pass (~512 calls per chunk) — commit `a26e2ee`. Validated
+  bit-identical to vanilla per-write `trackUpdate` across **23,204
+  chunks combined (21,012 in Step 1 + 2,192 in Step 2 verification),
+  100% match, 0 cell mismatches** for both `WORLD_SURFACE_WG` and
+  `OCEAN_FLOOR_WG`. Clean post-ship measurement: dispatcher ON
+  drops from ~15.6 ms to **~13.4 ms** (-2.2 ms recovered, within the
+  source-audit projection of 2-3 ms). Gap to vanilla baseline closed
+  from ~9.2 ms to **~7.0 ms** structural floor — palette writes +
+  vanilla's `isDefaultBlock` column scanner + biome supplier chain +
+  ferrite dispatch ceremony. Surface dispatcher remains default-OFF
+  pending architectural work that bypasses the structural floor; the
+  lesson from this session was that **counted-O(N) projections from
+  source audit are reliable** (this win held on the first try),
+  while JFR-frame-count projections are not (three consecutive misses
+  documented in `docs/PIANO_STATUS.md`).
+
 - **Noise-sync chunkgen phase: ~8-10 ms/chunk faster** for everyone.
   JFR profiler session (2026-04-28) identified two diagnostic mixins
   firing during the noise-fill phase that contributed combined
@@ -68,6 +107,18 @@ marks pre-release research builds.
   No behaviour change.
 
 ### Added
+
+- **`/ferrite surface heightmap-parity on|off|stats|reset`** —
+  regression check for the batched heightmap update path (commit
+  `e4e7a41`). When ON, every flushChunk snapshots
+  `WORLD_SURFACE_WG` + `OCEAN_FLOOR_WG` pre-flush, runs the
+  production batched path, then replays vanilla's per-write
+  `trackUpdate` from the snapshot as a reference and diffs cell-by-
+  cell. Logs `[surface-heightmap-parity]` lines with running match %
+  and mismatch counts. ~1 ms/chunk overhead when on; default OFF.
+  Useful if you've changed surface rules and want to confirm the
+  predicate-preserving assumption (writes never flip `NOT_AIR` or
+  `SUFFOCATES` for the highest Y in a column) still holds.
 
 - **Surface rule dispatcher** (`/ferrite surface dispatch on|off|status`).
   Batched JNI architecture: vanilla's `tryApply` calls are deferred,
