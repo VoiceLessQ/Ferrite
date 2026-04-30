@@ -7,6 +7,85 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Performance
+
+- **Hopper extract hint (active by default).** Per-source-inventory
+  hint tracks the first non-empty slot; extract loops start there
+  instead of iterating from slot 0 every fire. On a partially-drained
+  chest, the savings scale linearly with how many leading slots are
+  empty: **~23 µs/call at avgStartIdx=16 (~60% reduction), ~110 µs/call
+  at avgStartIdx=53 (~85%)**. Vanilla cost was measured at
+  ~2.4 µs per slot probe; hint cost is ~21 µs/call envelope (allocation
+  in `getInputInventory`, mixin dispatch) plus ~3 µs for the one
+  successful extract attempt. Per-attempt nsPerAtt baseline came from
+  diagnostic probe `[hopper-slot]` (commit `c34b05c`) which surfaced
+  `wasted/call=4.16` on a 100-hopper chain draining a double chest.
+  Hint maintenance hooks fire on `setStack`, `removeStack(int)`,
+  `removeStack(int, int)` for both `LootableContainerBlockEntity`
+  (chests, barrels) and `HopperBlockEntity`'s overrides; `DoubleInventory`
+  computes its hint by delegating to underlying chest BEs. Validator
+  shadow-runs at `-Dferrite.hopper.extract.validate=true` and reported
+  **0 stale events across 450+ extracts during chest-drain testing**.
+  Boot flag `-Dferrite.hopper.extract.useHint=true` (default).
+
+- **Hopper highway, opt-in (`/ferrite hopper highway on`).** Per-slot
+  independent cooldowns + round-robin destination routing. Each
+  hopper's 5 slots get individual 8-tick cooldown counters with
+  staggered init `{0, 1, 2, 3, 4}`; round-robin enforces at most one
+  fire per server tick per hopper, so per-tick item count stays
+  **≤ 1** (preserved comparator transition rate). Aggregate per-hopper
+  throughput climbs from vanilla 1/(8 ticks) to up to 5/(8 ticks).
+  Measured **3.1× chain throughput** under back-pressure on the
+  100-hopper test chain. Validator probe `[hopper-perslot]` reports
+  zero `tickViolations` and zero `staggerCollapses` across 20K+
+  fires; per-slot interval probe shows `min=8, max=8, avg=8.00` once
+  steady state reaches (each slot at exactly vanilla 8-tick pace).
+  Phase 3 round-robin destination puts incoming items into
+  `(lastInsertSlot + 1) % 5` instead of always slot 0, so chain
+  hoppers visibly distribute items across lanes 0-4 in the UI.
+  Default off - turn on for hopper-heavy storage systems, leave off
+  for sorters tuned to vanilla 8-tick clocks. Per-tick decrement and
+  NBT write are gated behind `ENABLE`, so default-off users pay
+  zero per-tick overhead and zero NBT bloat.
+
+### Added
+
+- **`/ferrite hopper highway on|off|status`** runtime command toggles
+  the entire hopper layer (extract hint + per-slot fire + lane
+  routing) for the current server session. Status command reports
+  flag state and validator state.
+
+- **Probe `HopperSlotMonitor`** - extract/insert slot-attempt
+  distribution (succ@0, succ>0, fail) plus wall-time per call and
+  per-attempt. Active when ferrite is loaded; produces `[hopper-slot]`
+  log lines every 5s during hopper activity. Used to characterize
+  per-call cost before the hint port; remains as a regression detector
+  if anyone disables `useHint`.
+
+- **Probe `HopperHintMonitor`** - hint hits/wraps/fails plus opt-in
+  validator at `-Dferrite.hopper.extract.validate=true`. Validator
+  checks the invariant "slots [0..hint-1] are empty" on every extract;
+  any stale hint logs to warn and increments a counter, capped at 20
+  warns per session.
+
+- **Probe `HopperPerSlotMonitor`** - per-slot fire counts, items
+  moved, lane hits/fallbacks, plus an opt-in invariant validator at
+  `-Dferrite.hopper.perslot.validate=true` that catches per-tick
+  count > 1 (comparator-safety violation) and stagger collapse
+  (slot cooldowns synchronizing back to whole-hopper pacing).
+
+### Notes
+
+- The "highway" design rejected one earlier scope: removing the
+  return-true break to fire multiple items per call. That violates
+  vanilla's 1-item-per-fire contract, which `ScreenHandler.calculateComparatorOutput`
+  ([1.21.11/common/net/minecraft/screen/ScreenHandler.java#L1062-L1077](1.21.11/common/net/minecraft/screen/ScreenHandler.java))
+  + the chain-feed cooldown trick at
+  [HopperBlockEntity.java#L323-L331](1.21.11/common/net/minecraft/block/entity/HopperBlockEntity.java)
+  both depend on. The shipped highway preserves the contract: 1
+  item per fire, vanilla 8-tick cooldown per slot, multiple slots
+  in parallel. See [docs/HOPPER_HIGHWAY.md](docs/HOPPER_HIGHWAY.md).
+
 ## [0.5.1-alpha] — 2026-04-29
 
 ### Performance
