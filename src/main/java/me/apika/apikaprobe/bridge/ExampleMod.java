@@ -36,6 +36,7 @@ import me.apika.apikaprobe.monitor.SurfacePhaseMonitor;
 import me.apika.apikaprobe.monitor.GoalSelectorMonitor;
 import me.apika.apikaprobe.monitor.HopperMonitor;
 import me.apika.apikaprobe.monitor.HopperSlotMonitor;
+import me.apika.apikaprobe.monitor.HopperHintMonitor;
 import me.apika.apikaprobe.monitor.ItemFrameMonitor;
 import me.apika.apikaprobe.monitor.LookControlMonitor;
 import me.apika.apikaprobe.monitor.MoveControlMonitor;
@@ -78,6 +79,7 @@ public class ExampleMod implements ModInitializer {
 		LookControlMonitor.register();
 		HopperMonitor.register();
 		HopperSlotMonitor.register();
+		HopperHintMonitor.register();
 		ItemFrameMonitor.register();
 		PhysicsOracle.register();
 		// PreChunkMonitor must register BEFORE PreChunkDispatcher so its
