@@ -78,6 +78,7 @@ public abstract class HopperPerSlotCooldownMixin implements SlotCooldownAccess {
 		at = @At("HEAD")
 	)
 	private static void ferrite$decrementOnTick(World world, BlockPos pos, BlockState state, HopperBlockEntity blockEntity, CallbackInfo ci) {
+		if (!me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE) return;
 		((SlotCooldownAccess) (Object) blockEntity).ferrite$decrementAllSlotCooldowns();
 	}
 
@@ -108,6 +109,7 @@ public abstract class HopperPerSlotCooldownMixin implements SlotCooldownAccess {
 
 	@Inject(method = "writeData(Lnet/minecraft/storage/WriteView;)V", at = @At("RETURN"))
 	private void ferrite$writeSlotCooldowns(WriteView view, CallbackInfo ci) {
+		if (!me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE) return;
 		view.putIntArray("FerriteSlotCooldowns", this.ferrite$slotCooldowns.clone());
 	}
 }
