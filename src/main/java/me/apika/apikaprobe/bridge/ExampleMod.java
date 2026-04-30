@@ -35,6 +35,7 @@ import me.apika.apikaprobe.monitor.ServerTickPhaseMonitor;
 import me.apika.apikaprobe.monitor.SurfacePhaseMonitor;
 import me.apika.apikaprobe.monitor.GoalSelectorMonitor;
 import me.apika.apikaprobe.monitor.HopperMonitor;
+import me.apika.apikaprobe.monitor.ItemFrameMonitor;
 import me.apika.apikaprobe.monitor.LookControlMonitor;
 import me.apika.apikaprobe.monitor.MoveControlMonitor;
 import me.apika.apikaprobe.monitor.TargetScanMonitor;
@@ -75,6 +76,7 @@ public class ExampleMod implements ModInitializer {
 		MoveControlMonitor.register();
 		LookControlMonitor.register();
 		HopperMonitor.register();
+		ItemFrameMonitor.register();
 		PhysicsOracle.register();
 		// PreChunkMonitor must register BEFORE PreChunkDispatcher so its
 		// END_SERVER_TICK report handler fires first and reads the window
