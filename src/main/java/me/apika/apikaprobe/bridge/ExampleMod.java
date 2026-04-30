@@ -33,6 +33,11 @@ import me.apika.apikaprobe.monitor.PreChunkMonitor;
 import me.apika.apikaprobe.monitor.RedstonePhaseMonitor;
 import me.apika.apikaprobe.monitor.ServerTickPhaseMonitor;
 import me.apika.apikaprobe.monitor.SurfacePhaseMonitor;
+import me.apika.apikaprobe.monitor.GoalSelectorMonitor;
+import me.apika.apikaprobe.monitor.HopperMonitor;
+import me.apika.apikaprobe.monitor.LookControlMonitor;
+import me.apika.apikaprobe.monitor.MoveControlMonitor;
+import me.apika.apikaprobe.monitor.TargetScanMonitor;
 import me.apika.apikaprobe.monitor.TpsMonitor;
 import me.apika.apikaprobe.monitor.WorldTickMonitor;
 
@@ -65,6 +70,11 @@ public class ExampleMod implements ModInitializer {
 		// MonsterPhaseMonitor.getMovementSelfNs() before that monitor resets.
 		MovementInternalsMonitor.register();
 		MonsterPhaseMonitor.register();
+		TargetScanMonitor.register();
+		GoalSelectorMonitor.register();
+		MoveControlMonitor.register();
+		LookControlMonitor.register();
+		HopperMonitor.register();
 		PhysicsOracle.register();
 		// PreChunkMonitor must register BEFORE PreChunkDispatcher so its
 		// END_SERVER_TICK report handler fires first and reads the window
