@@ -30,6 +30,7 @@
 		"MoveControlMixin",
 		"LookControlMixin",
 		"HopperScanMixin",
+		"HopperSlotProbeMixin",
 		"EntityAdjustInvoker",
 		"MovementRedirectMixin",
 		"PhysicsPreTickMixin",
