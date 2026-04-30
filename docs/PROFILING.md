@@ -364,3 +364,26 @@ calling method is, not how often the hook fires.
 
 The chunkTick cost (~3.4ms) is still recoverable as `other =
 total - scheduledTicks - entities - blockEntities`.
+
+## Common Lag Myths
+
+### "Item frames cause lag"
+
+Measured: ~120ns per frame per tick at 370-408 frames.
+At 5,000 frames: ~0.6ms/tick, not meaningful.
+
+The actual cost is `Entity.baseTick()` housekeeping shared by every
+entity (water-state update, fire ticks, void check, leash check).
+Item-frame-specific logic in `BlockAttachedEntity.tick()` is ~3 ns
+per frame: a Y-coord compare and a counter increment. The expensive
+`canStayAttached()` check fires only every 100 ticks (5 seconds).
+
+State (item present, rotation 0-7) is held in `DataTracker` and only
+written when a player interacts. There is no per-tick polling of frame
+contents.
+
+When players report "item frame lag" the real culprits are almost
+always co-located systems in the same chunk as the display wall:
+villagers, hoppers behind the wall, mob farms above, redstone clocks.
+Use `/ferrite` commands and the per-bucket monitors to identify the
+real bottleneck before blaming the frames.
