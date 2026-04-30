@@ -50,6 +50,7 @@ src/main/resources/assets/ferrite/natives/
 
 # release/build artifacts at repo root
 /*.zip
+/*.tar.gz
 
 # built jars (Gradle output) — kept explicit in case build/ pattern changes
 *.jar

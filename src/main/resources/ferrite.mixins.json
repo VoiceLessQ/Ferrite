@@ -37,6 +37,7 @@
 		"HopperExtractHintMaintainMixin",
 		"HopperHintExtractRouteMixin",
 		"HopperHintValidatorMixin",
+		"HopperPerSlotCooldownMixin",
 		"EntityAdjustInvoker",
 		"MovementRedirectMixin",
 		"PhysicsPreTickMixin",
