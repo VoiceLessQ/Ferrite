@@ -12,9 +12,9 @@ public final class HopperHintMonitor {
 	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 
-	public static final boolean USE_HINT = Boolean.parseBoolean(
+	public static volatile boolean USE_HINT = Boolean.parseBoolean(
 		System.getProperty("ferrite.hopper.extract.useHint", "true"));
-	public static final boolean VALIDATE = Boolean.parseBoolean(
+	public static volatile boolean VALIDATE = Boolean.parseBoolean(
 		System.getProperty("ferrite.hopper.extract.validate", "false"));
 
 	private static final AtomicLong HINT_HITS         = new AtomicLong();

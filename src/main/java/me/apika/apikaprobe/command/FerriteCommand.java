@@ -82,6 +82,11 @@ public final class FerriteCommand {
 						.then(CommandManager.literal("on").executes(FerriteCommand::enableCramming))
 						.then(CommandManager.literal("off").executes(FerriteCommand::disableCramming))
 						.then(CommandManager.literal("status").executes(FerriteCommand::statusCramming)))
+				.then(CommandManager.literal("hopper")
+						.then(CommandManager.literal("highway")
+								.then(CommandManager.literal("on").executes(FerriteCommand::enableHopper))
+								.then(CommandManager.literal("off").executes(FerriteCommand::disableHopper))
+								.then(CommandManager.literal("status").executes(FerriteCommand::statusHopper))))
 				.then(CommandManager.literal("redstone")
 						.then(CommandManager.literal("rust")
 								.then(CommandManager.literal("on").executes(FerriteCommand::enableRust))
@@ -246,6 +251,39 @@ public final class FerriteCommand {
 			"[cramming] ENABLED=%s native=%s  (watch [cramming-dispatch] in latest.log for batch counts)",
 			CrammingDispatcher.ENABLED,
 			RustBridge.NATIVE_AVAILABLE ? "available" : "MISSING");
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int enableHopper(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		me.apika.apikaprobe.monitor.HopperHintMonitor.USE_HINT = true;
+		me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE = true;
+		me.apika.apikaprobe.hopper.HopperLaneRouteConfig.ENABLE = true;
+		String msg = "[hopper] Ferrite hopper layer ENABLED (extract hint + per-slot fire + lane routing)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int disableHopper(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		me.apika.apikaprobe.monitor.HopperHintMonitor.USE_HINT = false;
+		me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE = false;
+		me.apika.apikaprobe.hopper.HopperLaneRouteConfig.ENABLE = false;
+		String msg = "[hopper] Ferrite hopper layer DISABLED, vanilla hopper paths active";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int statusHopper(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		String msg = String.format(
+			"[hopper] hint=%s perslot=%s lane=%s  (validate flags: hint=%s perslot=%s)",
+			me.apika.apikaprobe.monitor.HopperHintMonitor.USE_HINT,
+			me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE,
+			me.apika.apikaprobe.hopper.HopperLaneRouteConfig.ENABLE,
+			me.apika.apikaprobe.monitor.HopperHintMonitor.VALIDATE,
+			me.apika.apikaprobe.hopper.PerSlotFireConfig.VALIDATE);
 		sendFeedback(ctx, msg, false);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;

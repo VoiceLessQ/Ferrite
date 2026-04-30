@@ -24,6 +24,15 @@ public abstract class HopperPerSlotCooldownMixin implements SlotCooldownAccess {
 	@Unique
 	private int[] ferrite$slotCooldowns = new int[]{0, 1, 2, 3, 4};
 
+	@Unique
+	private int ferrite$roundRobinPointer = 0;
+
+	@Unique
+	private int ferrite$lastInsertSlot = -1;
+
+	@Unique
+	private long[] ferrite$lastFireTick = new long[]{-1L, -1L, -1L, -1L, -1L};
+
 	@Override
 	public int ferrite$getSlotCooldown(int slot) {
 		return this.ferrite$slotCooldowns[slot];
@@ -37,6 +46,31 @@ public abstract class HopperPerSlotCooldownMixin implements SlotCooldownAccess {
 	@Override
 	public int[] ferrite$getSlotCooldowns() {
 		return this.ferrite$slotCooldowns;
+	}
+
+	@Override
+	public int ferrite$getRoundRobinPointer() {
+		return this.ferrite$roundRobinPointer;
+	}
+
+	@Override
+	public void ferrite$setRoundRobinPointer(int pointer) {
+		this.ferrite$roundRobinPointer = pointer;
+	}
+
+	@Override
+	public int ferrite$getLastInsertSlot() {
+		return this.ferrite$lastInsertSlot;
+	}
+
+	@Override
+	public void ferrite$setLastInsertSlot(int slot) {
+		this.ferrite$lastInsertSlot = slot;
+	}
+
+	@Override
+	public long[] ferrite$getLastFireTick() {
+		return this.ferrite$lastFireTick;
 	}
 
 	@Inject(

@@ -5,6 +5,14 @@ public interface SlotCooldownAccess {
 	void ferrite$setSlotCooldown(int slot, int value);
 	int[] ferrite$getSlotCooldowns();
 
+	int ferrite$getRoundRobinPointer();
+	void ferrite$setRoundRobinPointer(int pointer);
+
+	int ferrite$getLastInsertSlot();
+	void ferrite$setLastInsertSlot(int slot);
+
+	long[] ferrite$getLastFireTick();
+
 	default void ferrite$decrementAllSlotCooldowns() {
 		int[] cd = ferrite$getSlotCooldowns();
 		for (int i = 0; i < cd.length; i++) cd[i]--;
