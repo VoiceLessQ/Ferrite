@@ -35,7 +35,7 @@ public abstract class HopperPerSlotFireMixin {
 			cir.setReturnValue(false);
 			return;
 		}
-		if (!(Boolean) state.get(HopperBlock.ENABLED)) {
+		if (!(Boolean) state.getValue(HopperBlock.ENABLED)) {
 			cir.setReturnValue(false);
 			return;
 		}
@@ -72,7 +72,7 @@ public abstract class HopperPerSlotFireMixin {
 			access.ferrite$setSlotCooldown(firedSlot, 8);
 			HopperPerSlotMonitor.onFire(firedSlot, 1);
 
-			long now = world.getTime();
+			long now = world.getGameTime();
 			long[] lastFire = access.ferrite$getLastFireTick();
 			long prev = lastFire[firedSlot];
 			if (prev >= 0L) {
@@ -98,7 +98,7 @@ public abstract class HopperPerSlotFireMixin {
 
 	private static int ferrite$totalItemCount(HopperBlockEntity be) {
 		int total = 0;
-		int n = be.size();
+		int n = be.getContainerSize();
 		for (int i = 0; i < n; i++) {
 			total += be.getItem(i).getCount();
 		}
@@ -106,10 +106,10 @@ public abstract class HopperPerSlotFireMixin {
 	}
 
 	private static boolean ferrite$isFull(HopperBlockEntity be) {
-		int n = be.size();
+		int n = be.getContainerSize();
 		for (int i = 0; i < n; i++) {
 			net.minecraft.world.item.ItemStack s = be.getItem(i);
-			if (s.isEmpty() || s.getCount() != s.getMaxCount()) return false;
+			if (s.isEmpty() || s.getCount() != s.getMaxStackSize()) return false;
 		}
 		return true;
 	}
