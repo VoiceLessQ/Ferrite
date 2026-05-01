@@ -64,8 +64,8 @@ public final class PreChunkDispatcher {
 	public static void register() {
 		ticketType = Registry.register(
 				BuiltInRegistries.TICKET_TYPE,
-				Identifier.of(ExampleMod.MOD_ID, "prechunk"),
-				new TicketType(80L, TicketType.FOR_LOADING));
+				Identifier.fromNamespaceAndPath(ExampleMod.MOD_ID, "prechunk"),
+				new TicketType(80L, TicketType.FLAG_LOADING));
 		ServerTickEvents.END_SERVER_TICK.register(PreChunkDispatcher::onTick);
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
 				LAST_POS.remove(handler.getPlayer().getUUID()));
@@ -78,18 +78,18 @@ public final class PreChunkDispatcher {
 	private static void onTick(MinecraftServer server) {
 		if (!ENABLED) return;
 		int budget = MAX_PER_TICK;
-		long now = server.getTicks();
+		long now = server.getTickCount();
 		int viewDistance = currentViewDistance(server);
 		double targetBlocks = (viewDistance + VIEW_DISTANCE_MARGIN) * 16.0;
 		PreChunkMonitor.recordViewDistance(viewDistance);
 
 		for (ServerLevel world : server.getAllLevels()) {
-			for (ServerPlayer player : world.getPlayers()) {
+			for (ServerPlayer player : world.players()) {
 				if (budget <= 0) return;
 				ChunkPos target = predict(player, targetBlocks);
 				if (target == null) continue;
 
-				long key = target.toLong();
+				long key = target.pack();
 				// Sentinel 0L is safe: `now` is a server tick count ≥ 0, so
 				// `now - 0 == now`, which exceeds DEDUPE_TICKS once the server
 				// has been running for more than one second. Long.MIN_VALUE
@@ -134,7 +134,7 @@ public final class PreChunkDispatcher {
 	private static void submit(ServerLevel world, ChunkPos pos, long submitTick) {
 		PreChunkMonitor.onSubmit();
 		world.getChunkSource()
-				.addChunkLoadingTicket(ticketType, pos, RADIUS)
+				.addTicketAndLoadWithRadius(ticketType, pos, RADIUS)
 				.thenAccept(ignored -> {
 					long leadTicks = world.getServer().getTicks() - submitTick;
 					PreChunkMonitor.onLoaded(leadTicks);
