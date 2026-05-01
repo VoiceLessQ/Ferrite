@@ -411,9 +411,9 @@ public final class SurfaceValidator {
 				try {
 					Object entry = s.get();
 					if (entry instanceof net.minecraft.core.Holder<?> regEntry) {
-						java.util.Optional<? extends net.minecraft.resources.ResourceKey<?>> keyOpt = regEntry.getKey();
+						java.util.Optional<? extends net.minecraft.resources.ResourceKey<?>> keyOpt = regEntry.unwrapKey();
 						if (keyOpt.isPresent()) {
-							net.minecraft.resources.Identifier id = keyOpt.get().getValue();
+							net.minecraft.resources.Identifier id = keyOpt.get().identifier();
 							if (id != null) biome = internIdentifierToString(id);
 						}
 						Object raw = regEntry.value();
@@ -431,7 +431,7 @@ public final class SurfaceValidator {
 			int seaLevel = ((MaterialRuleContextInvoker) liveCtx).ferrite$invokeGetSeaLevel();
 			net.minecraft.core.BlockPos.MutableBlockPos pos = scratchPos.get();
 			pos.set(x, y, z);
-			isCold = biomeImpl.isCold(pos, seaLevel);
+			isCold = biomeImpl.coldEnoughToSnow(pos, seaLevel);
 		}
 
 		return SurfaceDispatcher.enqueue(
@@ -497,9 +497,9 @@ public final class SurfaceValidator {
 		try {
 			Object entry = s.get();
 			if (!(entry instanceof net.minecraft.core.Holder<?> regEntry)) return "unknown";
-			java.util.Optional<? extends net.minecraft.resources.ResourceKey<?>> keyOpt = regEntry.getKey();
+			java.util.Optional<? extends net.minecraft.resources.ResourceKey<?>> keyOpt = regEntry.unwrapKey();
 			if (!keyOpt.isPresent()) return "unknown";
-			net.minecraft.resources.Identifier id = keyOpt.get().getValue();
+			net.minecraft.resources.Identifier id = keyOpt.get().identifier();
 			return id == null ? "unknown" : id.toString();
 		} catch (RuntimeException e) {
 			return "unknown";
@@ -526,7 +526,7 @@ public final class SurfaceValidator {
 			int seaLevel = (int) mhSea.invokeExact(liveCtx);
 			// Yarn 1.21.11: Biome.isCold(BlockPos, int) → boolean.
 			// Mojmap name is coldEnoughToSnow — same method.
-			return biome.isCold(pos, seaLevel);
+			return biome.coldEnoughToSnow(pos, seaLevel);
 		} catch (Throwable t) {
 			return false;
 		}
