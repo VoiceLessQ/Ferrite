@@ -40,7 +40,7 @@ import java.nio.ByteOrder;
  *
  * Only nodes whose power changed produce a result entry; Rust returns
  * the populated count. Java applies each result as
- * `world.setBlockState(pos, state.with(POWER, newPower), UPDATE_CLIENTS)`.
+ * `world.setBlock(pos, state.setValue(POWER, newPower), UPDATE_CLIENTS)`.
  *
  * A network is everything BFS-reachable from the trigger position via
  * the vanilla connectivity rules. Capped at MAX_NODES so a large

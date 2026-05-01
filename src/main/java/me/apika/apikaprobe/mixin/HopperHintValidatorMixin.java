@@ -25,7 +25,7 @@ public abstract class HopperHintValidatorMixin {
 	private static void ferrite$validateHint(Level world, Hopper hopper, CallbackInfoReturnable<Boolean> cir) {
 		if (!HopperHintMonitor.VALIDATE) return;
 
-		BlockPos pos = BlockPos.ofFloored(hopper.getHopperX(), hopper.getHopperY() + 1.0, hopper.getHopperZ());
+		BlockPos pos = BlockPos.containing(hopper.getLevelX(), hopper.getLevelY() + 1.0, hopper.getLevelZ());
 		BlockState state = world.getBlockState(pos);
 		Container inventory = HopperBlockEntityInvoker.ferrite$invokeGetInputInventory(world, hopper, pos, state);
 
@@ -39,7 +39,7 @@ public abstract class HopperHintValidatorMixin {
 		}
 
 		int hint = h.ferrite$getExtractHint();
-		int n = inventory.size();
+		int n = inventory.getContainerSize();
 		if (hint <= 0) {
 			HopperHintMonitor.onValidation(false, pos, hint, -1);
 			return;

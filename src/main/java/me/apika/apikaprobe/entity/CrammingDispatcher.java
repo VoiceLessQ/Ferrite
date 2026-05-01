@@ -25,14 +25,14 @@ import net.minecraft.server.level.ServerLevel;
  *      skipping pairs of same-vehicle passengers, and counts pushable
  *      non-passenger overlaps per entity (`crowdedCount`).
  *   4. Read accumulated (dx, dz) + neighborCount + crowdedCount.
- *   5. Apply each mob's velocity delta via entity.addVelocity(dx,0,dz).
+ *   5. Apply each mob's velocity delta via entity.push(dx,0,dz).
  *   6. Apply cramming damage when crowdedCount &gt; maxEntityCramming − 1
  *      AND the per-entity RandomSource fires the vanilla 1-in-4 check
  *      (entity.getRandom().nextInt(4) == 0). Mirrors vanilla
  *      LivingEntity.pushEntities (Yarn: tickCramming) bit-for-bit.
  *
  * Subsequent tickCramming calls in the same server tick are cancelled
- * by the Mixin without re-triggering — the tick guard is `world.getTime()`.
+ * by the Mixin without re-triggering — the tick guard is `world.getGameTime()`.
  *
  * ENABLED=true by default. /ferrite cramming off lets users fall back
  * to vanilla without restart for A/B verification.
@@ -76,7 +76,7 @@ public final class CrammingDispatcher {
 		if (!ENABLED || !RustBridge.NATIVE_AVAILABLE) return false;
 		if (!(caller.level() instanceof ServerLevel world)) return false;
 
-		long tick = world.getTime();
+		long tick = world.getGameTime();
 		if (tick == lastProcessedTick) {
 			// Batch already processed this tick — still cancel vanilla body.
 			return true;
@@ -128,11 +128,11 @@ public final class CrammingDispatcher {
 		//    Rust returns crowdedCount = the inner `count`. Per-entity
 		//    RandomSource and the threshold check stay in Java so semantics are
 		//    bit-for-bit identical to vanilla (per-entity RNG state).
-		// Yarn 1.21.11: GameRules moved to net.minecraft.world.rule.GameRules
+		// Yarn 1.21.11: GameRules moved to net.minecraft.world.level.gamerules.GameRules
 		// and the typed getInt accessor is gone — only getValue(rule)→Object
 		// remains. Cast Integer for the int rule.
 		int maxCramming = (Integer) world.getGameRules().getValue(
-				net.minecraft.world.rule.GameRules.MAX_ENTITY_CRAMMING);
+				net.minecraft.world.level.gamerules.GameRules.MAX_ENTITY_CRAMMING);
 		int pushedThisBatch = 0;
 		int damagedThisBatch = 0;
 		for (int i = 0; i < count; i++) {
@@ -140,14 +140,14 @@ public final class CrammingDispatcher {
 			double dx = ACCUM_DX[i];
 			double dz = ACCUM_DZ[i];
 			if (dx != 0.0 || dz != 0.0) {
-				e.addVelocity(dx, 0.0, dz);
+				e.push(dx, 0.0, dz);
 				pushedThisBatch++;
 			}
 
 			if (maxCramming > 0
 					&& CROWDED_COUNT[i] > maxCramming - 1
 					&& e.getRandom().nextInt(4) == 0) {
-				e.damage(world, world.getDamageSources().cramming(), 6.0F);
+				e.damage(world, world.damageSources().cramming(), 6.0F);
 				damagedThisBatch++;
 			}
 		}

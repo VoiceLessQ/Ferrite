@@ -90,7 +90,7 @@ public class WireNode extends Node {
 
 		this.connections = new WireConnectionManager(this);
 
-		this.virtualPower = this.currentPower = this.state.get(RedStoneWireBlock.POWER);
+		this.virtualPower = this.currentPower = this.state.getValue(RedStoneWireBlock.POWER);
 		this.priority = priority();
 	}
 
@@ -157,13 +157,13 @@ public class WireNode extends Node {
 		}
 
 		if (shouldBreak) {
-			Block.dropStacks(state, world, pos);
-			world.setBlockState(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+			Block.dropResources(state, world, pos);
+			world.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
 			return true;
 		}
 
 		currentPower = Mth.clamp(virtualPower, WireConstants.SIGNAL_MIN, WireConstants.SIGNAL_MAX);
-		state = state.with(RedStoneWireBlock.POWER, currentPower);
+		state = state.setValue(RedStoneWireBlock.POWER, currentPower);
 
 		return LevelHelper.setWireState(world, pos, state, added);
 	}
