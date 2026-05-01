@@ -15,14 +15,14 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.redstone.VanillaRedstoneWireEvaluator;
+import net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.redstone.Orientation;
 
 import org.jspecify.annotations.Nullable;
 
 /**
- * Extends {@link VanillaRedstoneWireEvaluator} so that the
+ * Extends {@link DefaultRedstoneWireEvaluator} so that the
  * {@link RedStoneWireBlock#redstoneController} field — which the
  * installation mixin intercepts via {@code @Redirect(value = NEW)} —
  * gets a drop-in replacement that can either delegate to AC's
@@ -35,7 +35,7 @@ import org.jspecify.annotations.Nullable;
  * uses {@link WeakHashMap} keys so an unloaded / GC'd world doesn't
  * pin the handler in memory.
  */
-public class FerriteRedstoneController extends VanillaRedstoneWireEvaluator {
+public class FerriteRedstoneController extends DefaultRedstoneWireEvaluator {
 
 	/** One handler per world. Weak keys so unloaded worlds don't leak. */
 	private final Map<ServerLevel, WireHandler> handlers = new WeakHashMap<>();

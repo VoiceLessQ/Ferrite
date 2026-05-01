@@ -9,7 +9,7 @@ import me.apika.apikaprobe.monitor.RedstonePhaseMonitor;
 
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.redstone.AlternateCurrentRedstoneWireEvaluator;
+import net.minecraft.world.level.redstone.ExperimentalRedstoneWireEvaluator;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.redstone.Orientation;
 
@@ -19,7 +19,7 @@ import net.minecraft.world.level.redstone.Orientation;
  * pair lets the 5s log line show `default=X exp=Y` so every test
  * session self-documents which controller is active.
  */
-@Mixin(AlternateCurrentRedstoneWireEvaluator.class)
+@Mixin(ExperimentalRedstoneWireEvaluator.class)
 public abstract class ExperimentalRedstoneControllerMixin {
 
 	@Inject(

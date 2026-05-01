@@ -12,7 +12,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.level.redstone.VanillaRedstoneWireEvaluator;
+import net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator;
 import net.minecraft.world.level.redstone.RedstoneWireEvaluator;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.redstone.Orientation;
@@ -119,7 +119,7 @@ public final class RedstoneOracle {
 			// and disable the oracle for the rest of the session rather than
 			// rethrowing into the cascade hot path.
 			try {
-				c = new VanillaRedstoneWireEvaluator((RedStoneWireBlock) Blocks.REDSTONE_WIRE);
+				c = new DefaultRedstoneWireEvaluator((RedStoneWireBlock) Blocks.REDSTONE_WIRE);
 				oracleController = c;
 			} catch (RuntimeException e) {
 				controllerInitFailed = true;
@@ -210,7 +210,7 @@ public final class RedstoneOracle {
 	}
 
 	/**
-	 * Mirrors {@code VanillaRedstoneWireEvaluator.calculateTotalPowerAt}: if
+	 * Mirrors {@code DefaultRedstoneWireEvaluator.calculateTotalPowerAt}: if
 	 * a strong source here is 15, no wire contribution can exceed it;
 	 * otherwise max of strong and wire-calculated.
 	 */

@@ -17,7 +17,7 @@ import net.minecraft.world.level.redstone.Orientation;
  * Times every wire-power propagation cascade.
  *
  * RedStoneWireBlock.update is the single private dispatcher that routes
- * to VanillaRedstoneWireEvaluator or AlternateCurrentRedstoneWireEvaluator — so
+ * to DefaultRedstoneWireEvaluator or ExperimentalRedstoneWireEvaluator — so
  * one mixin target catches both feature-flag branches. The method is
  * private but mixin targets it by name + descriptor.
  *

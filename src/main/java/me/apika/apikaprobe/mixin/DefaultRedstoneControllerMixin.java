@@ -9,7 +9,7 @@ import me.apika.apikaprobe.monitor.RedstonePhaseMonitor;
 
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.redstone.VanillaRedstoneWireEvaluator;
+import net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.redstone.Orientation;
 
@@ -21,7 +21,7 @@ import net.minecraft.world.level.redstone.Orientation;
  * when comparing Rust-port benchmarks so we're not accidentally
  * measuring the already-optimized experimental path.
  */
-@Mixin(VanillaRedstoneWireEvaluator.class)
+@Mixin(DefaultRedstoneWireEvaluator.class)
 public abstract class DefaultRedstoneControllerMixin {
 
 	@Inject(

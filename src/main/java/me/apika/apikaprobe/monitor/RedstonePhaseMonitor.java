@@ -13,8 +13,8 @@ import org.slf4j.LoggerFactory;
  * Two independent metric streams:
  *
  * 1. Wire cascades — RedStoneWireBlock.update is the single private
- *    dispatcher that routes to VanillaRedstoneWireEvaluator or
- *    AlternateCurrentRedstoneWireEvaluator. Wire power propagation is recursive:
+ *    dispatcher that routes to DefaultRedstoneWireEvaluator or
+ *    ExperimentalRedstoneWireEvaluator. Wire power propagation is recursive:
  *    controller.update() → world.updateNeighbors(...) → neighbor's
  *    neighborUpdate → potentially another RedStoneWireBlock.update. To
  *    avoid double-counting, a ThreadLocal depth counter makes only the

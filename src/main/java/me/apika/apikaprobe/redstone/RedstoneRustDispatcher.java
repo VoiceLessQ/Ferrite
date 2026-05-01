@@ -16,7 +16,7 @@ import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.level.redstone.VanillaRedstoneWireEvaluator;
+import net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator;
 import net.minecraft.world.level.redstone.RedstoneWireEvaluator;
 
 import me.apika.apikaprobe.mixin.RedstoneControllerInvoker;
@@ -114,7 +114,7 @@ public final class RedstoneRustDispatcher {
 	private static RedstoneWireEvaluator controller() {
 		RedstoneWireEvaluator c = dispatchController;
 		if (c == null) {
-			c = new VanillaRedstoneWireEvaluator((RedStoneWireBlock) Blocks.REDSTONE_WIRE);
+			c = new DefaultRedstoneWireEvaluator((RedStoneWireBlock) Blocks.REDSTONE_WIRE);
 			dispatchController = c;
 		}
 		return c;

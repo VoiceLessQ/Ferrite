@@ -59,7 +59,7 @@ import net.minecraft.network.chat.Component;
  * rust and ac are independent: rust takes effect via the per-cascade
  * Rust BFS mixin, ac takes effect via FerriteRedstoneController.
  * Don't enable both at the same time — the Rust path expects to see
- * VanillaRedstoneWireEvaluator's behavior underneath, not AC's.
+ * DefaultRedstoneWireEvaluator's behavior underneath, not AC's.
  *
  * All subcommands require op-level 2. Logs to both the command feedback
  * channel (visible in chat) and the [ferrite] logger (visible in
@@ -456,7 +456,7 @@ public final class FerriteCommand {
 	 * the default tree has operand extraction, this will be true.
 	 */
 	private static int surfaceCompile(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
-		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
+		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getLevel());
 		if (!extracted.ok()) {
 			String msg = "[surface] compile failed: " + extracted.error();
 			sendFeedback(ctx, msg, false);
@@ -485,7 +485,7 @@ public final class FerriteCommand {
 	 * extractor pass needs to handle next. Answers spec open-item #1.
 	 */
 	private static int surfaceStats(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
-		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
+		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getLevel());
 		if (!extracted.ok()) {
 			String msg = "[surface] stats failed: " + extracted.error();
 			sendFeedback(ctx, msg, false);
@@ -584,7 +584,7 @@ public final class FerriteCommand {
 	}
 
 	private static int surfaceValidate(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
-		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
+		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getLevel());
 		if (!extracted.ok()) {
 			String msg = "[surface-validate] install failed: " + extracted.error();
 			sendFeedback(ctx, msg, false);
@@ -623,7 +623,7 @@ public final class FerriteCommand {
 	 * batched path is safe to use against real chunks.
 	 */
 	private static int surfaceBatchTest(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
-		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
+		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getLevel());
 		if (!extracted.ok()) {
 			sendFeedback(ctx, "[surface-batch] extract failed: " + extracted.error(), false);
 			return 0;
@@ -739,7 +739,7 @@ public final class FerriteCommand {
 	 * but didn't.
 	 */
 	private static int surfaceDump(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
-		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
+		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getLevel());
 		if (!extracted.ok()) {
 			sendFeedback(ctx, "[surface-dump] extract failed: " + extracted.error(), false);
 			return 0;
@@ -764,7 +764,7 @@ public final class FerriteCommand {
 	}
 
 	private static int surfaceDumpBiomes(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
-		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
+		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getLevel());
 		if (!extracted.ok()) {
 			sendFeedback(ctx, "[surface-dump] extract failed: " + extracted.error(), false);
 			return 0;
@@ -1126,7 +1126,7 @@ public final class FerriteCommand {
 		int x = IntegerArgumentType.getInteger(ctx, "x");
 		int y = IntegerArgumentType.getInteger(ctx, "y");
 		int z = IntegerArgumentType.getInteger(ctx, "z");
-		String biome = BiomeParity.lookupActualBiomeAt(ctx.getSource().getWorld(), x, y, z);
+		String biome = BiomeParity.lookupActualBiomeAt(ctx.getSource().getLevel(), x, y, z);
 		String line = String.format("[biome-actual] (%d,%d,%d) → %s", x, y, z, biome);
 		sendFeedback(ctx, line, false);
 		return Command.SINGLE_SUCCESS;
@@ -1373,7 +1373,7 @@ public final class FerriteCommand {
 		int y = IntegerArgumentType.getInteger(ctx, "y");
 		int z = IntegerArgumentType.getInteger(ctx, "z");
 		String predicted = BiomeParity.lookupBiomeAt(x, y, z);
-		String actual = BiomeParity.lookupActualBiomeAt(ctx.getSource().getWorld(), x, y, z);
+		String actual = BiomeParity.lookupActualBiomeAt(ctx.getSource().getLevel(), x, y, z);
 		String status;
 		if (predicted == null) {
 			status = "rust=<unavailable>";

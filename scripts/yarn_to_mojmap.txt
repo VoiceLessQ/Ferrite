@@ -43,8 +43,8 @@ net.minecraft.world.gen.|net.minecraft.world.level.levelgen.
 # Direct children of net.minecraft.world. listed explicitly to avoid the
 # double-level pollution problem.
 net.minecraft.world.ChunkRegion|net.minecraft.world.level.WorldGenRegion
-net.minecraft.world.DefaultRedstoneController|net.minecraft.world.level.redstone.VanillaRedstoneWireEvaluator
-net.minecraft.world.ExperimentalRedstoneController|net.minecraft.world.level.redstone.AlternateCurrentRedstoneWireEvaluator
+net.minecraft.world.DefaultRedstoneController|net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator
+net.minecraft.world.ExperimentalRedstoneController|net.minecraft.world.level.redstone.ExperimentalRedstoneWireEvaluator
 net.minecraft.world.Heightmap|net.minecraft.world.level.levelgen.Heightmap
 net.minecraft.world.RedstoneController|net.minecraft.world.level.redstone.RedstoneWireEvaluator
 net.minecraft.world.StructureWorldAccess|net.minecraft.world.level.WorldGenLevel
@@ -138,8 +138,8 @@ StructureAccessor|StructureManager
 NoiseChunkGenerator|NoiseBasedChunkGenerator
 SurfaceBuilder|SurfaceRules
 AquiferSampler|Aquifer
-DefaultRedstoneController|VanillaRedstoneWireEvaluator
-ExperimentalRedstoneController|AlternateCurrentRedstoneWireEvaluator
+DefaultRedstoneController|DefaultRedstoneWireEvaluator
+ExperimentalRedstoneController|ExperimentalRedstoneWireEvaluator
 RedstoneController|RedstoneWireEvaluator
 DoubleInventory|CompoundContainer
 ItemFrameEntity|ItemFrame
@@ -239,3 +239,6 @@ net.minecraft.world.level.WorldGenRegion|net.minecraft.server.level.WorldGenRegi
 \.down()|.below()
 \.getUuid()|.getUUID()
 \.hasVehicle()|.isPassenger()
+# .getWorld() is safe in this codebase: all 8 callers are CommandSourceStack
+# (formerly ServerCommandSource); none are Entity/Minecraft.
+\.getWorld()|.getLevel()
