@@ -85,7 +85,7 @@ public final class TerrainBulkHandoff {
 
 		long tStart = System.nanoTime();
 
-		DensityFunction finalDensity = noiseConfig.getNoiseRouter().finalDensity();
+		DensityFunction finalDensity = noiseConfig.router().finalDensity();
 
 		ByteBuffer cornerBuf = ByteBuffer.allocateDirect(CORNER_BYTES).order(ByteOrder.nativeOrder());
 		ByteBuffer outBuf = ByteBuffer.allocateDirect(BLOCK_ID_BYTES).order(ByteOrder.nativeOrder());

@@ -45,7 +45,7 @@ public class FerriteRedstoneController extends DefaultRedstoneWireEvaluator {
 	}
 
 	@Override
-	public void update(Level world, BlockPos pos, BlockState state, @Nullable Orientation orientation, boolean blockAdded) {
+	public void updatePowerStrength(Level world, BlockPos pos, BlockState state, @Nullable Orientation orientation, boolean blockAdded) {
 		// Client-side, non-server, or A/B flag off — defer to vanilla.
 		if (world.isClientSide() || !(world instanceof ServerLevel serverWorld) || !FerriteWireConfig.ENABLED) {
 			super.updatePowerStrength(world, pos, state, orientation, blockAdded);

@@ -175,7 +175,7 @@ public final class BiomeParity {
 	public static String lookupActualBiomeAt(net.minecraft.server.level.ServerLevel world, int x, int y, int z) {
 		net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(x, y, z);
 		net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> entry = world.getBiome(pos);
-		return entry.getKey()
+		return entry.unwrapKey()
 				.map(k -> k.getValue().toString())
 				.orElse("unknown");
 	}

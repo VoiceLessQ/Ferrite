@@ -645,7 +645,7 @@ public final class DensityParity {
 
 	/**
 	 * Look up a RESOLVED DF by name. Walks
-	 * `RandomState.getNoiseRouter()` and resolves each named field by
+	 * `RandomState.router()` and resolves each named field by
 	 * matching its DF reference back to the registry's name. This is the
 	 * tree that has live noise instances bound, so its compute path
 	 * matches what vanilla would actually use during chunk gen.
