@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class BiomeParity {
 	private static final AtomicReference<Object> lastBiomeSource = new AtomicReference<>();
 	/** The {@code Climate.Sampler} for the live overworld (mojmap)
-	 *  / yarn `Climate.MultiNoiseSampler`. Captured at world
+	 *  / yarn `Climate.Sampler`. Captured at world
 	 *  load, used by {@link #lookupBiomeAt} to sample climate at any
 	 *  block position — works for unloaded chunks because the sampler
 	 *  is a pure function of (quartX, quartY, quartZ). */

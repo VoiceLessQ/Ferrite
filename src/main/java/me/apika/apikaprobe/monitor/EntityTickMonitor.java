@@ -96,7 +96,7 @@ public final class EntityTickMonitor {
 		if (entity instanceof ItemEntity) {
 			return CAT_ITEM;
 		}
-		MobCategory group = entity.getType().getSpawnGroup();
+		MobCategory group = entity.getType().getCategory();
 		if (group == MobCategory.MONSTER) {
 			return CAT_MONSTER;
 		}

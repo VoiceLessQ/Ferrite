@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import me.apika.apikaprobe.monitor.TargetScanMonitor;
 
-import net.minecraft.world.entity.ai.goal.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 
 /**
  * Probes NearestAttackableTargetGoal to separate goal-evaluation frequency from

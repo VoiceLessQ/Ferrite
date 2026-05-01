@@ -36,7 +36,7 @@ public abstract class MultiNoiseBiomeSourceRouteMixin {
 		require = 0  // optional — yarn descriptor may shift across versions
 	)
 	private void ferrite$routeBiome(int qx, int qy, int qz,
-			Climate.MultiNoiseSampler sampler,
+			Climate.Sampler sampler,
 			CallbackInfoReturnable<Holder<Biome>> cir) {
 		Holder<Biome> rust = RustBiomeRouter.tryRoute(qx << 2, qy << 2, qz << 2);
 		if (rust != null) {

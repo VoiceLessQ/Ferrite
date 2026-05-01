@@ -77,7 +77,7 @@ public final class FerriteCommand {
 
 	private static void registerRoot(CommandDispatcher<CommandSourceStack> dispatcher) {
 		dispatcher.register(Commands.literal("ferrite")
-				.requires(Commands.requirePermissionLevel(Commands.GAMEMASTERS_CHECK))
+				.requires(Commands.requirePermissionLevel(Commands.LEVEL_GAMEMASTERS))
 				.then(Commands.literal("cramming")
 						.then(Commands.literal("on").executes(FerriteCommand::enableCramming))
 						.then(Commands.literal("off").executes(FerriteCommand::disableCramming))

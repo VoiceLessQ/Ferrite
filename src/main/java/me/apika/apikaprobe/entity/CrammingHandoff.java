@@ -71,7 +71,7 @@ public final class CrammingHandoff {
 			if (e.isPushable())    flags |= FLAG_PUSHABLE;
 			if (e.isVehicle()) flags |= FLAG_VEHICLE;
 			if (e.isPassenger())    flags |= FLAG_PASSENGER;
-			if (e.noClip)          flags |= FLAG_NO_PHYSICS;
+			if (e.noPhysics)          flags |= FLAG_NO_PHYSICS;
 
 			float halfWidth = (float) ((aabb.maxX - aabb.minX) * 0.5);
 

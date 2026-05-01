@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.StructureManager;
-import net.minecraft.world.level.levelgen.ChunkGenerator;
+import net.minecraft.world.level.chunk.ChunkGenerator;
 
 import me.apika.apikaprobe.worldgen.chunk.ChunkDecoratorTiming;
 

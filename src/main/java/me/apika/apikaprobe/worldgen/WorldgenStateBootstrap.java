@@ -618,7 +618,7 @@ public final class WorldgenStateBootstrap {
 
 	/**
 	 * Pull the overworld's {@code Climate.Sampler} (yarn
-	 * {@code Climate.MultiNoiseSampler}) off the chunk generator
+	 * {@code Climate.Sampler}) off the chunk generator
 	 * via the route {@code chunkGenerator → RandomState (per-world
 	 * RandomState equivalent) → multiNoiseSampler}. Stash it in
 	 * {@link BiomeParity#captureClimateSampler} for unloaded biome

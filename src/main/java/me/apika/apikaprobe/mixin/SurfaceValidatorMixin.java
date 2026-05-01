@@ -60,7 +60,7 @@ public abstract class SurfaceValidatorMixin {
 			RandomState noiseConfig, BiomeManager biomeAccess, Registry<Biome> biomeRegistry,
 			boolean useLegacyRandom, WorldGenerationContext heightContext,
 			ChunkAccess protoChunk, NoiseChunk chunkNoiseSampler,
-			SurfaceRules.MaterialRule ruleSource,
+			SurfaceRules.RuleSource ruleSource,
 			CallbackInfo ci) {
 		SurfaceDispatcher.beginChunk(protoChunk);
 	}
@@ -76,7 +76,7 @@ public abstract class SurfaceValidatorMixin {
 			RandomState noiseConfig, BiomeManager biomeAccess, Registry<Biome> biomeRegistry,
 			boolean useLegacyRandom, WorldGenerationContext heightContext,
 			ChunkAccess protoChunk, NoiseChunk chunkNoiseSampler,
-			SurfaceRules.MaterialRule ruleSource,
+			SurfaceRules.RuleSource ruleSource,
 			CallbackInfo ci) {
 		SurfaceDispatcher.flushChunk();
 	}
