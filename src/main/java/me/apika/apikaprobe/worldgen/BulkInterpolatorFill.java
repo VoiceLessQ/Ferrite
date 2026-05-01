@@ -13,7 +13,7 @@ import me.apika.apikaprobe.mixin.DensityInterpolatorAccessor;
 
 /**
  * Phase 2.5 step 2b — bulk-fill the slice arrays vanilla's
- * {@code ChunkNoiseSampler.sampleDensity} would fill cell-by-cell.
+ * {@code NoiseChunk.sampleDensity} would fill cell-by-cell.
  *
  * <p>Per chunk, vanilla calls {@code sampleDensity(start, cellX)} 9 times
  * (1 start + 4 advances × 2). Each iterates {@code horizontalCellCount+1}

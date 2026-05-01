@@ -5,8 +5,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
-import net.minecraft.world.gen.densityfunction.DensityFunction;
+import net.minecraft.world.level.levelgen.NoiseChunk;
+import net.minecraft.world.level.levelgen.DensityFunction;
 
 import java.lang.reflect.Method;
 
@@ -29,7 +29,7 @@ import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
  * matches at chunk-wrap time before we commit to writing the real
  * fill mixin (step 2b).
  */
-@Mixin(ChunkNoiseSampler.class)
+@Mixin(NoiseChunk.class)
 public abstract class CacheRouteCaptureMixin {
 
 	@Inject(

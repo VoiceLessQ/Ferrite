@@ -10,15 +10,15 @@ import java.nio.IntBuffer;
 
 import org.jspecify.annotations.Nullable;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.world.gen.chunk.AquiferSampler;
-import net.minecraft.world.gen.densityfunction.DensityFunction;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.Aquifer;
+import net.minecraft.world.level.levelgen.DensityFunction;
 
 /**
  * Java wrapper around the Rust aquifer port. Implements vanilla's
- * {@link AquiferSampler} interface so it drops directly into
- * {@code ChunkNoiseSampler}'s pipeline.
+ * {@link Aquifer} interface so it drops directly into
+ * {@code NoiseChunk}'s pipeline.
  *
  * <p>Lifecycle:
  * <ul>
@@ -30,7 +30,7 @@ import net.minecraft.world.gen.densityfunction.DensityFunction;
  *       packed result + needs-fluid-tick bit.</li>
  *   <li>Free: a {@link Cleaner} registers
  *       {@code RustBridge.freeAquifer} to run when this wrapper
- *       becomes phantom-reachable (i.e. its owning ChunkNoiseSampler
+ *       becomes phantom-reachable (i.e. its owning NoiseChunk
  *       is GC'd).</li>
  * </ul>
  *
@@ -39,7 +39,7 @@ import net.minecraft.world.gen.densityfunction.DensityFunction;
  * and forwards every call to it. The Java caller never has to
  * differentiate.
  */
-public final class RustAquiferSampler implements AquiferSampler {
+public final class RustAquiferSampler implements Aquifer {
 
     private static final Cleaner CLEANER = Cleaner.create();
 
@@ -92,7 +92,7 @@ public final class RustAquiferSampler implements AquiferSampler {
     private final long handle;
     /** Used when {@link #handle} is 0 — the Rust path failed to
      *  initialize and we must defer to vanilla. */
-    private final @Nullable AquiferSampler vanillaFallback;
+    private final @Nullable Aquifer vanillaFallback;
     /** Cached side-effect bit, vanilla's {@code needsFluidTick}.
      *  Updated by every {@link #apply} call. */
     private boolean lastNeedsFluidTick;
@@ -113,7 +113,7 @@ public final class RustAquiferSampler implements AquiferSampler {
      *                       ByteBuffer.
      * @param gridOriginX    world block-X of the grid's (0, 0) cell
      * @param gridOriginZ    world block-Z of the grid's (0, 0) cell
-     * @param vanillaFallback the AquiferSampler.Impl we delegate to if
+     * @param vanillaFallback the Aquifer.Impl we delegate to if
      *                       {@code initAquifer} fails. Must not be
      *                       null — caller is expected to pass the
      *                       sampler vanilla would have used.
@@ -130,7 +130,7 @@ public final class RustAquiferSampler implements AquiferSampler {
             ByteBuffer surfaceGridBuf,
             int gridOriginX,
             int gridOriginZ,
-            AquiferSampler vanillaFallback) {
+            Aquifer vanillaFallback) {
         if (vanillaFallback == null) {
             throw new IllegalArgumentException("vanillaFallback must not be null");
         }
@@ -286,7 +286,7 @@ public final class RustAquiferSampler implements AquiferSampler {
     }
 
     /** Functional bridge to vanilla's package-private
-     *  {@code ChunkNoiseSampler.estimateSurfaceHeight}. Implemented by
+     *  {@code NoiseChunk.estimateSurfaceHeight}. Implemented by
      *  the route mixin, which calls the shadow method on `this`. */
     @FunctionalInterface
     public interface SurfaceHeightEstimator {

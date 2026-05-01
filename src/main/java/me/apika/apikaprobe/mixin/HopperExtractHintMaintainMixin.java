@@ -8,12 +8,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import me.apika.apikaprobe.hopper.ExtractHint;
 
-import net.minecraft.block.entity.HopperBlockEntity;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.ItemStack;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
 
 @Mixin(HopperBlockEntity.class)
-public abstract class HopperExtractHintMaintainMixin implements Inventory, ExtractHint {
+public abstract class HopperExtractHintMaintainMixin implements Container, ExtractHint {
 
 	@Inject(method = "setStack", at = @At("RETURN"))
 	private void ferrite$onSetStack(int slot, ItemStack stack, CallbackInfo ci) {
@@ -22,7 +22,7 @@ public abstract class HopperExtractHintMaintainMixin implements Inventory, Extra
 		}
 	}
 
-	@Inject(method = "removeStack(II)Lnet/minecraft/item/ItemStack;", at = @At("RETURN"))
+	@Inject(method = "removeStack(II)Lnet.minecraft.world.item.ItemStack;", at = @At("RETURN"))
 	private void ferrite$onRemoveStack(int slot, int amount, CallbackInfoReturnable<ItemStack> cir) {
 		if (slot != this.ferrite$getExtractHint()) return;
 		if (!this.getStack(slot).isEmpty()) return;

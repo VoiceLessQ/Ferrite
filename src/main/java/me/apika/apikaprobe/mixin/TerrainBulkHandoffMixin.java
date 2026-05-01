@@ -7,11 +7,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import me.apika.apikaprobe.worldgen.TerrainBulkHandoff;
 
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.gen.StructureAccessor;
-import net.minecraft.world.gen.chunk.Blender;
-import net.minecraft.world.gen.chunk.NoiseChunkGenerator;
-import net.minecraft.world.gen.noise.NoiseConfig;
+import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.levelgen.StructureManager;
+import net.minecraft.world.level.levelgen.Blender;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
+import net.minecraft.world.level.levelgen.RandomState;
 
 /**
  * A/B measurement hook. Targets the private sync populateNoise overload
@@ -20,19 +20,19 @@ import net.minecraft.world.gen.noise.NoiseConfig;
  * unmodified after the inject returns.
  *
  * Fully qualified descriptor disambiguates from the public async overload:
- *   populateNoise(Blender, StructureAccessor, NoiseConfig, Chunk, int, int) -> Chunk
+ *   populateNoise(Blender, StructureManager, RandomState, Chunk, int, int) -> Chunk
  */
-@Mixin(NoiseChunkGenerator.class)
+@Mixin(NoiseBasedChunkGenerator.class)
 public abstract class TerrainBulkHandoffMixin {
 
 	@Inject(
-		method = "populateNoise(Lnet/minecraft/world/gen/chunk/Blender;Lnet/minecraft/world/gen/StructureAccessor;Lnet/minecraft/world/gen/noise/NoiseConfig;Lnet/minecraft/world/chunk/Chunk;II)Lnet/minecraft/world/chunk/Chunk;",
+		method = "populateNoise(Lnet.minecraft.world.level.levelgen.Blender;Lnet.minecraft.world.level.levelgen.StructureManager;Lnet.minecraft.world.level.levelgen.RandomState;Lnet.minecraft.world.level.chunk.Chunk;II)Lnet.minecraft.world.level.chunk.Chunk;",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$bulkTerrainAB(
 			Blender blender,
-			StructureAccessor structureAccessor,
-			NoiseConfig noiseConfig,
+			StructureManager structureAccessor,
+			RandomState noiseConfig,
 			Chunk chunk,
 			int minimumCellY,
 			int cellHeight,

@@ -9,7 +9,7 @@ import me.apika.apikaprobe.mixin.MaterialRuleContextInvoker;
 /**
  * Live diff-and-log validator for the bytecode evaluator.
  *
- * Hooked into {@code SurfaceBuilder.buildSurface} via
+ * Hooked into {@code SurfaceRules.buildSurface} via
  * {@code SurfaceValidatorMixin}. When enabled, every Nth call to the
  * top-level {@code BlockStateRule.tryApply(x, y, z)} runs the
  * compiled-bytecode evaluator with the same column inputs, diffs the
@@ -58,7 +58,7 @@ public final class SurfaceValidator {
 	/** Cache of {@code DoublePerlinNoiseSampler} references aligned with
 	 *  {@link CompiledRuleTree#noiseChannelTable()}. Populated lazily on
 	 *  the first sample after install — needs the live MaterialRuleContext
-	 *  to walk to NoiseConfig.getOrCreateSampler. Stored as Object[] so
+	 *  to walk to RandomState.getOrCreateSampler. Stored as Object[] so
 	 *  this file doesn't need yarn type imports. Null entries indicate a
 	 *  channel that failed to resolve (sample reads 0.0, logged once). */
 	private static volatile Object[] cachedSamplers = null;
@@ -72,7 +72,7 @@ public final class SurfaceValidator {
 	private static volatile java.nio.ByteBuffer cachedFactorySeedsBuf = null;
 	private static volatile int cachedFactorySeedCount = 0;
 
-	/** Cache of {@code RandomSplitter} references aligned with
+	/** Cache of {@code PositionalRandomFactory} references aligned with
 	 *  {@link CompiledRuleTree#randomNameTable()}. Same lifecycle and
 	 *  reset semantics as {@link #cachedSamplers}. Drives the per-block
 	 *  PRNG inside OP_VERT_GRADIENT (bedrock floor + deepslate transition).
@@ -161,7 +161,7 @@ public final class SurfaceValidator {
 		// instance — vanilla swaps suppliers when crossing a cave-biome
 		// boundary, so reference equality is the correct invalidation
 		// signal. Eliminates the duplicated supplier-chain resolution
-		// (fastReadObjectField + Supplier.get + RegistryEntry chain)
+		// (fastReadObjectField + Supplier.get + Holder chain)
 		// that fired twice per Y position before — once for biome name,
 		// once for isCold. ~30K positions × ~150ns saved = ~4-5 ms/chunk.
 		final Object[] cachedSuppliers    = new Object[256];
@@ -196,19 +196,19 @@ public final class SurfaceValidator {
 	 *  going straight to the eden generation. Vanilla's isCold only
 	 *  reads the pos's coords — doesn't store the reference — so a
 	 *  reused mutable is safe. */
-	private static final ThreadLocal<net.minecraft.util.math.BlockPos.Mutable> scratchPos =
-			ThreadLocal.withInitial(net.minecraft.util.math.BlockPos.Mutable::new);
+	private static final ThreadLocal<net.minecraft.core.BlockPos.Mutable> scratchPos =
+			ThreadLocal.withInitial(net.minecraft.core.BlockPos.Mutable::new);
 
-	/** Identifier → string intern cache. Vanilla {@link
-	 *  net.minecraft.util.Identifier} instances are themselves interned,
+	/** ResourceLocation → string intern cache. Vanilla {@link
+	 *  net.minecraft.util.ResourceLocation} instances are themselves interned,
 	 *  so identity-based lookup is sufficient. Eliminates ~30K
 	 *  {@code id.toString()} string-allocation calls per chunk on the
 	 *  dispatch hot path. ConcurrentHashMap because chunkgen workers
 	 *  populate the cache in parallel. */
-	private static final java.util.concurrent.ConcurrentHashMap<net.minecraft.util.Identifier, String>
+	private static final java.util.concurrent.ConcurrentHashMap<net.minecraft.util.ResourceLocation, String>
 			idStringCache = new java.util.concurrent.ConcurrentHashMap<>();
 
-	private static String internIdentifierToString(net.minecraft.util.Identifier id) {
+	private static String internIdentifierToString(net.minecraft.util.ResourceLocation id) {
 		String cached = idStringCache.get(id);
 		if (cached != null) return cached;
 		String s = id.toString();
@@ -235,8 +235,8 @@ public final class SurfaceValidator {
 	// calls + 1 MethodHandle.invokeExact). On 17K positions per chunk
 	// that's ~25ms saved.
 	//
-	// Direct-call path uses public yarn types: Supplier, RegistryEntry,
-	// RegistryKey, Optional, Biome, BlockPos. Field reads still use
+	// Direct-call path uses public yarn types: Supplier, Holder,
+	// ResourceKey, Optional, Biome, BlockPos. Field reads still use
 	// java.lang.reflect.Field because the field lives on a package-
 	// private class.
 	// ============================================================
@@ -394,7 +394,7 @@ public final class SurfaceValidator {
 		// Combined biome + isCold resolve. The biome supplier is set in
 		// vanilla's updateY and CAN change across Y for cave-biome
 		// boundaries, so we still read it every Y — but only re-resolve
-		// the chain (Supplier.get + RegistryEntry → name + Biome instance)
+		// the chain (Supplier.get + Holder → name + Biome instance)
 		// when the supplier object identity changes vs the per-column
 		// cache. isCold is computed per Y on the cached Biome instance
 		// using a reused Mutable BlockPos (no per-call allocation).
@@ -410,14 +410,14 @@ public final class SurfaceValidator {
 			if (supplier instanceof java.util.function.Supplier<?> s) {
 				try {
 					Object entry = s.get();
-					if (entry instanceof net.minecraft.registry.entry.RegistryEntry<?> regEntry) {
-						java.util.Optional<? extends net.minecraft.registry.RegistryKey<?>> keyOpt = regEntry.getKey();
+					if (entry instanceof net.minecraft.core.Holder<?> regEntry) {
+						java.util.Optional<? extends net.minecraft.core.registries.ResourceKey<?>> keyOpt = regEntry.getKey();
 						if (keyOpt.isPresent()) {
-							net.minecraft.util.Identifier id = keyOpt.get().getValue();
+							net.minecraft.util.ResourceLocation id = keyOpt.get().getValue();
 							if (id != null) biome = internIdentifierToString(id);
 						}
 						Object raw = regEntry.value();
-						if (raw instanceof net.minecraft.world.biome.Biome b) biomeInstance = b;
+						if (raw instanceof net.minecraft.world.level.biome.Biome b) biomeInstance = b;
 					}
 				} catch (RuntimeException ignored) { /* defaults stand */ }
 			}
@@ -427,9 +427,9 @@ public final class SurfaceValidator {
 		}
 
 		boolean isCold = false;
-		if (biomeInstance instanceof net.minecraft.world.biome.Biome biomeImpl) {
+		if (biomeInstance instanceof net.minecraft.world.level.biome.Biome biomeImpl) {
 			int seaLevel = ((MaterialRuleContextInvoker) liveCtx).ferrite$invokeGetSeaLevel();
-			net.minecraft.util.math.BlockPos.Mutable pos = scratchPos.get();
+			net.minecraft.core.BlockPos.Mutable pos = scratchPos.get();
 			pos.set(x, y, z);
 			isCold = biomeImpl.isCold(pos, seaLevel);
 		}
@@ -488,7 +488,7 @@ public final class SurfaceValidator {
 	/**
 	 * Opt A: read biome name via direct typed Java. The supplier field is
 	 * the only reflective bit (its type is package-private). The chain
-	 * Supplier → RegistryEntry → RegistryKey → Identifier → toString uses
+	 * Supplier → Holder → ResourceKey → ResourceLocation → toString uses
 	 * public yarn classes — direct virtual calls JITed inline.
 	 */
 	private static String fastReadBiomeName(Object liveCtx) {
@@ -496,10 +496,10 @@ public final class SurfaceValidator {
 		if (!(supplier instanceof java.util.function.Supplier<?> s)) return "unknown";
 		try {
 			Object entry = s.get();
-			if (!(entry instanceof net.minecraft.registry.entry.RegistryEntry<?> regEntry)) return "unknown";
-			java.util.Optional<? extends net.minecraft.registry.RegistryKey<?>> keyOpt = regEntry.getKey();
+			if (!(entry instanceof net.minecraft.core.Holder<?> regEntry)) return "unknown";
+			java.util.Optional<? extends net.minecraft.core.registries.ResourceKey<?>> keyOpt = regEntry.getKey();
 			if (!keyOpt.isPresent()) return "unknown";
-			net.minecraft.util.Identifier id = keyOpt.get().getValue();
+			net.minecraft.util.ResourceLocation id = keyOpt.get().getValue();
 			return id == null ? "unknown" : id.toString();
 		} catch (RuntimeException e) {
 			return "unknown";
@@ -508,7 +508,7 @@ public final class SurfaceValidator {
 
 	/**
 	 * Opt A: read isCold via direct typed Java. Same supplier field, then
-	 * RegistryEntry.value() → Biome (public yarn). coldEnoughToSnow is a
+	 * Holder.value() → Biome (public yarn). coldEnoughToSnow is a
 	 * direct method call. Only getSeaLevel uses MethodHandle.invokeExact
 	 * (package-private MaterialRuleContext method).
 	 */
@@ -519,10 +519,10 @@ public final class SurfaceValidator {
 		if (!(supplier instanceof java.util.function.Supplier<?> s)) return false;
 		try {
 			Object entry = s.get();
-			if (!(entry instanceof net.minecraft.registry.entry.RegistryEntry<?> regEntry)) return false;
+			if (!(entry instanceof net.minecraft.core.Holder<?> regEntry)) return false;
 			Object biomeRaw = regEntry.value();
-			if (!(biomeRaw instanceof net.minecraft.world.biome.Biome biome)) return false;
-			net.minecraft.util.math.BlockPos pos = new net.minecraft.util.math.BlockPos(x, y, z);
+			if (!(biomeRaw instanceof net.minecraft.world.level.biome.Biome biome)) return false;
+			net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(x, y, z);
 			int seaLevel = (int) mhSea.invokeExact(liveCtx);
 			// Yarn 1.21.11: Biome.isCold(BlockPos, int) → boolean.
 			// Mojmap name is coldEnoughToSnow — same method.
@@ -823,7 +823,7 @@ public final class SurfaceValidator {
 			Object block = blockstate.getClass().getMethod("getBlock").invoke(blockstate);
 			if (block != null) {
 				try {
-					Class<?> registries = Class.forName("net.minecraft.registry.Registries");
+					Class<?> registries = Class.forName("net.minecraft.core.registries.BuiltInRegistries");
 					Object reg = registries.getField("BLOCK").get(null);
 					for (java.lang.reflect.Method m : reg.getClass().getMethods()) {
 						if (m.getName().equals("getId") && m.getParameterCount() == 1) {
@@ -843,7 +843,7 @@ public final class SurfaceValidator {
 
 	/**
 	 * Reflectively build a {@link ColumnContext} from the
-	 * {@code SurfaceBuilder}'s active {@code MaterialRuleContext}.
+	 * {@code SurfaceRules}'s active {@code MaterialRuleContext}.
 	 *
 	 * Returns null if any required field can't be resolved — the
 	 * sample is then dropped and counted in {@code contextBuildFails}.
@@ -875,7 +875,7 @@ public final class SurfaceValidator {
 
 		// isCold: vanilla calls biome.value().coldEnoughToSnow(pos, seaLevel).
 		// Pull biomeSupplier (already used by readBiomeName), call .get() →
-		// RegistryEntry → .value() → coldEnoughToSnow(BlockPos, int).
+		// Holder → .value() → coldEnoughToSnow(BlockPos, int).
 		boolean isCold = readIsCold(ruleContext, blockX, blockY, blockZ);
 
 		// surfaceHeight: vanilla calls ruleContext.getMinSurfaceLevel() —
@@ -888,7 +888,7 @@ public final class SurfaceValidator {
 		// SteepMaterialCondition occurrences in tree — accept as residual.
 		boolean isSteep = false;
 
-		// Real noise channel values via the live NoiseConfig (path 2 fix —
+		// Real noise channel values via the live RandomState (path 2 fix —
 		// previously passed all-zero placeholder, which caused
 		// OP_NOISE_THRESH conditions to flip in surface-rule cases gated
 		// on bedrock floor noise / deep-stone gradient noise).
@@ -1031,7 +1031,7 @@ public final class SurfaceValidator {
 	 * {@link CompiledRuleTree#randomNameTable()}. Slot N at byte offset
 	 * 16N is seedLo; offset 16N+8 is seedHi.
 	 *
-	 * <p>Yarn 1.21.11: vanilla's RandomSplitter impl is
+	 * <p>Yarn 1.21.11: vanilla's PositionalRandomFactory impl is
 	 * {@code Xoroshiro128PlusPlusRandom$Splitter} with public-field
 	 * {@code seedLo}/{@code seedHi}. Reflective read is direct.
 	 */
@@ -1079,8 +1079,8 @@ public final class SurfaceValidator {
 	 * Build (or return cached) the {@link SurfaceRuleEvaluator.VerticalGradientSampler}
 	 * closure for this tree. First call after install resolves every
 	 * random_name in {@link CompiledRuleTree#randomNameTable()} via
-	 * {@code NoiseConfig.getOrCreateRandomDeriver(Identifier)} and caches
-	 * the resulting {@code RandomSplitter} array plus the reflective
+	 * {@code RandomState.getOrCreateRandomDeriver(ResourceLocation)} and caches
+	 * the resulting {@code PositionalRandomFactory} array plus the reflective
 	 * Method handles for {@code split(int,int,int)} and {@code nextFloat()}.
 	 * Subsequent calls return the cached closure with no allocation.
 	 *
@@ -1100,8 +1100,8 @@ public final class SurfaceValidator {
 		if (splitters == null) return null;
 
 		// Resolve the per-call reflective methods once, off the first
-		// non-null splitter we find. All splitters are RandomSplitter; all
-		// Random instances are class_5819. Method handles are stable.
+		// non-null splitter we find. All splitters are PositionalRandomFactory; all
+		// RandomSource instances are class_5819. Method handles are stable.
 		java.lang.reflect.Method splitMethod = null;
 		java.lang.reflect.Method nextFloatMethod = null;
 		for (Object s : splitters) {
@@ -1118,7 +1118,7 @@ public final class SurfaceValidator {
 			}
 		}
 		if (splitMethod == null || nextFloatMethod == null) {
-			ExampleMod.LOGGER.warn("[surface-validate] could not resolve RandomSplitter.split / Random.nextFloat — gradient sampler disabled");
+			ExampleMod.LOGGER.warn("[surface-validate] could not resolve PositionalRandomFactory.split / RandomSource.nextFloat — gradient sampler disabled");
 			return null;
 		}
 
@@ -1147,7 +1147,7 @@ public final class SurfaceValidator {
 
 	/**
 	 * One-time splitter-array build. Parallel to {@link #buildSamplerCache}
-	 * but for {@code RandomSplitter} via {@code NoiseConfig.getOrCreateRandomDeriver}.
+	 * but for {@code PositionalRandomFactory} via {@code RandomState.getOrCreateRandomDeriver}.
 	 * Returns null on a structural failure (no noiseConfig, missing registry
 	 * plumbing); returns an array with null slots for individual unresolved
 	 * names.
@@ -1168,7 +1168,7 @@ public final class SurfaceValidator {
 		java.lang.reflect.Method identifierOf;
 		java.lang.reflect.Method getOrCreateRandomDeriver;
 		try {
-			identifierClass = Class.forName("net.minecraft.util.Identifier");
+			identifierClass = Class.forName("net.minecraft.util.ResourceLocation");
 			identifierOf = identifierClass.getMethod("of", String.class);
 			getOrCreateRandomDeriver = noiseConfig.getClass().getMethod("getOrCreateRandomDeriver", identifierClass);
 		} catch (ReflectiveOperationException e) {
@@ -1203,8 +1203,8 @@ public final class SurfaceValidator {
 
 	/**
 	 * One-time cache build. For each registry-name string in the tree's
-	 * noise channel table, parse it as an {@code Identifier}, wrap it as
-	 * a {@code RegistryKey<DoublePerlinNoiseSampler.NoiseParameters>},
+	 * noise channel table, parse it as an {@code ResourceLocation}, wrap it as
+	 * a {@code ResourceKey<DoublePerlinNoiseSampler.NoiseParameters>},
 	 * then call {@code noiseConfig.getOrCreateSampler(key)}. Failures
 	 * (unparseable name, missing registry entry, yarn rename) leave a
 	 * null slot and log once per channel.
@@ -1226,9 +1226,9 @@ public final class SurfaceValidator {
 		Class<?> registryKeysClass;
 		Object noiseParamsRegistryKey;
 		try {
-			identifierClass = Class.forName("net.minecraft.util.Identifier");
-			registryKeyClass = Class.forName("net.minecraft.registry.RegistryKey");
-			registryKeysClass = Class.forName("net.minecraft.registry.RegistryKeys");
+			identifierClass = Class.forName("net.minecraft.util.ResourceLocation");
+			registryKeyClass = Class.forName("net.minecraft.core.registries.ResourceKey");
+			registryKeysClass = Class.forName("net.minecraft.core.registries.BuiltInRegistries");
 			noiseParamsRegistryKey = registryKeysClass.getField("NOISE_PARAMETERS").get(null);
 		} catch (ReflectiveOperationException e) {
 			ExampleMod.LOGGER.warn(
@@ -1241,11 +1241,11 @@ public final class SurfaceValidator {
 		java.lang.reflect.Method registryKeyOf;
 		java.lang.reflect.Method identifierOf;
 		try {
-			// Identifier.of(String) — parses "minecraft:foo" or "namespace:path"
+			// ResourceLocation.of(String) — parses "minecraft:foo" or "namespace:path"
 			identifierOf = identifierClass.getMethod("of", String.class);
-			// RegistryKey.of(RegistryKey<? extends Registry<E>>, Identifier) → RegistryKey<E>
+			// ResourceKey.of(ResourceKey<? extends Registry<E>>, ResourceLocation) → ResourceKey<E>
 			registryKeyOf = registryKeyClass.getMethod("of", registryKeyClass, identifierClass);
-			// NoiseConfig.getOrCreateSampler(RegistryKey) → DoublePerlinNoiseSampler
+			// RandomState.getOrCreateSampler(ResourceKey) → DoublePerlinNoiseSampler
 			getOrCreateSampler = noiseConfig.getClass().getMethod("getOrCreateSampler", registryKeyClass);
 		} catch (ReflectiveOperationException e) {
 			ExampleMod.LOGGER.warn(
@@ -1322,7 +1322,7 @@ public final class SurfaceValidator {
 
 	private static Object newBlockPos(int x, int y, int z) {
 		try {
-			Class<?> cls = Class.forName("net.minecraft.util.math.BlockPos");
+			Class<?> cls = Class.forName("net.minecraft.core.BlockPos");
 			return cls.getConstructor(int.class, int.class, int.class).newInstance(x, y, z);
 		} catch (ReflectiveOperationException | RuntimeException ignored) {
 			return null;
@@ -1379,7 +1379,7 @@ public final class SurfaceValidator {
 		}
 		if (biomeEntry == null) return "unknown:null-entry";
 
-		// 2. Try RegistryEntry.getKey() — may return Optional<RegistryKey> or RegistryKey
+		// 2. Try Holder.getKey() — may return Optional<ResourceKey> or ResourceKey
 		try {
 			java.lang.reflect.Method getKey = biomeEntry.getClass().getMethod("getKey");
 			Object keyResult = getKey.invoke(biomeEntry);
@@ -1446,7 +1446,7 @@ public final class SurfaceValidator {
 
 	/**
 	 * One-shot diagnostic. Probes the live {@link
-	 * net.minecraft.world.gen.surfacebuilder.MaterialRules.MaterialRuleContext}
+	 * net.minecraft.world.level.levelgen.SurfaceRules.MaterialRuleContext}
 	 * (captured per-thread by the initVerticalContext redirect) and reports
 	 * whether each reflective read found its target or silently zeroed.
 	 *

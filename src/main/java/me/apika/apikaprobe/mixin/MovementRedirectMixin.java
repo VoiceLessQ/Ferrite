@@ -6,9 +6,9 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 import me.apika.apikaprobe.entity.PhysicsDispatcher;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Replaces the call to adjustMovementForCollisions inside Entity.move()
@@ -23,14 +23,14 @@ import net.minecraft.util.math.Vec3d;
 public abstract class MovementRedirectMixin {
 
 	@Redirect(
-		method = "move(Lnet/minecraft/entity/MovementType;Lnet/minecraft/util/math/Vec3d;)V",
+		method = "move(Lnet.minecraft.world.entity.MoverType;Lnet.minecraft.world.phys.Vec3;)V",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/entity/Entity;adjustMovementForCollisions(Lnet/minecraft/util/math/Vec3d;)Lnet/minecraft/util/math/Vec3d;"
+			target = "Lnet.minecraft.world.entity.Entity;adjustMovementForCollisions(Lnet.minecraft.world.phys.Vec3;)Lnet.minecraft.world.phys.Vec3;"
 		)
 	)
-	private Vec3d ferrite$redirectAdjust(Entity self, Vec3d motion) {
-		if (!(self instanceof MobEntity)) {
+	private Vec3 ferrite$redirectAdjust(Entity self, Vec3 motion) {
+		if (!(self instanceof Mob)) {
 			return ((EntityAdjustInvoker) self).ferrite$invokeAdjust(motion);
 		}
 		return PhysicsDispatcher.adjust(self, motion);

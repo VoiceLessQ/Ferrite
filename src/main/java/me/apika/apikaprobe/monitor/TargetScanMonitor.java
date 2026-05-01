@@ -8,16 +8,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Measures ActiveTargetGoal.canStart() call frequency and findClosestTarget()
+ * Measures NearestAttackableTargetGoal.canStart() call frequency and findClosestTarget()
  * scan cost per tick.
  *
  * canStart() is called every tick by GoalSelector for every inactive
- * ActiveTargetGoal. Most calls return immediately via the reciprocalChance
+ * NearestAttackableTargetGoal. Most calls return immediately via the reciprocalChance
  * gate (random.nextInt(n) != 0). When the gate passes, findClosestTarget()
  * fires a world.getEntitiesByClass() spatial scan.
  *
  * This monitor separates the two so we can see:
- *   canStart calls/tick  — total goal evaluations hitting ActiveTargetGoal
+ *   canStart calls/tick  — total goal evaluations hitting NearestAttackableTargetGoal
  *   scans/tick           — actual entity scans after the chance gate
  *   scan time/tick       — total wall time spent inside findClosestTarget()
  *   per-scan cost        — average cost of one scan (= scan_time / scans)

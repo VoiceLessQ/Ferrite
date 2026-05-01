@@ -7,12 +7,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import me.apika.apikaprobe.monitor.MovementInternalsMonitor;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.Vec3;
 
 /**
- * Times Entity.adjustMovementForCollisions(Vec3d) — the pure-geometry
+ * Times Entity.adjustMovementForCollisions(Vec3) — the pure-geometry
  * voxel-shape sweep called once per move() invocation. This is the
  * actual Rust port target (isolating geometry from move()'s side effects).
  *
@@ -22,17 +22,17 @@ import net.minecraft.util.math.Vec3d;
 @Mixin(Entity.class)
 public abstract class AdjustCollisionsMixin {
 
-	@Inject(method = "adjustMovementForCollisions(Lnet/minecraft/util/math/Vec3d;)Lnet/minecraft/util/math/Vec3d;", at = @At("HEAD"))
-	private void ferrite$onAdjustBegin(Vec3d movement, CallbackInfoReturnable<Vec3d> cir) {
-		if (!((Object) this instanceof MobEntity)) {
+	@Inject(method = "adjustMovementForCollisions(Lnet.minecraft.world.phys.Vec3;)Lnet.minecraft.world.phys.Vec3;", at = @At("HEAD"))
+	private void ferrite$onAdjustBegin(Vec3 movement, CallbackInfoReturnable<Vec3> cir) {
+		if (!((Object) this instanceof Mob)) {
 			return;
 		}
 		MovementInternalsMonitor.onAdjustCollisionsBegin();
 	}
 
-	@Inject(method = "adjustMovementForCollisions(Lnet/minecraft/util/math/Vec3d;)Lnet/minecraft/util/math/Vec3d;", at = @At("RETURN"))
-	private void ferrite$onAdjustEnd(Vec3d movement, CallbackInfoReturnable<Vec3d> cir) {
-		if (!((Object) this instanceof MobEntity)) {
+	@Inject(method = "adjustMovementForCollisions(Lnet.minecraft.world.phys.Vec3;)Lnet.minecraft.world.phys.Vec3;", at = @At("RETURN"))
+	private void ferrite$onAdjustEnd(Vec3 movement, CallbackInfoReturnable<Vec3> cir) {
+		if (!((Object) this instanceof Mob)) {
 			return;
 		}
 		MovementInternalsMonitor.onAdjustCollisionsEnd();

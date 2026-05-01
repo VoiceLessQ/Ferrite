@@ -6,15 +6,15 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
-import net.minecraft.server.world.ChunkTaskScheduler;
-import net.minecraft.util.thread.TaskExecutor;
+import net.minecraft.server.level.ChunkTaskDispatcher;
+import net.minecraft.util.thread.ProcessorMailbox;
 
 import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
 
 /**
  * Wraps the {@link Runnable} payload of every
  * {@code TaskQueue.PrioritizedTask} constructed inside
- * {@link ChunkTaskScheduler}'s four
+ * {@link ChunkTaskDispatcher}'s four
  * {@code dispatcher.send(new PrioritizedTask(N, ...))} sites
  * (priority 0=updateLevel, 1=remove, 2=add, 3=pollTask) so
  * {@link FerriteDispatcherProbe} can record submission-to-execution
@@ -27,11 +27,11 @@ import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
  *
  * <p>No-op when {@link FerriteDispatcherProbe#ENABLED} is false.
  */
-@Mixin(ChunkTaskScheduler.class)
+@Mixin(ChunkTaskDispatcher.class)
 public abstract class FerriteDispatcherProbeMixin {
 
 	@Shadow @Final
-	private TaskExecutor<Runnable> executor;
+	private ProcessorMailbox<Runnable> executor;
 
 	@ModifyArg(
 			method = {"updateLevel", "remove", "add", "pollTask"},

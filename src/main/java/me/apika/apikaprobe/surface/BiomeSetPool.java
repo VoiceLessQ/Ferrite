@@ -75,7 +75,7 @@ public final class BiomeSetPool {
 
 	/**
 	 * Convert an arbitrary biome-collection (Set, List, RegistryEntryList,
-	 * Stream-able, or single RegistryKey/RegistryEntry) to the canonical
+	 * Stream-able, or single ResourceKey/Holder) to the canonical
 	 * sorted-list-of-registry-names key. Best-effort with reflection;
 	 * elements whose registry name can't be resolved fall back to
 	 * toString.
@@ -111,15 +111,15 @@ public final class BiomeSetPool {
 
 	/**
 	 * Resolve a single biome reference to its registry name string.
-	 * Tries getValue() (RegistryKey) → getKey() (RegistryEntry,
-	 * returns Optional&lt;RegistryKey&gt;) → toString fallback.
+	 * Tries getValue() (ResourceKey) → getKey() (Holder,
+	 * returns Optional&lt;ResourceKey&gt;) → toString fallback.
 	 */
 	private static String registryNameOf(Object o) {
 		if (o == null) return "";
-		// RegistryKey has getValue() returning Identifier
+		// ResourceKey has getValue() returning ResourceLocation
 		String s = invokeAndStringify(o, "getValue");
 		if (s != null) return s;
-		// RegistryEntry has getKey() returning Optional<RegistryKey<T>>
+		// Holder has getKey() returning Optional<ResourceKey<T>>
 		try {
 			java.lang.reflect.Method m = o.getClass().getMethod("getKey");
 			Object k = m.invoke(o);
@@ -134,7 +134,7 @@ public final class BiomeSetPool {
 				return k.toString();
 			}
 		} catch (NoSuchMethodException ignored) {
-			// not a RegistryEntry
+			// not a Holder
 		} catch (ReflectiveOperationException | RuntimeException ignored) {
 			// fall through
 		}

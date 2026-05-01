@@ -9,14 +9,14 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
+import java.util.RandomSource;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Rust↔Java noise parity validator.
  *
  * <p>{@link me.apika.apikaprobe.mixin.NoiseConfigCaptureMixin} stashes
- * the live yarn {@code NoiseConfig} into {@link #lastNoiseConfig} as a
+ * the live yarn {@code RandomState} into {@link #lastNoiseConfig} as a
  * world loads. {@link #runParityCheck} iterates the names Rust has
  * registered (via {@link WorldgenStateBootstrap#registeredNames}),
  * samples both sides at N test positions, and logs the max absolute
@@ -32,7 +32,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * demand.
  */
 public final class WorldgenParity {
-	/** Every NoiseConfig constructed this session. We pick the one
+	/** Every RandomState constructed this session. We pick the one
 	 *  whose root factory seeds match Rust's — that's the overworld.
 	 *  Copy-on-write because the mixin fires from the server-init thread
 	 *  and the validator reads from the command thread. */
@@ -48,11 +48,11 @@ public final class WorldgenParity {
 	}
 
 	/**
-	 * Walk the captured NoiseConfig list and return the one whose root
+	 * Walk the captured RandomState list and return the one whose root
 	 * positional-factory seeds match Rust's overworld state. Used by
 	 * {@link WorldgenStateBootstrap#captureOverworldClimateSampler} so
 	 * the sampler comes from the right dimension (overworld), not from
-	 * whichever NoiseConfig the mixin happened to see last.
+	 * whichever RandomState the mixin happened to see last.
 	 */
 	public static Object findOverworldNoiseConfig() {
 		long rustLo = RustBridge.worldgenRootSeedLo();
@@ -69,7 +69,7 @@ public final class WorldgenParity {
 	/**
 	 * Variant that takes raw expected (lo, hi) pair. Used by
 	 * {@link WorldgenStateBootstrap} when we need to find the
-	 * NoiseConfig BEFORE finalize (Rust's worldgenRootSeed* return 0
+	 * RandomState BEFORE finalize (Rust's worldgenRootSeed* return 0
 	 * pre-finalize, so we have to compute the expected seeds Java-side).
 	 */
 	public static Object findNoiseConfigBySeeds(long lo, long hi) {
@@ -96,10 +96,10 @@ public final class WorldgenParity {
 			return "[parity] Rust worldgen state not finalized — load an overworld first";
 		}
 		if (allNoiseConfigs.isEmpty()) {
-			return "[parity] NoiseConfig not captured — load an overworld first";
+			return "[parity] RandomState not captured — load an overworld first";
 		}
 		// Rust's root factory seeds are the ground truth — the overworld
-		// NoiseConfig is the one whose random factory matches.
+		// RandomState is the one whose random factory matches.
 		long rustLo0 = RustBridge.worldgenRootSeedLo();
 		long rustHi0 = RustBridge.worldgenRootSeedHi();
 		Object noiseConfig = null;
@@ -117,9 +117,9 @@ public final class WorldgenParity {
 			}
 		}
 		if (noiseConfig == null) {
-			ExampleMod.LOGGER.warn("[parity] no NoiseConfig matched Rust root seeds ({},{}); tried: {}",
+			ExampleMod.LOGGER.warn("[parity] no RandomState matched Rust root seeds ({},{}); tried: {}",
 					rustLo0, rustHi0, triedList);
-			return "[parity] could not find matching NoiseConfig (see log)";
+			return "[parity] could not find matching RandomState (see log)";
 		}
 		List<String> names = WorldgenStateBootstrap.registeredNames();
 		if (names.isEmpty()) {
@@ -147,7 +147,7 @@ public final class WorldgenParity {
 					rustLo, rustHi);
 		}
 
-		Random rng = new Random(0xDECAFBADL);
+		RandomSource rng = new RandomSource(0xDECAFBADL);
 		int pass = 0;
 		int fail = 0;
 		double worstDiff = 0.0;
@@ -220,17 +220,17 @@ public final class WorldgenParity {
 	}
 
 	/**
-	 * Walk yarn's {@code NoiseConfig.random} (a
+	 * Walk yarn's {@code RandomState.random} (a
 	 * {@code XoroshiroPositionalRandomFactory}) and return its
 	 * {@code seedLo} / {@code seedHi} via reflection.
 	 * Returns null if any field/type isn't found.
 	 */
 	private static long[] readYarnRootFactorySeeds(Object noiseConfig) {
-		// Yarn renames: PositionalRandomFactory → RandomDeriver / RandomSplitter
-		// Also try literal field names commonly used in NoiseConfig.
+		// Yarn renames: PositionalRandomFactory → RandomDeriver / PositionalRandomFactory
+		// Also try literal field names commonly used in RandomState.
 		String[] typeHints = {
 			"PositionalRandomFactory", "RandomDeriver",
-			"RandomSplitter", "RandomFactory"
+			"PositionalRandomFactory", "RandomFactory"
 		};
 		Object factory = null;
 		for (String hint : typeHints) {
@@ -242,9 +242,9 @@ public final class WorldgenParity {
 			}
 		}
 		if (factory == null) {
-			// Last resort: dump all NoiseConfig field types so we can see the
+			// Last resort: dump all RandomState field types so we can see the
 			// correct one next run.
-			StringBuilder sb = new StringBuilder("[parity] NoiseConfig fields: ");
+			StringBuilder sb = new StringBuilder("[parity] RandomState fields: ");
 			Class<?> cls = noiseConfig.getClass();
 			while (cls != null && cls != Object.class) {
 				for (java.lang.reflect.Field f : cls.getDeclaredFields()) {
@@ -312,7 +312,7 @@ public final class WorldgenParity {
 	}
 
 	/**
-	 * Reflection shim around {@code NoiseConfig.getOrCreateSampler} and
+	 * Reflection shim around {@code RandomState.getOrCreateSampler} and
 	 * the returned sampler's {@code sample(double, double, double)}.
 	 */
 	private static final class YarnSampler {
@@ -335,9 +335,9 @@ public final class WorldgenParity {
 
 		static YarnSampler resolve(Object noiseConfig) {
 			try {
-				Class<?> identifierClass = Class.forName("net.minecraft.util.Identifier");
-				Class<?> registryKeyClass = Class.forName("net.minecraft.registry.RegistryKey");
-				Class<?> registryKeysClass = Class.forName("net.minecraft.registry.RegistryKeys");
+				Class<?> identifierClass = Class.forName("net.minecraft.util.ResourceLocation");
+				Class<?> registryKeyClass = Class.forName("net.minecraft.core.registries.ResourceKey");
+				Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.BuiltInRegistries");
 				Method identifierOf = identifierClass.getMethod("of", String.class);
 				Method registryKeyOf = registryKeyClass.getMethod("of", registryKeyClass, identifierClass);
 				Object noiseParamsRegistryKey = registryKeysClass.getField("NOISE_PARAMETERS").get(null);

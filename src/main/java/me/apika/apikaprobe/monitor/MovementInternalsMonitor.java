@@ -13,9 +13,9 @@ import org.slf4j.LoggerFactory;
  *
  *   [0] cramming        — LivingEntity.tickCramming() — mob-vs-mob push-away
  *   [1] blockCollision  — Entity.tickBlockCollision() — block collision
- *   [2] navigator       — EntityNavigation.tick() — path step execution
- *   [3] move            — Entity.move(MovementType,Vec3d) — voxel-shape sweep
- *   [4] travel          — LivingEntity.travel(Vec3d) — velocity/input (wraps gravity+move)
+ *   [2] navigator       — PathNavigation.tick() — path step execution
+ *   [3] move            — Entity.move(MoverType,Vec3) — voxel-shape sweep
+ *   [4] travel          — LivingEntity.travel(Vec3) — velocity/input (wraps gravity+move)
  *   [5] gravity         — Entity.applyGravity() — gravity term
  *        other          — computed: movement_self − (sum of above)
  *

@@ -1,12 +1,12 @@
 package me.apika.apikaprobe.mixin;
 
-import net.minecraft.block.BlockState;
+import net.minecraft.world.level.block.BlockState;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
 /**
- * Exposes {@code MaterialRules$BlockStateRule.tryApply} (package-private
+ * Exposes {@code SurfaceRules$BlockStateRule.tryApply} (package-private
  * inner interface, package-private method) as a synthetic
  * {@code ferrite$invokeTryApply} method that {@link SurfaceValidatorMixin}'s
  * validator path can call directly via a typed cast — no reflection.
@@ -20,7 +20,7 @@ import org.spongepowered.asm.mixin.gen.Invoker;
  * the validator's slow path and keeps the design consistent with
  * {@link MaterialRuleContextInvoker}.
  */
-@Mixin(targets = "net.minecraft.world.gen.surfacebuilder.MaterialRules$BlockStateRule")
+@Mixin(targets = "net.minecraft.world.level.levelgen.SurfaceRules$BlockStateRule")
 public interface BlockStateRuleInvoker {
 	@Invoker("tryApply")
 	BlockState ferrite$invokeTryApply(int x, int y, int z);

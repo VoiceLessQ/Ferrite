@@ -7,9 +7,9 @@
  *     FerriteWireConfig static knobs instead. No per-world config.
  *   - Dropped the LevelStorageAccess constructor arg (was only used
  *     to build the Config file path).
- *   - Uses yarn's SimpleNeighborUpdater instead of Mojmap's
+ *   - Uses yarn's CollectingNeighborUpdates instead of Mojmap's
  *     InstantNeighborUpdater — same semantics, different name.
- *   - Orientation (Mojmap) → WireOrientation (yarn), same methods.
+ *   - Orientation (Mojmap) → Orientation (yarn), same methods.
  *   - All other renames per docs/AC_YARN_MAPPINGS.md.
  *
  * Original authorship and design remain entirely Space Walker's;
@@ -28,20 +28,20 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMap.Entry;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMaps;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.block.NeighborUpdater;
-import net.minecraft.world.block.SimpleNeighborUpdater;
-import net.minecraft.world.block.WireOrientation;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.redstone.NeighborUpdater;
+import net.minecraft.world.level.redstone.CollectingNeighborUpdates;
+import net.minecraft.world.level.redstone.Orientation;
 
 import me.apika.apikaprobe.redstone.WireConstants.Directions;
 
 /**
- * Handles redstone-wire power changes for one {@link ServerWorld}.
+ * Handles redstone-wire power changes for one {@link ServerLevel}.
  * Algorithm by Space Walker — see the AC repository for the original
  * design notes reproduced below.
  *
@@ -73,7 +73,7 @@ public class WireHandler {
 	private static final int POWER_MAX = WireConstants.SIGNAL_MAX;
 	private static final int POWER_STEP = WireConstants.POWER_STEP;
 
-	private final ServerWorld world;
+	private final ServerLevel world;
 
 	/** Map of wires and neighboring blocks for the current cascade. */
 	private final Long2ObjectMap<Node> nodes;
@@ -101,18 +101,18 @@ public class WireHandler {
 	private final WireNode[] rustWires = new WireNode[RedstoneHandoff.MAX_NODES];
 	private final int[] rustNeighbors = new int[RedstoneHandoff.NEIGHBOR_SLOTS];
 
-	public WireHandler(ServerWorld world) {
+	public WireHandler(ServerLevel world) {
 		this.world = world;
 
 		this.nodes = new Long2ObjectOpenHashMap<>();
 		this.search = new SimpleQueue();
 		this.updates = new PriorityQueue();
 
-		// SimpleNeighborUpdater is the yarn equivalent of AC's
+		// CollectingNeighborUpdates is the yarn equivalent of AC's
 		// InstantNeighborUpdater: synchronous delivery, no deferred
 		// chain queue. The algorithm relies on shape/block updates
 		// firing inline during powerNetwork().
-		this.neighborUpdater = new SimpleNeighborUpdater(world);
+		this.neighborUpdater = new CollectingNeighborUpdates(world);
 
 		this.nodeCache = new Node[16];
 		this.fillNodeCache(0, 16);
@@ -252,7 +252,7 @@ public class WireHandler {
 	// ------------------------------------------------------------------
 
 	/** Invoked when a wire at {@code pos} receives a block update. */
-	public boolean onWireUpdated(BlockPos pos, BlockState state, WireOrientation orientation) {
+	public boolean onWireUpdated(BlockPos pos, BlockState state, Orientation orientation) {
 		Node node = getOrAddNode(pos, state);
 
 		if (!node.isWire()) {
@@ -337,7 +337,7 @@ public class WireHandler {
 	 * Find wires at and around {@code wire} that are in an invalid state
 	 * and need power changes. These wires become BFS roots.
 	 */
-	private void findRoots(WireNode wire, WireOrientation orientation) {
+	private void findRoots(WireNode wire, Orientation orientation) {
 		int iDirBias = -1;
 
 		if (orientation != null) {
@@ -692,7 +692,7 @@ public class WireHandler {
 		// wire via the existing fastutil Long2ObjectMap (primitive-keyed,
 		// no Long boxing) instead of our own HashMap.
 		for (int i = 0; i < changed; i++) {
-			long key = net.minecraft.util.math.BlockPos.asLong(
+			long key = net.minecraft.core.BlockPos.asLong(
 					RedstoneHandoff.readResultX(i),
 					RedstoneHandoff.readResultY(i),
 					RedstoneHandoff.readResultZ(i));

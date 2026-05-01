@@ -8,7 +8,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Random;
+import java.util.RandomSource;
 
 import net.minecraft.server.MinecraftServer;
 
@@ -51,7 +51,7 @@ public final class DensityParity {
 		if (dfRegistry == null) {
 			return "[df-parity] could not resolve DENSITY_FUNCTION registry";
 		}
-		Random rng = new Random(0xABCDEFABL);
+		RandomSource rng = new RandomSource(0xABCDEFABL);
 		int totalPass = 0;
 		int totalFail = 0;
 		double worstDiff = 0.0;
@@ -62,7 +62,7 @@ public final class DensityParity {
 
 		// Walk each unresolved registry DF with a Visitor that binds
 		// NoiseHolders to live NormalNoise instances via
-		// NoiseConfig.getOrCreateNoise. The bound tree computes correctly;
+		// RandomState.getOrCreateNoise. The bound tree computes correctly;
 		// without this the validator would compare rust-with-real-noise
 		// vs vanilla-with-null-noise (noise.getValue returns 0 on null).
 		Object noiseConfig = WorldgenParity.findOverworldNoiseConfig();
@@ -148,7 +148,7 @@ public final class DensityParity {
 	/**
 	 * Public probe: resolve a registered DF by name and compute at (x, y, z).
 	 * Walks the unresolved registry DF with a Visitor that binds
-	 * NoiseHolders via `NoiseConfig.getOrCreateNoise(key)` — matches
+	 * NoiseHolders via `RandomState.getOrCreateNoise(key)` — matches
 	 * what vanilla's `RandomState` constructor does internally. The
 	 * bound tree then computes correctly.
 	 */
@@ -192,7 +192,7 @@ public final class DensityParity {
 	}
 
 	/** Look up the named field on the live overworld NoiseRouter and
-	 *  return its DensityFunction. Returns null if no NoiseConfig was
+	 *  return its DensityFunction. Returns null if no RandomState was
 	 *  captured or the router doesn't expose this accessor. */
 	private static Object liveRouterField(String accessor) {
 		Object noiseConfig = WorldgenParity.findOverworldNoiseConfig();
@@ -227,10 +227,10 @@ public final class DensityParity {
 			Class<?> visitorClass = null;
 			// First try literal candidate names.
 			for (String name : new String[]{
-					"net.minecraft.world.gen.densityfunction.DensityFunction$Visitor",
-					"net.minecraft.world.gen.densityfunction.DensityFunction$DensityFunctionVisitor",
 					"net.minecraft.world.level.levelgen.DensityFunction$Visitor",
-					"net.minecraft.world.gen.densityfunction.DensityFunctionVisitor",
+					"net.minecraft.world.level.levelgen.DensityFunction$DensityFunctionVisitor",
+					"net.minecraft.world.level.levelgen.DensityFunction$Visitor",
+					"net.minecraft.world.level.levelgen.DensityFunctionVisitor",
 			}) {
 				try { visitorClass = Class.forName(name); break; }
 				catch (ClassNotFoundException ignored) { /* next */ }
@@ -241,7 +241,7 @@ public final class DensityParity {
 			if (visitorClass == null) {
 				try {
 					Class<?> dfInterface = Class.forName(
-							"net.minecraft.world.gen.densityfunction.DensityFunction");
+							"net.minecraft.world.level.levelgen.DensityFunction");
 					for (Class<?> inner : dfInterface.getClasses()) {
 						if (inner.isInterface() && inner.getSimpleName().toLowerCase().contains("visitor")) {
 							visitorClass = inner;
@@ -354,9 +354,9 @@ public final class DensityParity {
 	 * does internally via `noise.withNewRandom(terrainRandom)`.
 	 *
 	 * <p>Yarn 1.21.11 renames:
-	 * - {@code PositionalRandomFactory} → {@code RandomSplitter}
+	 * - {@code PositionalRandomFactory} → {@code PositionalRandomFactory}
 	 * - {@code fromHashOf(String)} → {@code split(String)}
-	 * - {@code withNewRandom(RandomSource)} → {@code copyWithRandom(Random)}
+	 * - {@code withNewRandom(RandomSource)} → {@code copyWithRandom(RandomSource)}
 	 *
 	 * <p>Returns the re-seeded instance or null on any reflection failure
 	 * (caller falls through to the unresolved instance).
@@ -368,7 +368,7 @@ public final class DensityParity {
 		boolean log = reseedLogged.compareAndSet(false, true);
 		try {
 			Object splitter = findFieldByTypeContains(noiseConfig,
-					new String[]{"RandomSplitter", "RandomDeriver", "PositionalRandomFactory", "RandomFactory"});
+					new String[]{"PositionalRandomFactory", "RandomDeriver", "PositionalRandomFactory", "RandomFactory"});
 			if (splitter == null) {
 				if (log) ExampleMod.LOGGER.warn("[df-parity] reseed: no splitter on noiseConfig {}", noiseConfig.getClass().getName());
 				return null;
@@ -521,7 +521,7 @@ public final class DensityParity {
 			Method noiseDataM = noiseHolder.getClass().getMethod("noiseData");
 			Object noiseData = noiseDataM.invoke(noiseHolder);
 			if (noiseData == null) return noiseHolder;
-			// holder.unwrapKey() → Optional<RegistryKey<NoiseParameters>>
+			// holder.unwrapKey() → Optional<ResourceKey<NoiseParameters>>
 			Method unwrapKey = noiseData.getClass().getMethod("getKey");
 			Object opt = unwrapKey.invoke(noiseData);
 			if (!(opt instanceof java.util.Optional<?> o) || !o.isPresent()) return noiseHolder;
@@ -561,8 +561,8 @@ public final class DensityParity {
 	private static Object buildSinglePointContext(int x, int y, int z) {
 		// Yarn renames DensityFunction.SinglePointContext — probe likely names.
 		String[] candidates = {
-			"net.minecraft.world.gen.densityfunction.DensityFunction$UnblendedNoisePos",
-			"net.minecraft.world.gen.densityfunction.DensityFunction$SinglePointContext",
+			"net.minecraft.world.level.levelgen.DensityFunction$UnblendedNoisePos",
+			"net.minecraft.world.level.levelgen.DensityFunction$SinglePointContext",
 			"net.minecraft.world.level.levelgen.DensityFunction$SinglePointContext",
 		};
 		for (String name : candidates) {
@@ -602,12 +602,12 @@ public final class DensityParity {
 	private static Object resolveDfRegistry(MinecraftServer server) {
 		try {
 			Object manager = server.getRegistryManager();
-			Class<?> registryKeysClass = Class.forName("net.minecraft.registry.RegistryKeys");
+			Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.BuiltInRegistries");
 			Object dfKey = registryKeysClass.getField("DENSITY_FUNCTION").get(null);
 			for (String n : new String[]{"getOrThrow", "get", "getRegistry"}) {
 				try {
 					Method m = manager.getClass().getMethod(n,
-							Class.forName("net.minecraft.registry.RegistryKey"));
+							Class.forName("net.minecraft.core.registries.ResourceKey"));
 					Object r = m.invoke(manager, dfKey);
 					if (r != null) return r;
 				} catch (ReflectiveOperationException ignored) {
@@ -624,7 +624,7 @@ public final class DensityParity {
 	 * Look up a DF by name from the registry. NOTE: registry DFs are
 	 * UNRESOLVED — their `NoiseHolder.noise` fields are null, so compute
 	 * paths that hit a noise leaf return 0 instead of the real sample.
-	 * For RESOLVED DFs (with live noise instances), use the NoiseConfig
+	 * For RESOLVED DFs (with live noise instances), use the RandomState
 	 * route via {@link #lookupResolved}.
 	 */
 	private static Object lookupByName(Object registry, String fullName) {
@@ -645,7 +645,7 @@ public final class DensityParity {
 
 	/**
 	 * Look up a RESOLVED DF by name. Walks
-	 * `NoiseConfig.getNoiseRouter()` and resolves each named field by
+	 * `RandomState.getNoiseRouter()` and resolves each named field by
 	 * matching its DF reference back to the registry's name. This is the
 	 * tree that has live noise instances bound, so its compute path
 	 * matches what vanilla would actually use during chunk gen.

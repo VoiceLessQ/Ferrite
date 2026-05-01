@@ -12,14 +12,14 @@ import org.slf4j.LoggerFactory;
 
 import me.apika.apikaprobe.monitor.ChunkGenMonitor;
 
-import net.minecraft.world.ChunkRegion;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.gen.StructureAccessor;
-import net.minecraft.world.gen.chunk.Blender;
-import net.minecraft.world.gen.chunk.NoiseChunkGenerator;
-import net.minecraft.world.gen.noise.NoiseConfig;
+import net.minecraft.world.level.WorldGenRegion;
+import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.levelgen.StructureManager;
+import net.minecraft.world.level.levelgen.Blender;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
+import net.minecraft.world.level.levelgen.RandomState;
 
-@Mixin(NoiseChunkGenerator.class)
+@Mixin(NoiseBasedChunkGenerator.class)
 public abstract class ChunkPhaseMixin {
 
 	static {
@@ -29,8 +29,8 @@ public abstract class ChunkPhaseMixin {
 	@Inject(method = "populateNoise", at = @At("HEAD"))
 	private void apikaprobe$onNoiseStart(
 			Blender blender,
-			NoiseConfig noiseConfig,
-			StructureAccessor structureAccessor,
+			RandomState noiseConfig,
+			StructureManager structureAccessor,
 			Chunk chunk,
 			CallbackInfoReturnable<CompletableFuture<Chunk>> cir) {
 		ChunkGenMonitor.onNoiseStart();
@@ -39,8 +39,8 @@ public abstract class ChunkPhaseMixin {
 	@Inject(method = "populateNoise", at = @At("RETURN"))
 	private void apikaprobe$onNoiseEnd(
 			Blender blender,
-			NoiseConfig noiseConfig,
-			StructureAccessor structureAccessor,
+			RandomState noiseConfig,
+			StructureManager structureAccessor,
 			Chunk chunk,
 			CallbackInfoReturnable<CompletableFuture<Chunk>> cir) {
 		ChunkGenMonitor.onNoiseEnd();
@@ -48,9 +48,9 @@ public abstract class ChunkPhaseMixin {
 
 	@Inject(method = "buildSurface", at = @At("HEAD"))
 	private void apikaprobe$onSurfaceStart(
-			ChunkRegion region,
-			StructureAccessor structures,
-			NoiseConfig noiseConfig,
+			WorldGenRegion region,
+			StructureManager structures,
+			RandomState noiseConfig,
 			Chunk chunk,
 			CallbackInfo ci) {
 		ChunkGenMonitor.onSurfaceStart();
@@ -58,9 +58,9 @@ public abstract class ChunkPhaseMixin {
 
 	@Inject(method = "buildSurface", at = @At("RETURN"))
 	private void apikaprobe$onSurfaceEnd(
-			ChunkRegion region,
-			StructureAccessor structures,
-			NoiseConfig noiseConfig,
+			WorldGenRegion region,
+			StructureManager structures,
+			RandomState noiseConfig,
 			Chunk chunk,
 			CallbackInfo ci) {
 		ChunkGenMonitor.onSurfaceEnd();
@@ -68,17 +68,17 @@ public abstract class ChunkPhaseMixin {
 
 	// --- private sync populateNoise (the real noise work) -------------------
 	// Fully qualified descriptor disambiguates from the public async overload.
-	// Note parameter order: (Blender, StructureAccessor, NoiseConfig, Chunk, int, int)
-	// — StructureAccessor comes before NoiseConfig here, unlike the async version.
+	// Note parameter order: (Blender, StructureManager, RandomState, Chunk, int, int)
+	// — StructureManager comes before RandomState here, unlike the async version.
 
 	@Inject(
-		method = "populateNoise(Lnet/minecraft/world/gen/chunk/Blender;Lnet/minecraft/world/gen/StructureAccessor;Lnet/minecraft/world/gen/noise/NoiseConfig;Lnet/minecraft/world/chunk/Chunk;II)Lnet/minecraft/world/chunk/Chunk;",
+		method = "populateNoise(Lnet.minecraft.world.level.levelgen.Blender;Lnet.minecraft.world.level.levelgen.StructureManager;Lnet.minecraft.world.level.levelgen.RandomState;Lnet.minecraft.world.level.chunk.Chunk;II)Lnet.minecraft.world.level.chunk.Chunk;",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onSyncNoiseStart(
 			Blender blender,
-			StructureAccessor structureAccessor,
-			NoiseConfig noiseConfig,
+			StructureManager structureAccessor,
+			RandomState noiseConfig,
 			Chunk chunk,
 			int minimumCellY,
 			int cellHeight,
@@ -87,13 +87,13 @@ public abstract class ChunkPhaseMixin {
 	}
 
 	@Inject(
-		method = "populateNoise(Lnet/minecraft/world/gen/chunk/Blender;Lnet/minecraft/world/gen/StructureAccessor;Lnet/minecraft/world/gen/noise/NoiseConfig;Lnet/minecraft/world/chunk/Chunk;II)Lnet/minecraft/world/chunk/Chunk;",
+		method = "populateNoise(Lnet.minecraft.world.level.levelgen.Blender;Lnet.minecraft.world.level.levelgen.StructureManager;Lnet.minecraft.world.level.levelgen.RandomState;Lnet.minecraft.world.level.chunk.Chunk;II)Lnet.minecraft.world.level.chunk.Chunk;",
 		at = @At("RETURN")
 	)
 	private void apikaprobe$onSyncNoiseEnd(
 			Blender blender,
-			StructureAccessor structureAccessor,
-			NoiseConfig noiseConfig,
+			StructureManager structureAccessor,
+			RandomState noiseConfig,
 			Chunk chunk,
 			int minimumCellY,
 			int cellHeight,

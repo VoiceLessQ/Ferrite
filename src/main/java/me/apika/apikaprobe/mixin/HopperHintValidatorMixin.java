@@ -8,26 +8,26 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import me.apika.apikaprobe.hopper.ExtractHint;
 import me.apika.apikaprobe.monitor.HopperHintMonitor;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.Hopper;
-import net.minecraft.block.entity.HopperBlockEntity;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.entity.Hopper;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.Container;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
 
 @Mixin(HopperBlockEntity.class)
 public abstract class HopperHintValidatorMixin {
 
 	@Inject(
-		method = "extract(Lnet/minecraft/world/World;Lnet/minecraft/block/entity/Hopper;)Z",
+		method = "extract(Lnet.minecraft.world.level.Level;Lnet.minecraft.world.level.block.entity.Hopper;)Z",
 		at = @At("HEAD")
 	)
-	private static void ferrite$validateHint(World world, Hopper hopper, CallbackInfoReturnable<Boolean> cir) {
+	private static void ferrite$validateHint(Level world, Hopper hopper, CallbackInfoReturnable<Boolean> cir) {
 		if (!HopperHintMonitor.VALIDATE) return;
 
 		BlockPos pos = BlockPos.ofFloored(hopper.getHopperX(), hopper.getHopperY() + 1.0, hopper.getHopperZ());
 		BlockState state = world.getBlockState(pos);
-		Inventory inventory = HopperBlockEntityInvoker.ferrite$invokeGetInputInventory(world, hopper, pos, state);
+		Container inventory = HopperBlockEntityInvoker.ferrite$invokeGetInputInventory(world, hopper, pos, state);
 
 		if (inventory == null) {
 			HopperHintMonitor.onValidationNoInv();

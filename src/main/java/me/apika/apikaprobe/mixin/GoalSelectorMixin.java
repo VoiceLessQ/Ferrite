@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.GoalSelectorMonitor;
 
-import net.minecraft.entity.ai.goal.GoalSelector;
+import net.minecraft.world.entity.ai.goal.GoalSelector;
 
 /**
  * Times GoalSelector.tick() and GoalSelector.tickGoals(boolean).

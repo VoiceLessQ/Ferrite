@@ -269,7 +269,7 @@ public final class DeepMarkerWalker {
 					Object v = m.invoke(coord);
 					if (v == null) continue;
 					String tn = v.getClass().getSimpleName();
-					if (tn.contains("Holder") || tn.contains("RegistryEntry")) {
+					if (tn.contains("Holder") || tn.contains("Holder")) {
 						holder = v; break;
 					}
 					if (tn.contains("DensityFunction") || tn.contains("Wrapping")

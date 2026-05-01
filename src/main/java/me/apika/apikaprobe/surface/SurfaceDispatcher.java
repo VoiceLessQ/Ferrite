@@ -1,8 +1,8 @@
 package me.apika.apikaprobe.surface;
 
 import me.apika.apikaprobe.bridge.ExampleMod;
-import net.minecraft.block.BlockState;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.core.BlockPos;
 
 /**
  * Batched surface-rule dispatcher.
@@ -200,25 +200,25 @@ public final class SurfaceDispatcher {
 		// Step 2: batched write path. Replaces per-write
 		// ProtoChunk.setBlockState (which fires Heightmap.trackUpdate per
 		// write × 2 types = ~32K calls/chunk during SURFACE phase) with
-		// raw ChunkSection.setBlockState + per-column heightmap batch
+		// raw LevelChunkSection.setBlockState + per-column heightmap batch
 		// (~512 trackUpdate calls/chunk). Validated bit-identical against
 		// per-write trackUpdate across 21,012 chunks (commit e4e7a41 +
 		// SurfaceHeightmapValidator).
 		//
 		// Three relevant observations from the source audit:
-		//   - SurfaceBuilder.buildSurface's redirect target returns null
+		//   - SurfaceRules.buildSurface's redirect target returns null
 		//     in batch mode; vanilla's setBlockState is therefore never
 		//     called for any enqueued position. flushChunk's writes are
 		//     the *only* writes for these positions.
 		//   - During SURFACE phase, status < INITIALIZE_LIGHT, so
 		//     ProtoChunk.setBlockState's lighting branch is dead — safe
-		//     to skip by going straight to ChunkSection.
+		//     to skip by going straight to LevelChunkSection.
 		//   - Surface rule writes are predicate-preserving (always non-
 		//     air, always suffocating), so per-column trackUpdate at the
 		//     highest changed Y produces bit-identical heightmap state
 		//     to per-write trackUpdate.
 
-		net.minecraft.world.chunk.Chunk c = (net.minecraft.world.chunk.Chunk) st.protoChunk;
+		net.minecraft.world.level.chunk.Chunk c = (net.minecraft.world.level.chunk.Chunk) st.protoChunk;
 
 		// Heightmap parity validator (Step 1 — kept as regression check).
 		// When ON, snapshot pre-flush heightmaps and record per-write
@@ -229,8 +229,8 @@ public final class SurfaceDispatcher {
 		long[] preWSWG = null;
 		long[] preOFWG = null;
 		if (validating) {
-			preWSWG = SurfaceHeightmapValidator.snapshot(c, net.minecraft.world.Heightmap.Type.WORLD_SURFACE_WG);
-			preOFWG = SurfaceHeightmapValidator.snapshot(c, net.minecraft.world.Heightmap.Type.OCEAN_FLOOR_WG);
+			preWSWG = SurfaceHeightmapValidator.snapshot(c, net.minecraft.world.level.levelgen.Heightmap.Type.WORLD_SURFACE_WG);
+			preOFWG = SurfaceHeightmapValidator.snapshot(c, net.minecraft.world.level.levelgen.Heightmap.Type.OCEAN_FLOOR_WG);
 			if (st.writtenStates == null) {
 				st.writtenStates = new BlockState[CAPACITY];
 			}
@@ -242,20 +242,20 @@ public final class SurfaceDispatcher {
 		// have populated both, so this is normally a no-op (2 cheap
 		// hasHeightmap calls). Required for safety when the first surface
 		// write would have triggered creation in vanilla.
-		java.util.EnumSet<net.minecraft.world.Heightmap.Type> missingTypes = null;
-		if (!c.hasHeightmap(net.minecraft.world.Heightmap.Type.WORLD_SURFACE_WG)) {
-			missingTypes = java.util.EnumSet.of(net.minecraft.world.Heightmap.Type.WORLD_SURFACE_WG);
+		java.util.EnumSet<net.minecraft.world.level.levelgen.Heightmap.Type> missingTypes = null;
+		if (!c.hasHeightmap(net.minecraft.world.level.levelgen.Heightmap.Type.WORLD_SURFACE_WG)) {
+			missingTypes = java.util.EnumSet.of(net.minecraft.world.level.levelgen.Heightmap.Type.WORLD_SURFACE_WG);
 		}
-		if (!c.hasHeightmap(net.minecraft.world.Heightmap.Type.OCEAN_FLOOR_WG)) {
-			if (missingTypes == null) missingTypes = java.util.EnumSet.noneOf(net.minecraft.world.Heightmap.Type.class);
-			missingTypes.add(net.minecraft.world.Heightmap.Type.OCEAN_FLOOR_WG);
+		if (!c.hasHeightmap(net.minecraft.world.level.levelgen.Heightmap.Type.OCEAN_FLOOR_WG)) {
+			if (missingTypes == null) missingTypes = java.util.EnumSet.noneOf(net.minecraft.world.level.levelgen.Heightmap.Type.class);
+			missingTypes.add(net.minecraft.world.level.levelgen.Heightmap.Type.OCEAN_FLOOR_WG);
 		}
-		if (missingTypes != null) net.minecraft.world.Heightmap.populateHeightmaps(c, missingTypes);
+		if (missingTypes != null) net.minecraft.world.level.levelgen.Heightmap.populateHeightmaps(c, missingTypes);
 
-		net.minecraft.world.Heightmap hmWS = c.getHeightmap(net.minecraft.world.Heightmap.Type.WORLD_SURFACE_WG);
-		net.minecraft.world.Heightmap hmOF = c.getHeightmap(net.minecraft.world.Heightmap.Type.OCEAN_FLOOR_WG);
+		net.minecraft.world.level.levelgen.Heightmap hmWS = c.getHeightmap(net.minecraft.world.level.levelgen.Heightmap.Type.WORLD_SURFACE_WG);
+		net.minecraft.world.level.levelgen.Heightmap hmOF = c.getHeightmap(net.minecraft.world.level.levelgen.Heightmap.Type.OCEAN_FLOOR_WG);
 
-		net.minecraft.world.chunk.ChunkSection[] sections = c.getSectionArray();
+		net.minecraft.world.level.chunk.LevelChunkSection[] sections = c.getSectionArray();
 
 		// Per-column reduction: highest Y written and the state at that Y.
 		// Index = (localX << 4) | localZ; 256 columns max.
@@ -271,7 +271,7 @@ public final class SurfaceDispatcher {
 			int wx = st.xs[i], wy = st.ys[i], wz = st.zs[i];
 			if (c.isOutOfHeightLimit(wy)) continue; // matches vanilla's early return
 
-			net.minecraft.world.chunk.ChunkSection section = sections[c.getSectionIndex(wy)];
+			net.minecraft.world.level.chunk.LevelChunkSection section = sections[c.getSectionIndex(wy)];
 			int localX = wx & 15;
 			int localY = wy & 15;
 			int localZ = wz & 15;

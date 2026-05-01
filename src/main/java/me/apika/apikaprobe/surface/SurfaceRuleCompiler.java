@@ -3,7 +3,7 @@ package me.apika.apikaprobe.surface;
 import java.io.ByteArrayOutputStream;
 
 /**
- * Walks a vanilla {@code MaterialRules} tree (rooted at a
+ * Walks a vanilla {@code SurfaceRules} tree (rooted at a
  * {@code MaterialRule} or {@code MaterialCondition}) and emits a flat
  * opcode stream defined by {@link RuleBytecode}.
  *
@@ -38,7 +38,7 @@ public final class SurfaceRuleCompiler {
 	private final java.util.List<Integer> blockIdOffsets = new java.util.ArrayList<>();
 	private final java.util.List<Integer> biomeIdOffsets = new java.util.ArrayList<>();
 	private final java.util.List<Integer> noiseIdOffsets = new java.util.ArrayList<>();
-	/** Random-name pool: insertion-order map of random_name string → id.
+	/** RandomSource-name pool: insertion-order map of random_name string → id.
 	 *  Populated by VerticalGradient nodes; consumed by the validator and
 	 *  Rust port to look up per-block PRNG factories at runtime. */
 	private final java.util.LinkedHashMap<String, Integer> randomNamePool = new java.util.LinkedHashMap<>();
@@ -92,7 +92,7 @@ public final class SurfaceRuleCompiler {
 	}
 
 	/**
-	 * Intern a random_name Identifier (or its string form) into the pool.
+	 * Intern a random_name ResourceLocation (or its string form) into the pool.
 	 * Returns the stable index used by OP_VERT_GRADIENT operands.
 	 * Idempotent — repeated names get the same id.
 	 */
@@ -295,7 +295,7 @@ public final class SurfaceRuleCompiler {
 
 	/**
 	 * Read the {@code randomName} field from a VerticalGradientMaterialCondition
-	 * node and stringify the resulting Identifier. Falls back to the empty
+	 * node and stringify the resulting ResourceLocation. Falls back to the empty
 	 * string if the field can't be read; the validator's splitter cache will
 	 * then produce a null sampler for that index and the evaluator falls back
 	 * to the midpoint behavior for that one rule.
@@ -303,8 +303,8 @@ public final class SurfaceRuleCompiler {
 	private static String readRandomName(Object node) {
 		Object id = readField(node, "randomName");
 		if (id == null) return "";
-		// Identifier.toString() returns "namespace:path" — same format the
-		// validator passes to Identifier.of() at runtime.
+		// ResourceLocation.toString() returns "namespace:path" — same format the
+		// validator passes to ResourceLocation.of() at runtime.
 		return id.toString();
 	}
 
@@ -354,7 +354,7 @@ public final class SurfaceRuleCompiler {
 	}
 
 	private static boolean readBoolField(Object node, String name, boolean dflt) {
-		// Try the record-component accessor first. Vanilla MaterialRules
+		// Try the record-component accessor first. Vanilla SurfaceRules
 		// nodes are private static records (e.g. StoneDepthCheck); yarn
 		// renames the auto-generated zero-arg accessor methods (`addSurfaceDepth()`)
 		// even when the underlying record-component field stays at its
@@ -425,7 +425,7 @@ public final class SurfaceRuleCompiler {
 	}
 
 	/**
-	 * Extract the noise reference (RegistryKey or similar) from a
+	 * Extract the noise reference (ResourceKey or similar) from a
 	 * {@code NoiseThresholdMaterialCondition}. Vanilla yarn typically
 	 * names this field {@code noise}.
 	 */
@@ -447,7 +447,7 @@ public final class SurfaceRuleCompiler {
 	/**
 	 * Extract the biome collection from a {@code BiomeMaterialCondition}.
 	 * Vanilla yarn typically names this {@code biomes} (a
-	 * {@code RegistryEntryList<Biome>} or {@code Set<RegistryKey<Biome>>}).
+	 * {@code RegistryEntryList<Biome>} or {@code Set<ResourceKey<Biome>>}).
 	 * The caller hands the result to {@link BiomeSetPool#canonicalKey},
 	 * which handles whatever shape it actually has.
 	 */
@@ -726,7 +726,7 @@ public final class SurfaceRuleCompiler {
 	/**
 	 * Best-effort recursion: walks the node's declared fields and
 	 * recurses into anything whose class lives in the
-	 * {@code MaterialRules} package. This is enough for the spike —
+	 * {@code SurfaceRules} package. This is enough for the spike —
 	 * opcode count + fallback verdict only depend on which node types
 	 * we encountered, not on operand layout.
 	 */

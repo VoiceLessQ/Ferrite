@@ -7,12 +7,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.MonsterPhaseMonitor;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
 
 /**
  * Times Entity.baseTick for mobs only. Entity.baseTick fires for every
- * entity; guard with instanceof MobEntity so items, projectiles, etc.
+ * entity; guard with instanceof Mob so items, projectiles, etc.
  * don't pollute the sample.
  */
 @Mixin(Entity.class)
@@ -20,7 +20,7 @@ public abstract class MonsterBaseTickMixin {
 
 	@Inject(method = "baseTick()V", at = @At("HEAD"))
 	private void ferrite$onBaseTickBegin(CallbackInfo ci) {
-		if (!((Object) this instanceof MobEntity)) {
+		if (!((Object) this instanceof Mob)) {
 			return;
 		}
 		MonsterPhaseMonitor.onBaseTickBegin();
@@ -28,7 +28,7 @@ public abstract class MonsterBaseTickMixin {
 
 	@Inject(method = "baseTick()V", at = @At("RETURN"))
 	private void ferrite$onBaseTickEnd(CallbackInfo ci) {
-		if (!((Object) this instanceof MobEntity)) {
+		if (!((Object) this instanceof Mob)) {
 			return;
 		}
 		MonsterPhaseMonitor.onBaseTickEnd();

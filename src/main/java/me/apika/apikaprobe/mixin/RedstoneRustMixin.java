@@ -7,17 +7,17 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import me.apika.apikaprobe.redstone.RedstoneHandoff;
 import me.apika.apikaprobe.redstone.RedstoneRustDispatcher;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.block.RedstoneWireBlock;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.RedstoneController;
-import net.minecraft.world.World;
-import net.minecraft.world.block.WireOrientation;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.redstone.RedstoneWireEvaluator;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.redstone.Orientation;
 
 /**
  * A/B switch: redirects the {@code this.redstoneController.update(...)}
- * call inside RedstoneWireBlock's private dispatcher (line 275 in yarn
+ * call inside RedStoneWireBlock's private dispatcher (line 275 in yarn
  * 1.21.11) to [RedstoneRustDispatcher].
  *
  * Why @Redirect instead of @Inject(HEAD, cancellable=true):
@@ -48,24 +48,24 @@ import net.minecraft.world.block.WireOrientation;
  * vanilla's own explosive cascade doesn't fire because nothing is
  * changing.
  */
-@Mixin(RedstoneWireBlock.class)
+@Mixin(RedStoneWireBlock.class)
 public abstract class RedstoneRustMixin {
 
 	@Redirect(
-		method = "update(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;Lnet/minecraft/world/block/WireOrientation;Z)V",
+		method = "update(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.BlockState;Lnet.minecraft.world.level.redstone.Orientation;Z)V",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/world/RedstoneController;update(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;Lnet/minecraft/world/block/WireOrientation;Z)V"
+			target = "Lnet.minecraft.world.level.redstone.RedstoneWireEvaluator;update(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.BlockState;Lnet.minecraft.world.level.redstone.Orientation;Z)V"
 		)
 	)
 	private void apikaprobe$redirectControllerUpdate(
-			RedstoneController controller,
-			World world, BlockPos pos, BlockState state, WireOrientation orientation, boolean blockAdded) {
+			RedstoneWireEvaluator controller,
+			Level world, BlockPos pos, BlockState state, Orientation orientation, boolean blockAdded) {
 		if (!RedstoneHandoff.USE_RUST || world.isClient() || RedstoneRustDispatcher.isActive()) {
 			controller.update(world, pos, state, orientation, blockAdded);
 			return;
 		}
-		if (!RedstoneRustDispatcher.runBfsAndApply((ServerWorld) world, pos)) {
+		if (!RedstoneRustDispatcher.runBfsAndApply((ServerLevel) world, pos)) {
 			// Rust bailed (overflow / native missing) — fall back so the
 			// wire still gets updated.
 			controller.update(world, pos, state, orientation, blockAdded);

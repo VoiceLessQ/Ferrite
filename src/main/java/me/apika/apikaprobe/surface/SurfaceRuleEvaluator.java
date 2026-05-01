@@ -42,11 +42,11 @@ public final class SurfaceRuleEvaluator {
 
 	/**
 	 * Per-block PRNG sampler for OP_VERT_GRADIENT. Mirrors vanilla's
-	 * {@code RandomSplitter.split(x, y, z).nextFloat()} call.
+	 * {@code PositionalRandomFactory.split(x, y, z).nextFloat()} call.
 	 *
 	 * <p>The validator builds an instance backed by reflective calls to
-	 * {@code NoiseConfig.getOrCreateRandomDeriver(Identifier)} →
-	 * {@code RandomSplitter.split(x, y, z)} → {@code Random.nextFloat()}.
+	 * {@code RandomState.getOrCreateRandomDeriver(ResourceLocation)} →
+	 * {@code PositionalRandomFactory.split(x, y, z)} → {@code RandomSource.nextFloat()}.
 	 * Self-tests pass {@code null}, which falls back to the midpoint
 	 * approximation that the spike originally shipped with — preserves
 	 * existing test expectations.
@@ -324,7 +324,7 @@ public final class SurfaceRuleEvaluator {
 		try {
 			Object block = o.getClass().getMethod("getBlock").invoke(o);
 			if (block != null) {
-				Class<?> reg = Class.forName("net.minecraft.registry.Registries");
+				Class<?> reg = Class.forName("net.minecraft.core.registries.BuiltInRegistries");
 				Object br = reg.getField("BLOCK").get(null);
 				for (java.lang.reflect.Method m : br.getClass().getMethods()) {
 					if (m.getName().equals("getId") && m.getParameterCount() == 1) {
@@ -348,7 +348,7 @@ public final class SurfaceRuleEvaluator {
 	 * to get the real per-block PRNG behavior vanilla uses for bedrock floor
 	 * and deepslate transition rules. Pass null to get the spike's midpoint
 	 * approximation (preserved for self-tests and any caller that doesn't
-	 * have access to a {@code NoiseConfig}).
+	 * have access to a {@code RandomState}).
 	 */
 	public static Object evaluate(CompiledRuleTree tree, ColumnContext ctx, VerticalGradientSampler sampler) {
 		// Don't short-circuit on tree.hasFallback() — that flag is for the
@@ -463,7 +463,7 @@ public final class SurfaceRuleEvaluator {
 					//   depth = surfaceType==CEILING ? stoneDepthBelow : stoneDepthAbove
 					//   addSurface = addSurfaceDepth ? runDepth : 0
 					//   secondaryAdjust = secondaryDepthRange == 0 ? 0
-					//     : (int)MathHelper.map(secondaryDepth, -1.0, 1.0, 0.0, secondaryDepthRange)
+					//     : (int)Mth.map(secondaryDepth, -1.0, 1.0, 0.0, secondaryDepthRange)
 					//   return depth <= 1 + offset + addSurface + secondaryAdjust
 					int offset = readIntLE(bc, ip); ip += 4;
 					int addSurfaceDepth = bc[ip++] & 0xFF;
@@ -479,7 +479,7 @@ public final class SurfaceRuleEvaluator {
 					if (secondaryDepthRange == 0) {
 						secondaryAdjust = 0;
 					} else {
-						// MathHelper.map(v, -1, 1, 0, R) = (v + 1) * R / 2
+						// Mth.map(v, -1, 1, 0, R) = (v + 1) * R / 2
 						double mapped = (ctx.secondaryDepth() + 1.0) * secondaryDepthRange / 2.0;
 						secondaryAdjust = (int) mapped;
 					}

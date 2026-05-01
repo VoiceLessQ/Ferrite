@@ -1,13 +1,13 @@
 package me.apika.apikaprobe.surface;
 
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.server.level.ServerLevel;
 
 /**
  * Best-effort extractor for the active world's surface rule tree.
  *
  * The path is:
- *   ServerWorld → ChunkManager → ChunkGenerator → (NoiseChunkGenerator)
- *     → settings (RegistryEntry&lt;ChunkGeneratorSettings&gt;)
+ *   ServerLevel → ChunkManager → ChunkGenerator → (NoiseBasedChunkGenerator)
+ *     → settings (Holder&lt;ChunkGeneratorSettings&gt;)
  *     → value().surfaceRule()
  *
  * The last two hops use reflection because {@code surfaceRule()} is a
@@ -26,7 +26,7 @@ public final class SurfaceRuleAccess {
 		public static Result fail(String msg) { return new Result(null, null, msg); }
 	}
 
-	public static Result extract(ServerWorld world) {
+	public static Result extract(ServerLevel world) {
 		if (world == null) return Result.fail("world is null");
 		Object generator;
 		try {
@@ -38,13 +38,13 @@ public final class SurfaceRuleAccess {
 
 		String genClass = generator.getClass().getName();
 
-		// Walk up the class hierarchy looking for a NoiseChunkGenerator
+		// Walk up the class hierarchy looking for a NoiseBasedChunkGenerator
 		// (or anything with a 'settings' field of registry-entry type).
 		Object settingsValue = readSettingsValue(generator);
 		if (settingsValue == null) {
 			return Result.fail("active generator (" + genClass
 				+ ") has no resolvable 'settings' field — surface rule extraction"
-				+ " currently only supports NoiseChunkGenerator-shaped generators");
+				+ " currently only supports NoiseBasedChunkGenerator-shaped generators");
 		}
 
 		Object rule = readSurfaceRule(settingsValue);
@@ -66,7 +66,7 @@ public final class SurfaceRuleAccess {
 					f.setAccessible(true);
 					Object raw = f.get(generator);
 					if (raw == null) return null;
-					// Could be a RegistryEntry<ChunkGeneratorSettings>; unwrap via .value().
+					// Could be a Holder<ChunkGeneratorSettings>; unwrap via .value().
 					return tryUnwrapRegistryEntry(raw);
 				} catch (ReflectiveOperationException | RuntimeException e) {
 					return null;

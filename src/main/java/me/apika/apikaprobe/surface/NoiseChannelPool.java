@@ -62,9 +62,9 @@ public final class NoiseChannelPool {
 	public int size() { return idToChannel.length; }
 
 	/**
-	 * Resolve a noise reference (RegistryKey or bare Identifier or
+	 * Resolve a noise reference (ResourceKey or bare ResourceLocation or
 	 * String) to its registry-name string. Tries getValue() first
-	 * (RegistryKey path), falls back to toString.
+	 * (ResourceKey path), falls back to toString.
 	 */
 	public static String resolveName(Object noiseRef) {
 		if (noiseRef == null) return "";
@@ -73,7 +73,7 @@ public final class NoiseChannelPool {
 			Object v = m.invoke(noiseRef);
 			if (v != null) return v.toString();
 		} catch (NoSuchMethodException ignored) {
-			// not a RegistryKey
+			// not a ResourceKey
 		} catch (ReflectiveOperationException | RuntimeException ignored) {
 			// fall through
 		}

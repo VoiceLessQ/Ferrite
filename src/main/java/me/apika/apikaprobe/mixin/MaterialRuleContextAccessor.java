@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 /**
  * Exposes package-private fields on
- * {@code MaterialRules$MaterialRuleContext} as direct getters so
+ * {@code SurfaceRules$MaterialRuleContext} as direct getters so
  * {@link me.apika.apikaprobe.surface.SurfaceValidator}'s per-position
  * dispatch path can read them via a typed cast — no MethodHandle, no
  * reflection.
@@ -19,7 +19,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
  * {@code runDepth} fires only on the column-first miss but is included
  * for symmetry with the existing reflective fallback.
  */
-@Mixin(targets = "net.minecraft.world.gen.surfacebuilder.MaterialRules$MaterialRuleContext")
+@Mixin(targets = "net.minecraft.world.level.levelgen.SurfaceRules$MaterialRuleContext")
 public interface MaterialRuleContextAccessor {
 	@Accessor("runDepth")
 	int ferrite$getRunDepth();

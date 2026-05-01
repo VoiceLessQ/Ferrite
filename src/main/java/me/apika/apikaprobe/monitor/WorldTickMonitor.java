@@ -10,10 +10,10 @@ import org.slf4j.LoggerFactory;
 /**
  * Server-side tick-cost monitor.
  *
- *   blockentities : time inside World.tickBlockEntities (called once per
+ *   blockentities : time inside Level.tickBlockEntities (called once per
  *                   world tick, iterates internally). Measured per-call,
  *                   one sample per tick.
- *   entities      : time inside ServerWorld.tickEntity (called per entity
+ *   entities      : time inside ServerLevel.tickEntity (called per entity
  *                   per tick). Individual call durations are summed into
  *                   a per-tick running total, pushed to the window at
  *                   END_SERVER_TICK so the reported "entities" average is

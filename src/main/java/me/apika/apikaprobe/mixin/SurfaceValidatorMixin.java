@@ -7,24 +7,24 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.gen.HeightContext;
-import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
-import net.minecraft.world.gen.noise.NoiseConfig;
-import net.minecraft.world.gen.surfacebuilder.MaterialRules;
-import net.minecraft.world.biome.source.BiomeAccess;
-import net.minecraft.registry.Registry;
-import net.minecraft.world.biome.Biome;
+import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.levelgen.WorldGenerationContext;
+import net.minecraft.world.level.levelgen.NoiseChunk;
+import net.minecraft.world.level.levelgen.RandomState;
+import net.minecraft.world.level.levelgen.SurfaceRules;
+import net.minecraft.world.level.biome.BiomeManager;
+import net.minecraft.core.registries.Registry;
+import net.minecraft.world.level.biome.Biome;
 
 import me.apika.apikaprobe.surface.SurfaceDispatcher;
 import me.apika.apikaprobe.surface.SurfaceValidator;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.world.gen.surfacebuilder.SurfaceBuilder;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.levelgen.SurfaceRules;
 
 /**
  * Redirects the per-column-Y {@code tryApply} call inside
- * {@code SurfaceBuilder.buildSurface} so that, when the validator is
+ * {@code SurfaceRules.buildSurface} so that, when the validator is
  * enabled (a compiled tree is installed), every result can be diffed
  * against the bytecode evaluator.
  *
@@ -40,7 +40,7 @@ import net.minecraft.world.gen.surfacebuilder.SurfaceBuilder;
  * does it do reflection work. With sampling at 1-in-1000, overhead
  * is essentially zero on disabled and ~negligible on enabled.
  */
-@Mixin(SurfaceBuilder.class)
+@Mixin(SurfaceRules.class)
 public abstract class SurfaceValidatorMixin {
 
 	/**
@@ -57,10 +57,10 @@ public abstract class SurfaceValidatorMixin {
 	 */
 	@Inject(method = "buildSurface", at = @At("HEAD"))
 	private void ferrite$dispatchBegin(
-			NoiseConfig noiseConfig, BiomeAccess biomeAccess, Registry<Biome> biomeRegistry,
-			boolean useLegacyRandom, HeightContext heightContext,
-			Chunk protoChunk, ChunkNoiseSampler chunkNoiseSampler,
-			MaterialRules.MaterialRule ruleSource,
+			RandomState noiseConfig, BiomeManager biomeAccess, Registry<Biome> biomeRegistry,
+			boolean useLegacyRandom, WorldGenerationContext heightContext,
+			Chunk protoChunk, NoiseChunk chunkNoiseSampler,
+			SurfaceRules.MaterialRule ruleSource,
 			CallbackInfo ci) {
 		SurfaceDispatcher.beginChunk(protoChunk);
 	}
@@ -73,10 +73,10 @@ public abstract class SurfaceValidatorMixin {
 	 */
 	@Inject(method = "buildSurface", at = @At("RETURN"))
 	private void ferrite$dispatchEnd(
-			NoiseConfig noiseConfig, BiomeAccess biomeAccess, Registry<Biome> biomeRegistry,
-			boolean useLegacyRandom, HeightContext heightContext,
-			Chunk protoChunk, ChunkNoiseSampler chunkNoiseSampler,
-			MaterialRules.MaterialRule ruleSource,
+			RandomState noiseConfig, BiomeManager biomeAccess, Registry<Biome> biomeRegistry,
+			boolean useLegacyRandom, WorldGenerationContext heightContext,
+			Chunk protoChunk, NoiseChunk chunkNoiseSampler,
+			SurfaceRules.MaterialRule ruleSource,
 			CallbackInfo ci) {
 		SurfaceDispatcher.flushChunk();
 	}
@@ -85,7 +85,7 @@ public abstract class SurfaceValidatorMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/world/gen/surfacebuilder/MaterialRules$BlockStateRule;tryApply(III)Lnet/minecraft/block/BlockState;"
+			target = "Lnet.minecraft.world.level.levelgen.SurfaceRules$BlockStateRule;tryApply(III)Lnet.minecraft.world.level.block.BlockState;"
 		)
 	)
 	private BlockState ferrite$validateTryApply(@Coerce Object rule, int x, int y, int z) {
@@ -121,7 +121,7 @@ public abstract class SurfaceValidatorMixin {
 			return invokeTryApply(rule, x, y, z);
 		}
 
-		// rule is MaterialRules$BlockStateRule (package-private interface).
+		// rule is SurfaceRules$BlockStateRule (package-private interface).
 		// Invoke tryApply via reflection — single virtual dispatch is cheap
 		// and avoids needing an access widener for a one-off mixin.
 		BlockState vanilla = invokeTryApply(rule, x, y, z);
@@ -141,7 +141,7 @@ public abstract class SurfaceValidatorMixin {
 	/**
 	 * Capture the MaterialRuleContext receiver + vertical-state args
 	 * just before tryApply fires for this column-Y position. The context
-	 * is a local in buildSurface (not a field on SurfaceBuilder), so
+	 * is a local in buildSurface (not a field on SurfaceRules), so
 	 * this redirect is the only stable way to grab it without an access
 	 * widener.
 	 */
@@ -149,7 +149,7 @@ public abstract class SurfaceValidatorMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/world/gen/surfacebuilder/MaterialRules$MaterialRuleContext;initVerticalContext(IIIIII)V"
+			target = "Lnet.minecraft.world.level.levelgen.SurfaceRules$MaterialRuleContext;initVerticalContext(IIIIII)V"
 		)
 	)
 	private void ferrite$captureContext(@Coerce Object ctx,

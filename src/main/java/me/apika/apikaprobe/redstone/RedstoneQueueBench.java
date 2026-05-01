@@ -2,7 +2,7 @@ package me.apika.apikaprobe.redstone;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.Random;
+import java.util.RandomSource;
 
 import me.apika.apikaprobe.RustBridge;
 
@@ -35,7 +35,7 @@ public final class RedstoneQueueBench {
 
 	public static Result run(int n, int iterations, int warmup) {
 		// Deterministic test data so both paths see identical input.
-		Random rng = new Random(0xFE11171EL);
+		RandomSource rng = new RandomSource(0xFE11171EL);
 		int[] ids = new int[n];
 		byte[] priorities = new byte[n];
 		for (int i = 0; i < n; i++) {

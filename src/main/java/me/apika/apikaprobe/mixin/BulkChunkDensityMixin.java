@@ -9,8 +9,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.lang.reflect.Method;
 
-import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
-import net.minecraft.world.gen.densityfunction.DensityFunction;
+import net.minecraft.world.level.levelgen.NoiseChunk;
+import net.minecraft.world.level.levelgen.DensityFunction;
 
 import me.apika.apikaprobe.worldgen.BulkChunkDensityFill;
 import me.apika.apikaprobe.worldgen.DensityFunctionWalker;
@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * the dirty FlatCache substitution); each runs HEAD cancellable but
  * only fires for its own pattern.
  */
-@Mixin(ChunkNoiseSampler.class)
+@Mixin(NoiseChunk.class)
 public abstract class BulkChunkDensityMixin {
 
 	private static final AtomicBoolean firstFireLogged = new AtomicBoolean();

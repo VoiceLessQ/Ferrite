@@ -10,14 +10,14 @@ import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registry;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ChunkTicketType;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.TicketType;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.world.level.ChunkPos;
 
 /**
  * Movement-predictive chunk pre-generation.
@@ -54,7 +54,7 @@ public final class PreChunkDispatcher {
 	private static final int VIEW_DISTANCE_MARGIN = 16;
 	private static final double MIN_SPEED = 0.05;
 
-	private static ChunkTicketType ticketType;
+	private static TicketType ticketType;
 
 	private static final Long2LongOpenHashMap LAST_SUBMIT = new Long2LongOpenHashMap();
 	private static final HashMap<UUID, double[]> LAST_POS = new HashMap<>();
@@ -63,9 +63,9 @@ public final class PreChunkDispatcher {
 
 	public static void register() {
 		ticketType = Registry.register(
-				Registries.TICKET_TYPE,
-				Identifier.of(ExampleMod.MOD_ID, "prechunk"),
-				new ChunkTicketType(80L, ChunkTicketType.FOR_LOADING));
+				BuiltInRegistries.TICKET_TYPE,
+				ResourceLocation.of(ExampleMod.MOD_ID, "prechunk"),
+				new TicketType(80L, TicketType.FOR_LOADING));
 		ServerTickEvents.END_SERVER_TICK.register(PreChunkDispatcher::onTick);
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
 				LAST_POS.remove(handler.getPlayer().getUuid()));
@@ -83,8 +83,8 @@ public final class PreChunkDispatcher {
 		double targetBlocks = (viewDistance + VIEW_DISTANCE_MARGIN) * 16.0;
 		PreChunkMonitor.recordViewDistance(viewDistance);
 
-		for (ServerWorld world : server.getWorlds()) {
-			for (ServerPlayerEntity player : world.getPlayers()) {
+		for (ServerLevel world : server.getWorlds()) {
+			for (ServerPlayer player : world.getPlayers()) {
 				if (budget <= 0) return;
 				ChunkPos target = predict(player, targetBlocks);
 				if (target == null) continue;
@@ -112,7 +112,7 @@ public final class PreChunkDispatcher {
 		}
 	}
 
-	private static ChunkPos predict(ServerPlayerEntity player, double targetBlocks) {
+	private static ChunkPos predict(ServerPlayer player, double targetBlocks) {
 		UUID id = player.getUuid();
 		double cx = player.getX();
 		double cz = player.getZ();
@@ -131,7 +131,7 @@ public final class PreChunkDispatcher {
 		return new ChunkPos(((int) Math.floor(x)) >> 4, ((int) Math.floor(z)) >> 4);
 	}
 
-	private static void submit(ServerWorld world, ChunkPos pos, long submitTick) {
+	private static void submit(ServerLevel world, ChunkPos pos, long submitTick) {
 		PreChunkMonitor.onSubmit();
 		world.getChunkManager()
 				.addChunkLoadingTicket(ticketType, pos, RADIUS)

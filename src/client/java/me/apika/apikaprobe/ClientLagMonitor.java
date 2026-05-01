@@ -5,8 +5,8 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.world.ClientWorld;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.world.ClientLevel;
 
 /**
  * Client-side lag diagnostic. Runs on the client thread (single-threaded
@@ -20,10 +20,10 @@ import net.minecraft.client.world.ClientWorld;
  *   avg >= 30  →  WARN
  *   avg <  30  →  LAG
  *
- * Entity count via ClientWorld.getRegularEntityCount() (method_18120).
- * Chunk count via World.getChunkManager().getLoadedChunkCount()
+ * Entity count via ClientLevel.getRegularEntityCount() (method_18120).
+ * Chunk count via Level.getChunkManager().getLoadedChunkCount()
  * (inherited from ChunkManager, method_14151).
- * FPS via MinecraftClient.getCurrentFps() (method_47599) — same number
+ * FPS via Minecraft.getCurrentFps() (method_47599) — same number
  * the F3 overlay displays.
  */
 public final class ClientLagMonitor {
@@ -45,8 +45,8 @@ public final class ClientLagMonitor {
 		ClientTickEvents.END_CLIENT_TICK.register(ClientLagMonitor::onTick);
 	}
 
-	private static void onTick(MinecraftClient client) {
-		ClientWorld world = client.world;
+	private static void onTick(Minecraft client) {
+		ClientLevel world = client.world;
 		if (world == null) {
 			// Not in a world (main menu etc). Reset window so we don't log stale data
 			// once we enter a world.

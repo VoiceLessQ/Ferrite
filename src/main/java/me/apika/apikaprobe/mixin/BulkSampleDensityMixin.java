@@ -9,13 +9,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
 
-import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
+import net.minecraft.world.level.levelgen.NoiseChunk;
 
 import me.apika.apikaprobe.worldgen.BulkInterpolatorFill;
 
 /**
  * Phase 2.5 step 2b — bulk-fill the slice arrays in
- * {@link ChunkNoiseSampler#sampleDensity}. Cancels the per-z-row ×
+ * {@link NoiseChunk#sampleDensity}. Cancels the per-z-row ×
  * per-interpolator vanilla loop in favor of one Rust JNI call per
  * interpolator that fills all z-rows at once.
  *
@@ -28,11 +28,11 @@ import me.apika.apikaprobe.worldgen.BulkInterpolatorFill;
  * <p>The yarn target is {@code sampleDensity(boolean, int)} —
  * private method, called 9 times per chunk (1 start + 4 advances × 2).
  */
-@Mixin(ChunkNoiseSampler.class)
+@Mixin(NoiseChunk.class)
 public abstract class BulkSampleDensityMixin {
 
 	@Shadow @Final
-	private List<ChunkNoiseSampler.DensityInterpolator> interpolators;
+	private List<NoiseChunk.DensityInterpolator> interpolators;
 
 	@Shadow @Final
 	int horizontalCellBlockCount;

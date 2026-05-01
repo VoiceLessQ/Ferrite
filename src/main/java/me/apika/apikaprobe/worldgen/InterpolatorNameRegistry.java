@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Phase 2.5 step 2b — per-instance rustName side map for vanilla's
- * {@code ChunkNoiseSampler$DensityInterpolator} (and its sibling
+ * {@code NoiseChunk$DensityInterpolator} (and its sibling
  * cache wrappers). Populated by
  * {@link me.apika.apikaprobe.mixin.CacheRouteCaptureMixin} every time
  * a fingerprint match succeeds; consumed by the upcoming

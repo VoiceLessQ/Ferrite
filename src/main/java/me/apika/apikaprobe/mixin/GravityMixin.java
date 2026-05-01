@@ -7,8 +7,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.MovementInternalsMonitor;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
 
 /**
  * Times Entity.applyGravity() — the gravity term applied each tick.
@@ -19,7 +19,7 @@ public abstract class GravityMixin {
 
 	@Inject(method = "applyGravity()V", at = @At("HEAD"))
 	private void ferrite$onGravityBegin(CallbackInfo ci) {
-		if (!((Object) this instanceof MobEntity)) {
+		if (!((Object) this instanceof Mob)) {
 			return;
 		}
 		MovementInternalsMonitor.onGravityBegin();
@@ -27,7 +27,7 @@ public abstract class GravityMixin {
 
 	@Inject(method = "applyGravity()V", at = @At("RETURN"))
 	private void ferrite$onGravityEnd(CallbackInfo ci) {
-		if (!((Object) this instanceof MobEntity)) {
+		if (!((Object) this instanceof Mob)) {
 			return;
 		}
 		MovementInternalsMonitor.onGravityEnd();

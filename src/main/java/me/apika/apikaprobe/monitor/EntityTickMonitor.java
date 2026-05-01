@@ -7,9 +7,9 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.entity.SpawnGroup;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.ItemEntity;
+import net.minecraft.world.entity.MobCategory;
 
 /**
  * Buckets per-entity tick cost by category. Complements WorldTickMonitor
@@ -17,7 +17,7 @@ import net.minecraft.entity.SpawnGroup;
  * budget. Same 5-second window pattern as the other monitors.
  *
  * Categories:
- *   [0] MONSTER   — SpawnGroup.MONSTER
+ *   [0] MONSTER   — MobCategory.MONSTER
  *   [1] CREATURE  — CREATURE + AMBIENT + all water-group variants
  *   [2] ITEM      — instanceof ItemEntity (checked before spawn group —
  *                   items share the MISC spawn group with other things
@@ -91,21 +91,21 @@ public final class EntityTickMonitor {
 	}
 
 	private static int categorize(Entity entity) {
-		// Item check first — items live in SpawnGroup.MISC alongside unrelated
+		// Item check first — items live in MobCategory.MISC alongside unrelated
 		// things (falling blocks, projectiles). We want them bucketed separately.
 		if (entity instanceof ItemEntity) {
 			return CAT_ITEM;
 		}
-		SpawnGroup group = entity.getType().getSpawnGroup();
-		if (group == SpawnGroup.MONSTER) {
+		MobCategory group = entity.getType().getSpawnGroup();
+		if (group == MobCategory.MONSTER) {
 			return CAT_MONSTER;
 		}
-		if (group == SpawnGroup.CREATURE
-				|| group == SpawnGroup.AMBIENT
-				|| group == SpawnGroup.AXOLOTLS
-				|| group == SpawnGroup.WATER_CREATURE
-				|| group == SpawnGroup.WATER_AMBIENT
-				|| group == SpawnGroup.UNDERGROUND_WATER_CREATURE) {
+		if (group == MobCategory.CREATURE
+				|| group == MobCategory.AMBIENT
+				|| group == MobCategory.AXOLOTLS
+				|| group == MobCategory.WATER_CREATURE
+				|| group == MobCategory.WATER_AMBIENT
+				|| group == MobCategory.UNDERGROUND_WATER_CREATURE) {
 			return CAT_CREATURE;
 		}
 		return CAT_MISC;

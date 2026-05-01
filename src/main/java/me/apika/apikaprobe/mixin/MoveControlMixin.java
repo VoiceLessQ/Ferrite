@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.MoveControlMonitor;
 
-import net.minecraft.entity.ai.control.MoveControl;
+import net.minecraft.world.entity.ai.control.MoveControl;
 
 @Mixin(MoveControl.class)
 public abstract class MoveControlMixin {

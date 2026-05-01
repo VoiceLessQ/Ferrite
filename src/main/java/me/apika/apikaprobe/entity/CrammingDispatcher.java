@@ -8,17 +8,17 @@ import org.slf4j.LoggerFactory;
 
 import me.apika.apikaprobe.RustBridge;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.server.level.ServerLevel;
 
 /**
  * Batched mob-vs-mob cramming dispatcher.
  *
  * First LivingEntity.tickCramming() call within a given server tick
  * triggers the batch:
- *   1. Collect every MobEntity in the world.
+ *   1. Collect every Mob in the world.
  *   2. Fill CrammingHandoff.REQUEST_BUF with positions, AABBs, flags,
  *      and root vehicle ids.
  *   3. Native call → Rust runs the spatial hash push accumulator,
@@ -27,7 +27,7 @@ import net.minecraft.server.world.ServerWorld;
  *   4. Read accumulated (dx, dz) + neighborCount + crowdedCount.
  *   5. Apply each mob's velocity delta via entity.addVelocity(dx,0,dz).
  *   6. Apply cramming damage when crowdedCount &gt; maxEntityCramming − 1
- *      AND the per-entity Random fires the vanilla 1-in-4 check
+ *      AND the per-entity RandomSource fires the vanilla 1-in-4 check
  *      (entity.getRandom().nextInt(4) == 0). Mirrors vanilla
  *      LivingEntity.pushEntities (Yarn: tickCramming) bit-for-bit.
  *
@@ -74,7 +74,7 @@ public final class CrammingDispatcher {
 	 */
 	public static boolean onTickCramming(LivingEntity caller) {
 		if (!ENABLED || !RustBridge.NATIVE_AVAILABLE) return false;
-		if (!(caller.getEntityWorld() instanceof ServerWorld world)) return false;
+		if (!(caller.getEntityWorld() instanceof ServerLevel world)) return false;
 
 		long tick = world.getTime();
 		if (tick == lastProcessedTick) {
@@ -91,11 +91,11 @@ public final class CrammingDispatcher {
 	// Batch
 	// =========================================================================
 
-	private static void runBatch(ServerWorld world) {
+	private static void runBatch(ServerLevel world) {
 		// 1. Collect all eligible mobs in this world.
 		MOB_SCRATCH.clear();
 		for (Entity e : world.iterateEntities()) {
-			if (e instanceof MobEntity && e.isAlive() && !e.isRemoved()) {
+			if (e instanceof Mob && e.isAlive() && !e.isRemoved()) {
 				MOB_SCRATCH.add((LivingEntity) e);
 			}
 		}
@@ -126,7 +126,7 @@ public final class CrammingDispatcher {
 		//          if (count > maxCramming - 1) hurt(cramming, 6.0F);
 		//      }
 		//    Rust returns crowdedCount = the inner `count`. Per-entity
-		//    Random and the threshold check stay in Java so semantics are
+		//    RandomSource and the threshold check stay in Java so semantics are
 		//    bit-for-bit identical to vanilla (per-entity RNG state).
 		// Yarn 1.21.11: GameRules moved to net.minecraft.world.rule.GameRules
 		// and the typed getInt accessor is gone — only getValue(rule)→Object

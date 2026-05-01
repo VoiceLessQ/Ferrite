@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.entity.PhysicsDispatcher;
 
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.server.level.ServerLevel;
 
 /**
  * Fires once per world, per tick, just before entity iteration begins.
@@ -20,7 +20,7 @@ import net.minecraft.server.world.ServerWorld;
  * marker immediately before entityTickList.forEach(). Stable across
  * versions; only breaks if Mojang renames the profiler scope.
  */
-@Mixin(ServerWorld.class)
+@Mixin(ServerLevel.class)
 public abstract class PhysicsPreTickMixin {
 
 	@Inject(
@@ -28,6 +28,6 @@ public abstract class PhysicsPreTickMixin {
 		at = @At("HEAD")
 	)
 	private void ferrite$onPreEntityTick(BooleanSupplier shouldKeepTicking, CallbackInfo ci) {
-		PhysicsDispatcher.onPreEntityTick((ServerWorld) (Object) this);
+		PhysicsDispatcher.onPreEntityTick((ServerLevel) (Object) this);
 	}
 }

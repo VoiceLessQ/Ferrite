@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
  * Per-phase chunk-generation cost monitor.
  *
  * Tracks three separate phases:
- *   noise-dispatch : the public populateNoise(Blender, NoiseConfig, ...)
+ *   noise-dispatch : the public populateNoise(Blender, RandomState, ...)
  *                    which returns a CompletableFuture — only measures
  *                    future-creation overhead, not the real work.
  *   noise-sync     : the private populateNoise(... , int, int) called

@@ -7,16 +7,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.RedstonePhaseMonitor;
 
-import net.minecraft.block.AbstractRedstoneGateBlock;
-import net.minecraft.block.BlockState;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.random.Random;
+import net.minecraft.world.level.block.DiodeBlock;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.RandomSource;
 
 /**
  * Times every scheduledTick on repeaters and comparators.
  *
- * AbstractRedstoneGateBlock is the abstract parent of RepeaterBlock and
+ * DiodeBlock is the abstract parent of RepeaterBlock and
  * ComparatorBlock; mixing there catches both. Torches (RedstoneTorchBlock)
  * are intentionally out of scope for this pass — add later if gate data
  * shows signal.
@@ -24,29 +24,29 @@ import net.minecraft.util.math.random.Random;
  * No recursion concern: a gate's scheduledTick does not re-enter its own
  * scheduledTick within the same call stack. Straight HEAD/RETURN timing.
  *
- * Already server-thread only (ServerWorld parameter), no client filter
+ * Already server-thread only (ServerLevel parameter), no client filter
  * needed.
  */
-@Mixin(AbstractRedstoneGateBlock.class)
+@Mixin(DiodeBlock.class)
 public abstract class RedstoneGateMixin {
 
 	@Inject(
-		method = "scheduledTick(Lnet/minecraft/block/BlockState;Lnet/minecraft/server/world/ServerWorld;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/util/math/random/Random;)V",
+		method = "scheduledTick(Lnet.minecraft.world.level.block.BlockState;Lnet.minecraft.server.level.ServerLevel;Lnet.minecraft.core.BlockPos;Lnet.minecraft.util.RandomSource;)V",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onGateScheduledTickBegin(
-			BlockState state, ServerWorld world, BlockPos pos, Random random,
+			BlockState state, ServerLevel world, BlockPos pos, RandomSource random,
 			CallbackInfo ci) {
 		RedstonePhaseMonitor.onGateBegin();
 		RedstonePhaseMonitor.GATE_ACTIVE.get()[0] = true;
 	}
 
 	@Inject(
-		method = "scheduledTick(Lnet/minecraft/block/BlockState;Lnet/minecraft/server/world/ServerWorld;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/util/math/random/Random;)V",
+		method = "scheduledTick(Lnet.minecraft.world.level.block.BlockState;Lnet.minecraft.server.level.ServerLevel;Lnet.minecraft.core.BlockPos;Lnet.minecraft.util.RandomSource;)V",
 		at = @At("RETURN")
 	)
 	private void apikaprobe$onGateScheduledTickEnd(
-			BlockState state, ServerWorld world, BlockPos pos, Random random,
+			BlockState state, ServerLevel world, BlockPos pos, RandomSource random,
 			CallbackInfo ci) {
 		RedstonePhaseMonitor.GATE_ACTIVE.get()[0] = false;
 		RedstonePhaseMonitor.onGateEnd();

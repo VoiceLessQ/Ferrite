@@ -5,9 +5,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import me.apika.apikaprobe.bridge.ExampleMod;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.chunk.Chunk;
 
 /**
  * Heightmap parity regression check for the batched dispatcher path.
@@ -32,7 +32,7 @@ import net.minecraft.world.chunk.Chunk;
  * <li>Before the write loop fires, {@code flushChunk} captures
  *     pre-flush snapshots of {@code WORLD_SURFACE_WG} and
  *     {@code OCEAN_FLOOR_WG} via {@link #snapshot}.</li>
- * <li>The production Path B runs (raw {@code ChunkSection.setBlockState}
+ * <li>The production Path B runs (raw {@code LevelChunkSection.setBlockState}
  *     per write, then per-column {@code trackUpdate} at highest Y).</li>
  * <li>{@link #validate} captures the post-B heightmap arrays,
  *     temporarily restores the pre-flush snapshot, applies Path A

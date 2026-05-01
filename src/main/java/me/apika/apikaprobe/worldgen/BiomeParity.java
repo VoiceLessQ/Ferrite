@@ -5,7 +5,7 @@ import me.apika.apikaprobe.RustBridge;
 
 import java.lang.reflect.Method;
 import java.util.List;
-import java.util.Random;
+import java.util.RandomSource;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class BiomeParity {
 	private static final AtomicReference<Object> lastBiomeSource = new AtomicReference<>();
 	/** The {@code Climate.Sampler} for the live overworld (mojmap)
-	 *  / yarn `MultiNoiseUtil.MultiNoiseSampler`. Captured at world
+	 *  / yarn `Climate.MultiNoiseSampler`. Captured at world
 	 *  load, used by {@link #lookupBiomeAt} to sample climate at any
 	 *  block position — works for unloaded chunks because the sampler
 	 *  is a pure function of (quartX, quartY, quartZ). */
@@ -49,7 +49,7 @@ public final class BiomeParity {
 	}
 
 	/** Called by {@code WorldgenStateBootstrap} after it resolves the
-	 *  overworld's `Climate.Sampler` from the matching `NoiseConfig`. */
+	 *  overworld's `Climate.Sampler` from the matching `RandomState`. */
 	public static void captureClimateSampler(Object sampler) {
 		climateSampler.set(sampler);
 	}
@@ -143,7 +143,7 @@ public final class BiomeParity {
 		return null;
 	}
 
-	/** Yarn renames Climate.TargetPoint → MultiNoiseUtil.NoiseValuePoint —
+	/** Yarn renames Climate.TargetPoint → Climate.NoiseValuePoint —
 	 *  pull its 6 quantized record components via reflection. */
 	private static long[] readTargetPointLongs(Object targetPoint) {
 		if (targetPoint == null) return null;
@@ -162,19 +162,19 @@ public final class BiomeParity {
 	}
 
 	/**
-	 * Query vanilla's {@code ServerWorld.getBiome(BlockPos)} directly —
+	 * Query vanilla's {@code ServerLevel.getBiome(BlockPos)} directly —
 	 * no Rust, no reflection into the sampler, just whatever vanilla's
 	 * own biome-access layer reports. Used for independent verification
 	 * against {@link #lookupBiomeAt}; if the two disagree at any coord,
 	 * something drifted.
 	 *
-	 * <p>Works for unloaded chunks too because vanilla's BiomeAccess
+	 * <p>Works for unloaded chunks too because vanilla's BiomeManager
 	 * falls back to the biome source (same path chunk gen uses) for
 	 * positions whose chunk isn't loaded.
 	 */
-	public static String lookupActualBiomeAt(net.minecraft.server.world.ServerWorld world, int x, int y, int z) {
-		net.minecraft.util.math.BlockPos pos = new net.minecraft.util.math.BlockPos(x, y, z);
-		net.minecraft.registry.entry.RegistryEntry<net.minecraft.world.biome.Biome> entry = world.getBiome(pos);
+	public static String lookupActualBiomeAt(net.minecraft.server.level.ServerLevel world, int x, int y, int z) {
+		net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(x, y, z);
+		net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> entry = world.getBiome(pos);
 		return entry.getKey()
 				.map(k -> k.getValue().toString())
 				.orElse("unknown");
@@ -216,7 +216,7 @@ public final class BiomeParity {
 			return "[biome-parity] could not resolve MultiNoiseBiomeSource.getNoiseBiome(TargetPoint)";
 		}
 
-		Random rng = new Random(0xBEEFCAFEL);
+		RandomSource rng = new RandomSource(0xBEEFCAFEL);
 		int pass = 0;
 		int fail = 0;
 		int firstFailIdx = -1;
@@ -297,7 +297,7 @@ public final class BiomeParity {
 	private static Method findGetNoiseBiomeFromTarget(Object biomeSource) {
 		Class<?> targetPointCls;
 		try {
-			targetPointCls = Class.forName("net.minecraft.world.biome.source.util.MultiNoiseUtil$NoiseValuePoint");
+			targetPointCls = Class.forName("net.minecraft.world.level.biome.Climate$NoiseValuePoint");
 		} catch (ClassNotFoundException e) {
 			return scanOneArg(biomeSource, null);
 		}
@@ -329,14 +329,14 @@ public final class BiomeParity {
 	}
 
 	/**
-	 * Construct a yarn {@code MultiNoiseUtil.NoiseValuePoint} (vanilla
+	 * Construct a yarn {@code Climate.NoiseValuePoint} (vanilla
 	 * mojmap {@code Climate.TargetPoint}) from the 6 quantized longs.
 	 * Reflective because yarn's class name + ctor differ from mojmap's.
 	 */
 	private static Object newTargetPoint(long t, long h, long c, long e, long d, long w) {
-		// Yarn record class: MultiNoiseUtil$NoiseValuePoint(long t, long h, long c, long e, long d, long w)
+		// Yarn record class: Climate$NoiseValuePoint(long t, long h, long c, long e, long d, long w)
 		try {
-			Class<?> cls = Class.forName("net.minecraft.world.biome.source.util.MultiNoiseUtil$NoiseValuePoint");
+			Class<?> cls = Class.forName("net.minecraft.world.level.biome.Climate$NoiseValuePoint");
 			java.lang.reflect.Constructor<?> ctor = cls.getDeclaredConstructor(
 					long.class, long.class, long.class, long.class, long.class, long.class);
 			ctor.setAccessible(true);

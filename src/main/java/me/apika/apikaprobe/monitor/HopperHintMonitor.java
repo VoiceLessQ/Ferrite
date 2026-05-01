@@ -3,7 +3,7 @@ package me.apika.apikaprobe.monitor;
 import java.util.concurrent.atomic.AtomicLong;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

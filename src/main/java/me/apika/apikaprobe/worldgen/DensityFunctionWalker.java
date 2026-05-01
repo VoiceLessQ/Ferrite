@@ -191,7 +191,7 @@ public final class DensityFunctionWalker {
 		if (cls.contains("Clamp")) { encodeClamp(out, node); return; }
 		if (cls.contains("Spline")) { encodeSpline(out, node); return; }
 		if (cls.contains("Marker") || cls.contains("Wrapping")) { encodeMarker(out, node); return; }
-		// Cache wrapper classes — private inner classes of ChunkNoiseSampler
+		// Cache wrapper classes — private inner classes of NoiseChunk
 		// (yarn $FlatCache, $DensityInterpolator, $Cache2D, $CacheOnce,
 		// $CacheAllInCell). After mapAll(this::wrap) runs, inner Markers
 		// in any subtree have been replaced by these wrappers. We emit the
@@ -234,17 +234,17 @@ public final class DensityFunctionWalker {
 		writeUnknown(out, cls);
 	}
 
-	/** Map a {@link net.minecraft.world.gen.chunk.ChunkNoiseSampler} private
+	/** Map a {@link net.minecraft.world.level.levelgen.NoiseChunk} private
 	 *  cache-wrapper class simple name to its equivalent {@code MARKER_*}
 	 *  kind code. Returns -1 for non-wrappers. Yarn rotates the names
 	 *  occasionally; we accept both bare and inner-class ($-suffixed) forms.
 	 *
 	 *  <p>Yarn 1.21.11 names verified via the loom tiny mappings:
-	 *  - {@code ChunkNoiseSampler$FlatCache}
-	 *  - {@code ChunkNoiseSampler$DensityInterpolator} (mojmap: NoiseInterpolator)
-	 *  - {@code ChunkNoiseSampler$Cache2D}
-	 *  - {@code ChunkNoiseSampler$CacheOnce}
-	 *  - {@code ChunkNoiseSampler$CacheAllInCell}
+	 *  - {@code NoiseChunk$FlatCache}
+	 *  - {@code NoiseChunk$DensityInterpolator} (mojmap: NoiseInterpolator)
+	 *  - {@code NoiseChunk$Cache2D}
+	 *  - {@code NoiseChunk$CacheOnce}
+	 *  - {@code NoiseChunk$CacheAllInCell}
 	 */
 	private static int recognizeCacheWrapper(String cls) {
 		if (cls == null) return -1;
@@ -542,7 +542,7 @@ public final class DensityFunctionWalker {
 			// `coordinate()`; yarn 1.21.11 renamed it to `locationFunction()`
 			// (returns a ToFloatFunction implementation, in our case a
 			// `DensityFunctionTypes$Spline$DensityFunctionWrapper` wrapping
-			// a `RegistryEntry<DensityFunction>`). bruteFindCoord is a
+			// a `Holder<DensityFunction>`). bruteFindCoord is a
 			// last-resort field walk in case of further yarn drift.
 			Object coord = invokeAny(spline, new String[]{
 					"coordinate", "locationFunction",
@@ -647,7 +647,7 @@ public final class DensityFunctionWalker {
 					Object v = m.invoke(coord);
 					if (v == null) continue;
 					String tn = v.getClass().getSimpleName();
-					if (tn.contains("Holder") || tn.contains("RegistryEntry")) {
+					if (tn.contains("Holder") || tn.contains("Holder")) {
 						holder = v; break;
 					}
 					// Some yarn versions inline the DF directly without a Holder.

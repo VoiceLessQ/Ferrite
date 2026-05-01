@@ -7,14 +7,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.ServerTickPhaseMonitor;
 
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.server.level.ServerLevel;
 
 /**
  * Outer-envelope timing for the two scheduledTicks phases of
- * ServerWorld.tick. The two WorldTickScheduler.tick INVOKE sites have
+ * ServerLevel.tick. The two WorldTickScheduler.tick INVOKE sites have
  * the same descriptor; we discriminate by ordinal — vanilla calls
  * blockTickScheduler.tick first (ordinal 0) and fluidTickScheduler.tick
- * second (ordinal 1) at ServerWorld.java:399-401.
+ * second (ordinal 1) at ServerLevel.java:399-401.
  *
  * The two HEAD injects on tickBlock/tickFluid count individual ticks
  * per 5-second window — same approach already used by
@@ -28,7 +28,7 @@ import net.minecraft.server.world.ServerWorld;
  * descriptor uses that class even though the method is inherited from
  * the parent.
  */
-@Mixin(ServerWorld.class)
+@Mixin(ServerLevel.class)
 public abstract class ServerTickPhaseMixin {
 
 	// --- blockTicks (ordinal 0) --------------------------------------------
@@ -88,7 +88,7 @@ public abstract class ServerTickPhaseMixin {
 	// --- per-tick counts ---------------------------------------------------
 
 	@Inject(
-		method = "tickBlock(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/Block;)V",
+		method = "tickBlock(Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.Block;)V",
 		at = @At("HEAD")
 	)
 	private void ferrite$countBlockTick(CallbackInfo ci) {
@@ -96,7 +96,7 @@ public abstract class ServerTickPhaseMixin {
 	}
 
 	@Inject(
-		method = "tickFluid(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/fluid/Fluid;)V",
+		method = "tickFluid(Lnet.minecraft.core.BlockPos;Lnet/minecraft/fluid/Fluid;)V",
 		at = @At("HEAD")
 	)
 	private void ferrite$countFluidTick(CallbackInfo ci) {
@@ -108,7 +108,7 @@ public abstract class ServerTickPhaseMixin {
 	// overhead (measured: total 11.45 ms with hook -> 8.53 ms without),
 	// even though the hook fires only ~60 times per second — too rare
 	// for nanoTime self-contamination. The most likely cause is that
-	// @Inject splits the surrounding ServerWorld.tick body in a way
+	// @Inject splits the surrounding ServerLevel.tick body in a way
 	// that inhibits JIT inlining across the call site.
 	//
 	// chunkTick cost is still recoverable indirectly:

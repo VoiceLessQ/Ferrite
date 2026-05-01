@@ -100,7 +100,7 @@ public final class PerWorldBlockStateTable {
 
 	private static String tryRegistryName(Object block) {
 		try {
-			Class<?> registriesCls = Class.forName("net.minecraft.registry.Registries");
+			Class<?> registriesCls = Class.forName("net.minecraft.core.registries.BuiltInRegistries");
 			Object blockReg = registriesCls.getField("BLOCK").get(null);
 			for (java.lang.reflect.Method m : blockReg.getClass().getMethods()) {
 				if (!m.getName().equals("getId") || m.getParameterCount() != 1) continue;

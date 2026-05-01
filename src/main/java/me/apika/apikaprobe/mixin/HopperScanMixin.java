@@ -10,27 +10,27 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import me.apika.apikaprobe.monitor.HopperMonitor;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.HopperBlockEntity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.entity.ItemEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
 
 @Mixin(HopperBlockEntity.class)
 public abstract class HopperScanMixin {
 
 	@Inject(method = "serverTick", at = @At("HEAD"))
-	private static void ferrite$hopperTick(World world, BlockPos pos, BlockState state, HopperBlockEntity blockEntity, CallbackInfo ci) {
+	private static void ferrite$hopperTick(Level world, BlockPos pos, BlockState state, HopperBlockEntity blockEntity, CallbackInfo ci) {
 		HopperMonitor.onHopperTick();
 	}
 
 	@Inject(method = "getInputItemEntities", at = @At("HEAD"))
-	private static void ferrite$scanBegin(World world, net.minecraft.block.entity.Hopper hopper, CallbackInfoReturnable<List<ItemEntity>> cir) {
+	private static void ferrite$scanBegin(Level world, net.minecraft.world.level.block.entity.Hopper hopper, CallbackInfoReturnable<List<ItemEntity>> cir) {
 		HopperMonitor.onScanBegin();
 	}
 
 	@Inject(method = "getInputItemEntities", at = @At("RETURN"))
-	private static void ferrite$scanEnd(World world, net.minecraft.block.entity.Hopper hopper, CallbackInfoReturnable<List<ItemEntity>> cir) {
+	private static void ferrite$scanEnd(Level world, net.minecraft.world.level.block.entity.Hopper hopper, CallbackInfoReturnable<List<ItemEntity>> cir) {
 		HopperMonitor.onScanEnd(cir.getReturnValue().size());
 	}
 }

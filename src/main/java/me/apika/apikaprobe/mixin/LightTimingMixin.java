@@ -8,8 +8,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import net.minecraft.server.world.ServerLightingProvider;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.server.level.ThreadedLevelLightEngine;
+import net.minecraft.world.level.chunk.Chunk;
 
 import me.apika.apikaprobe.monitor.LightTimingMonitor;
 
@@ -20,7 +20,7 @@ import me.apika.apikaprobe.monitor.LightTimingMonitor;
  * (light dispatcher → flood fill → completion), not just the
  * task-submission overhead.
  *
- * <p>Yarn class: {@code ServerLightingProvider} (mojmap
+ * <p>Yarn class: {@code ThreadedLevelLightEngine} (mojmap
  * {@code ThreadedLevelLightEngine}). Yarn methods:
  * {@code initializeLight}, {@code light} (mojmap {@code lightChunk}).
  *
@@ -28,7 +28,7 @@ import me.apika.apikaprobe.monitor.LightTimingMonitor;
  * the closure'd start when the future completes on a (potentially
  * different) light worker thread.
  */
-@Mixin(ServerLightingProvider.class)
+@Mixin(ThreadedLevelLightEngine.class)
 public abstract class LightTimingMixin {
 
 	@Unique

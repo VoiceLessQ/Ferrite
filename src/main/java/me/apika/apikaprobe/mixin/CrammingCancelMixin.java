@@ -7,15 +7,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.entity.CrammingDispatcher;
 
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 
 /**
- * Intercepts LivingEntity.tickCramming() for MobEntity subclasses and
+ * Intercepts LivingEntity.tickCramming() for Mob subclasses and
  * cancels the vanilla body when the Rust batched dispatcher has already
  * (or will now) handle it for this tick.
  *
- * First MobEntity tickCramming of the tick triggers the batch; every
+ * First Mob tickCramming of the tick triggers the batch; every
  * subsequent call in the same tick just cancels (batch is idempotent
  * via CrammingDispatcher.lastProcessedTick).
  */
@@ -24,7 +24,7 @@ public abstract class CrammingCancelMixin {
 
 	@Inject(method = "tickCramming()V", at = @At("HEAD"), cancellable = true)
 	private void ferrite$onTickCramming(CallbackInfo ci) {
-		if (!((Object) this instanceof MobEntity)) {
+		if (!((Object) this instanceof Mob)) {
 			return; // let vanilla handle non-mobs (players, etc.)
 		}
 		if (CrammingDispatcher.onTickCramming((LivingEntity) (Object) this)) {

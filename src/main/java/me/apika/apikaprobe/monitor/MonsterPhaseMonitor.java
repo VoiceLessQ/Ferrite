@@ -14,14 +14,14 @@ import org.slf4j.LoggerFactory;
  *   [1] movement    — LivingEntity.tickMovement() — physics + mob AI
  *                     (this measurement INCLUDES mobTick because vanilla
  *                     calls mobTick from inside tickMovement's body)
- *   [2] mobTick     — MobEntity.mobTick(ServerWorld) — AI goals / pathfinding
+ *   [2] mobTick     — Mob.mobTick(ServerLevel) — AI goals / pathfinding
  *
  * Because tickMovement nests mobTick, the three numbers don't sum to
  * total. The report therefore also computes a "self" field:
  *     movement self = movement_total − mobTick_total
  * …which is pure physics cost, excluding AI.
  *
- * Fires for ALL MobEntity instances (monsters and creatures). In our
+ * Fires for ALL Mob instances (monsters and creatures). In our
  * stress-test scenarios monsters dominate 88%/11%, so the numbers are
  * effectively monster-phase anyway.
  *

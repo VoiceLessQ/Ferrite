@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicLongArray;
 
 /**
  * Ferrite step-0 probe — measures submission-to-execution latency on
- * {@link net.minecraft.server.world.ChunkTaskScheduler}'s
+ * {@link net.minecraft.server.level.ChunkTaskDispatcher}'s
  * {@code PrioritizedConsecutiveExecutor dispatcher}. Used to decide
  * whether the dispatcher is actually saturated under sustained chunkgen
  * before any parallelism work is built on top of it.
@@ -23,8 +23,8 @@ import java.util.concurrent.atomic.AtomicLongArray;
  * during chunkgen, the gate is not the bottleneck — parallelism work
  * should target a different layer.
  *
- * <p>Scoped per {@code TaskExecutor.getName()} on the scheduler's worker
- * pool ("worldgen" / "light"), so the two ChunkTaskScheduler instances
+ * <p>Scoped per {@code ProcessorMailbox.getName()} on the scheduler's worker
+ * pool ("worldgen" / "light"), so the two ChunkTaskDispatcher instances
  * are reported separately even though they both name their dispatcher
  * "dispatcher" in vanilla.
  *

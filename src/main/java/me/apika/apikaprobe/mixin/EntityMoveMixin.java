@@ -7,33 +7,33 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.MovementInternalsMonitor;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.MovementType;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.MoverType;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.Vec3;
 
 /**
- * Times Entity.move(MovementType, Vec3d) — the voxel-shape sweep that
+ * Times Entity.move(MoverType, Vec3) — the voxel-shape sweep that
  * resolves requested motion against block collision shapes. Prime
  * suspect for the 71% "other" bucket inside tickMovement.
  *
- * Guarded to MobEntity so the measurement aligns with the other
+ * Guarded to Mob so the measurement aligns with the other
  * movement-internals buckets (all mob-scoped).
  */
 @Mixin(Entity.class)
 public abstract class EntityMoveMixin {
 
-	@Inject(method = "move(Lnet/minecraft/entity/MovementType;Lnet/minecraft/util/math/Vec3d;)V", at = @At("HEAD"))
-	private void ferrite$onMoveBegin(MovementType type, Vec3d movement, CallbackInfo ci) {
-		if (!((Object) this instanceof MobEntity)) {
+	@Inject(method = "move(Lnet.minecraft.world.entity.MoverType;Lnet.minecraft.world.phys.Vec3;)V", at = @At("HEAD"))
+	private void ferrite$onMoveBegin(MoverType type, Vec3 movement, CallbackInfo ci) {
+		if (!((Object) this instanceof Mob)) {
 			return;
 		}
 		MovementInternalsMonitor.onMoveBegin();
 	}
 
-	@Inject(method = "move(Lnet/minecraft/entity/MovementType;Lnet/minecraft/util/math/Vec3d;)V", at = @At("RETURN"))
-	private void ferrite$onMoveEnd(MovementType type, Vec3d movement, CallbackInfo ci) {
-		if (!((Object) this instanceof MobEntity)) {
+	@Inject(method = "move(Lnet.minecraft.world.entity.MoverType;Lnet.minecraft.world.phys.Vec3;)V", at = @At("RETURN"))
+	private void ferrite$onMoveEnd(MoverType type, Vec3 movement, CallbackInfo ci) {
+		if (!((Object) this instanceof Mob)) {
 			return;
 		}
 		MovementInternalsMonitor.onMoveEnd();

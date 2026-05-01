@@ -8,17 +8,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import me.apika.apikaprobe.monitor.TargetScanMonitor;
 
-import net.minecraft.entity.ai.goal.ActiveTargetGoal;
+import net.minecraft.world.entity.ai.goal.NearestAttackableTargetGoal;
 
 /**
- * Probes ActiveTargetGoal to separate goal-evaluation frequency from
+ * Probes NearestAttackableTargetGoal to separate goal-evaluation frequency from
  * actual entity-scan cost.
  *
  * canStart() is called every tick by GoalSelector for every inactive goal.
  * findClosestTarget() fires only when the reciprocalChance gate passes
  * (~20% of canStart() calls with the default chance=10 setting).
  */
-@Mixin(ActiveTargetGoal.class)
+@Mixin(NearestAttackableTargetGoal.class)
 public abstract class ActiveTargetGoalMixin {
 
 	@Inject(method = "canStart()Z", at = @At("HEAD"))

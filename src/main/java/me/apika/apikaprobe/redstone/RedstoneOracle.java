@@ -7,15 +7,15 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.RedstoneWireBlock;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.DefaultRedstoneController;
-import net.minecraft.world.RedstoneController;
-import net.minecraft.world.World;
-import net.minecraft.world.block.WireOrientation;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.redstone.VanillaRedstoneWireEvaluator;
+import net.minecraft.world.level.redstone.RedstoneWireEvaluator;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.redstone.Orientation;
 
 import me.apika.apikaprobe.mixin.RedstoneControllerInvoker;
 
@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  * Mismatches increment [NODE_MISMATCHES] and log (rate-limited).
  *
  * Critical design choices:
- *   (1) Per-node math calls vanilla's RedstoneController.calculateWirePowerAt
+ *   (1) Per-node math calls vanilla's RedstoneWireEvaluator.calculateWirePowerAt
  *       and getStrongPowerAt via [RedstoneControllerInvoker]. Inherits
  *       up-step / down-step / solid-block-occluder rules from vanilla,
  *       so changes in Mojang's future patches don't silently diverge
@@ -49,14 +49,14 @@ import org.slf4j.LoggerFactory;
  *       surface within seconds.
  *
  * Critical mixin-target trap (flagged 2026-04-20):
- *   At RETURN of RedstoneWireBlock.update, the `state` parameter still
+ *   At RETURN of RedStoneWireBlock.update, the `state` parameter still
  *   references the OLD BlockState. Authoritative post-write power is
  *   `world.getBlockState(pos).get(POWER)`. The BFS reads world state,
  *   so this is handled for the center node; the only place we use the
  *   parameter's old power is the mismatch-log preWrite field (for
  *   debugging context).
  *
- * Recursion handling: only the OUTERMOST RedstoneWireBlock.update entry
+ * Recursion handling: only the OUTERMOST RedStoneWireBlock.update entry
  * triggers a BFS run. Inner recursive calls decrement the depth counter
  * and skip — they'd see mid-cascade state which isn't a valid oracle
  * input.
@@ -92,13 +92,13 @@ public final class RedstoneOracle {
 
 	// Lazy — registry may not be ready when this class first loads; defer
 	// until the first mixin invocation (mod init has certainly run by then).
-	private static volatile RedstoneController oracleController;
+	private static volatile RedstoneWireEvaluator oracleController;
 
 	static final class Snapshot {
 		BlockPos pos;
 		int preWritePower;
 		boolean blockAdded;
-		WireOrientation orientation;
+		Orientation orientation;
 		String worldKey;
 	}
 
@@ -110,8 +110,8 @@ public final class RedstoneOracle {
 
 	private static volatile boolean controllerInitFailed;
 
-	private static RedstoneController controller() {
-		RedstoneController c = oracleController;
+	private static RedstoneWireEvaluator controller() {
+		RedstoneWireEvaluator c = oracleController;
 		if (c == null && !controllerInitFailed) {
 			// Defensive: Blocks.REDSTONE_WIRE should be non-null long before
 			// any wire update fires, but if a mod-load ordering quirk leaves
@@ -119,7 +119,7 @@ public final class RedstoneOracle {
 			// and disable the oracle for the rest of the session rather than
 			// rethrowing into the cascade hot path.
 			try {
-				c = new DefaultRedstoneController((RedstoneWireBlock) Blocks.REDSTONE_WIRE);
+				c = new VanillaRedstoneWireEvaluator((RedStoneWireBlock) Blocks.REDSTONE_WIRE);
 				oracleController = c;
 			} catch (RuntimeException e) {
 				controllerInitFailed = true;
@@ -134,22 +134,22 @@ public final class RedstoneOracle {
 	// --- Mixin entry points -------------------------------------------------
 
 	public static void onWireUpdateBegin(
-			World world, BlockPos pos, BlockState state,
-			WireOrientation orientation, boolean blockAdded) {
+			Level world, BlockPos pos, BlockState state,
+			Orientation orientation, boolean blockAdded) {
 		if (!ENABLED || world.isClient()) return;
 		int[] depth = DEPTH.get();
 		if (depth[0]++ != 0) return;
 		Snapshot snap = SNAPSHOT.get();
 		snap.pos = pos.toImmutable();
 		snap.preWritePower = state.isOf(Blocks.REDSTONE_WIRE)
-				? state.get(RedstoneWireBlock.POWER)
+				? state.get(RedStoneWireBlock.POWER)
 				: -1;
 		snap.blockAdded = blockAdded;
 		snap.orientation = orientation;
 		snap.worldKey = world.getRegistryKey().getValue().toString();
 	}
 
-	public static void onWireUpdateEnd(World world, BlockPos pos) {
+	public static void onWireUpdateEnd(Level world, BlockPos pos) {
 		if (!ENABLED || world.isClient()) return;
 		int[] depth = DEPTH.get();
 		if (--depth[0] != 0) {
@@ -175,9 +175,9 @@ public final class RedstoneOracle {
 
 	// --- BFS verification ---------------------------------------------------
 
-	private static void runBfsVerification(World world, Snapshot snap) {
+	private static void runBfsVerification(Level world, Snapshot snap) {
 		BFS_RUNS.incrementAndGet();
-		RedstoneController c = controller();
+		RedstoneWireEvaluator c = controller();
 		if (c == null) return; // controller init failed — silently skip
 		RedstoneControllerInvoker inv = (RedstoneControllerInvoker) c;
 
@@ -197,7 +197,7 @@ public final class RedstoneOracle {
 			BlockState state = world.getBlockState(pos);
 			if (!state.isOf(Blocks.REDSTONE_WIRE)) continue;
 
-			int actual = state.get(RedstoneWireBlock.POWER);
+			int actual = state.get(RedStoneWireBlock.POWER);
 			int expected = computePowerAt(inv, world, pos);
 			NODE_CHECKS.incrementAndGet();
 			if (actual != expected) {
@@ -210,11 +210,11 @@ public final class RedstoneOracle {
 	}
 
 	/**
-	 * Mirrors {@code DefaultRedstoneController.calculateTotalPowerAt}: if
+	 * Mirrors {@code VanillaRedstoneWireEvaluator.calculateTotalPowerAt}: if
 	 * a strong source here is 15, no wire contribution can exceed it;
 	 * otherwise max of strong and wire-calculated.
 	 */
-	private static int computePowerAt(RedstoneControllerInvoker inv, World world, BlockPos pos) {
+	private static int computePowerAt(RedstoneControllerInvoker inv, Level world, BlockPos pos) {
 		int strong = inv.apikaprobe$getStrongPowerAt(world, pos);
 		if (strong >= 15) return 15;
 		int wire = inv.apikaprobe$calculateWirePowerAt(world, pos);
@@ -222,14 +222,14 @@ public final class RedstoneOracle {
 	}
 
 	/**
-	 * Matches the neighbor-check inside RedstoneController.calculateWirePowerAt:
+	 * Matches the neighbor-check inside RedstoneWireEvaluator.calculateWirePowerAt:
 	 *   horizontal neighbor always;
 	 *   up-step iff neighbor solid AND pos-above not solid;
 	 *   down-step iff neighbor NOT solid.
 	 * Only enqueues REDSTONE_WIRE blocks at the resolved neighbor position.
 	 */
 	private static void enqueueConnectedWireNeighbors(
-			World world, BlockPos pos, HashSet<BlockPos> visited, ArrayDeque<BlockPos> frontier) {
+			Level world, BlockPos pos, HashSet<BlockPos> visited, ArrayDeque<BlockPos> frontier) {
 		BlockPos above = pos.up();
 		BlockState aboveState = world.getBlockState(above);
 		boolean aboveSolid = aboveState.isSolidBlock(world, above);
@@ -250,7 +250,7 @@ public final class RedstoneOracle {
 	}
 
 	private static void tryEnqueue(
-			World world, BlockPos pos, HashSet<BlockPos> visited, ArrayDeque<BlockPos> frontier) {
+			Level world, BlockPos pos, HashSet<BlockPos> visited, ArrayDeque<BlockPos> frontier) {
 		if (visited.contains(pos)) return;
 		if (!world.getBlockState(pos).isOf(Blocks.REDSTONE_WIRE)) return;
 		BlockPos im = pos.toImmutable();

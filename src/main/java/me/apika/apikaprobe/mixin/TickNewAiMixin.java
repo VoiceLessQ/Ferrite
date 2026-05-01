@@ -7,10 +7,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.MovementInternalsMonitor;
 
-import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.world.entity.Mob;
 
 /**
- * Times MobEntity.tickNewAi() — the full AI block inside tickMovement.
+ * Times Mob.tickNewAi() — the full AI block inside tickMovement.
  * Contains: visibilityCache.clear, goalSelector.tick, targetSelector.tick,
  * navigation.tick (already probed separately), mobTick (excluded from
  * movement_self), moveControl.tick, lookControl.tick, jumpControl.tick.
@@ -19,7 +19,7 @@ import net.minecraft.entity.mob.MobEntity;
  * because it overlaps with the navigator bucket already in accountedTotal.
  * To estimate goal-selector + control cost: tickNewAi − navigator − mobTick.
  */
-@Mixin(MobEntity.class)
+@Mixin(Mob.class)
 public abstract class TickNewAiMixin {
 
 	@Inject(method = "tickNewAi()V", at = @At("HEAD"))

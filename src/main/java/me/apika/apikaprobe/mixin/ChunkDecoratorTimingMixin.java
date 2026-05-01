@@ -5,10 +5,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import net.minecraft.world.StructureWorldAccess;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.gen.StructureAccessor;
-import net.minecraft.world.gen.chunk.ChunkGenerator;
+import net.minecraft.world.level.WorldGenLevel;
+import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.levelgen.StructureManager;
+import net.minecraft.world.level.levelgen.ChunkGenerator;
 
 import me.apika.apikaprobe.worldgen.chunk.ChunkDecoratorTiming;
 
@@ -27,14 +27,14 @@ import me.apika.apikaprobe.worldgen.chunk.ChunkDecoratorTiming;
 @Mixin(ChunkGenerator.class)
 public abstract class ChunkDecoratorTimingMixin {
 	@Inject(method = "generateFeatures", at = @At("HEAD"))
-	private void ferrite$startTiming(StructureWorldAccess world, Chunk chunk,
-			StructureAccessor structureAccessor, CallbackInfo ci) {
+	private void ferrite$startTiming(WorldGenLevel world, Chunk chunk,
+			StructureManager structureAccessor, CallbackInfo ci) {
 		ChunkDecoratorTiming.start();
 	}
 
 	@Inject(method = "generateFeatures", at = @At("RETURN"))
-	private void ferrite$endTiming(StructureWorldAccess world, Chunk chunk,
-			StructureAccessor structureAccessor, CallbackInfo ci) {
+	private void ferrite$endTiming(WorldGenLevel world, Chunk chunk,
+			StructureManager structureAccessor, CallbackInfo ci) {
 		// Center of chunk in block coords. ChunkPos.x/z are chunk coords;
 		// (cx << 4) + 8 is the center block.
 		int cx = (chunk.getPos().x << 4) + 8;

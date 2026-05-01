@@ -7,11 +7,11 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.world.ClientWorld;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.world.ClientLevel;
 
 /**
- * Sampled timer for EntityRenderManager.render(...).
+ * Sampled timer for EntityRenderDispatcher.render(...).
  *
  * render() is called once per visible entity per frame. At 300 entities
  * × 60 fps = ~18K calls/sec on dev hardware; even more on bursty frames.
@@ -71,7 +71,7 @@ public final class EntityRenderMonitor {
 		SAMPLED_MAX_NS.updateAndGet(prev -> Math.max(prev, duration));
 	}
 
-	private static void maybeReport(MinecraftClient client) {
+	private static void maybeReport(Minecraft client) {
 		long now = System.nanoTime();
 		if (now - lastReportNs < REPORT_INTERVAL_NS) {
 			return;
@@ -88,7 +88,7 @@ public final class EntityRenderMonitor {
 			return;
 		}
 
-		ClientWorld world = client.world;
+		ClientLevel world = client.world;
 		int entities = world == null ? 0 : world.getRegularEntityCount();
 		int fps = client.getCurrentFps();
 

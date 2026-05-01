@@ -9,21 +9,21 @@ import me.apika.apikaprobe.hopper.HopperLaneRouteConfig;
 import me.apika.apikaprobe.hopper.SlotCooldownAccess;
 import me.apika.apikaprobe.monitor.HopperPerSlotMonitor;
 
-import net.minecraft.block.entity.HopperBlockEntity;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.math.Direction;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.Direction;
 
 @Mixin(HopperBlockEntity.class)
 public abstract class HopperLaneRouteMixin {
 
 	@Inject(
-		method = "transfer(Lnet/minecraft/inventory/Inventory;Lnet/minecraft/inventory/Inventory;Lnet/minecraft/item/ItemStack;Lnet/minecraft/util/math/Direction;)Lnet/minecraft/item/ItemStack;",
+		method = "transfer(Lnet.minecraft.world.Container;Lnet.minecraft.world.Container;Lnet.minecraft.world.item.ItemStack;Lnet.minecraft.core.Direction;)Lnet.minecraft.world.item.ItemStack;",
 		at = @At("HEAD"),
 		cancellable = true
 	)
 	private static void ferrite$roundRobinDestRoute(
-		Inventory from, Inventory to, ItemStack stack, Direction side,
+		Container from, Container to, ItemStack stack, Direction side,
 		CallbackInfoReturnable<ItemStack> cir
 	) {
 		if (!HopperLaneRouteConfig.ENABLE) return;

@@ -4,8 +4,8 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.List;
 
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.util.math.Box;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.phys.AABB;
 
 /**
  * Zero-copy handoff for mob-vs-mob cramming. Much simpler than
@@ -65,7 +65,7 @@ public final class CrammingHandoff {
 		REQUEST_BUF.clear();
 		for (int i = 0; i < n; i++) {
 			LivingEntity e = mobs.get(i);
-			Box aabb = e.getBoundingBox();
+			AABB aabb = e.getBoundingBox();
 
 			byte flags = 0;
 			if (e.isPushable())    flags |= FLAG_PUSHABLE;
@@ -81,7 +81,7 @@ public final class CrammingHandoff {
 			// (sentinel-equal pairs are explicitly skipped on Rust side).
 			int rootVehicleId = -1;
 			if (e.hasVehicle()) {
-				net.minecraft.entity.Entity root = e.getRootVehicle();
+				net.minecraft.world.entity.Entity root = e.getRootVehicle();
 				if (root != null) rootVehicleId = root.getId();
 			}
 

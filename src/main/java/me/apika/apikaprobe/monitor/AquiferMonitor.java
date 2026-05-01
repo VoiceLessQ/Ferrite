@@ -8,7 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Sampled timer for AquiferSampler.Impl.apply(NoisePos, double).
+ * Sampled timer for Aquifer.Impl.apply(NoisePos, double).
  *
  * apply is called once per block during sampleBlockState — ~98K times
  * per chunk, ~29M per 5-second window on active flight. Full timing

@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.LookControlMonitor;
 
-import net.minecraft.entity.ai.control.LookControl;
+import net.minecraft.world.entity.ai.control.LookControl;
 
 @Mixin(LookControl.class)
 public abstract class LookControlMixin {

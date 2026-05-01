@@ -7,9 +7,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.NoiseStageMonitor;
 
-import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
+import net.minecraft.world.level.levelgen.NoiseChunk;
 
-@Mixin(ChunkNoiseSampler.class)
+@Mixin(NoiseChunk.class)
 public abstract class NoiseStageMixin {
 
 	@Inject(method = "sampleStartDensity", at = @At("HEAD"))

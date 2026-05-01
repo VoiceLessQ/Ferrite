@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Pure-observational counters for the Phase 2.5 step 2a checkpoint.
  *
- * <p>When vanilla's {@code ChunkNoiseSampler#getActualDensityFunctionImpl}
+ * <p>When vanilla's {@code NoiseChunk#getActualDensityFunctionImpl}
  * (yarn name for {@code NoiseChunk.wrapNew}) returns a cache wrapper
  * (FlatCache / NoiseInterpolator / CacheAllInCell), the
  * {@link me.apika.apikaprobe.mixin.CacheRouteCaptureMixin} looks up the

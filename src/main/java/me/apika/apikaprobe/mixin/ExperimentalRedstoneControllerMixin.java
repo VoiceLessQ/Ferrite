@@ -7,11 +7,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.RedstonePhaseMonitor;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.ExperimentalRedstoneController;
-import net.minecraft.world.World;
-import net.minecraft.world.block.WireOrientation;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.redstone.AlternateCurrentRedstoneWireEvaluator;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.redstone.Orientation;
 
 /**
  * Per-call counter for the experimental (Mojang-optimized) redstone
@@ -19,15 +19,15 @@ import net.minecraft.world.block.WireOrientation;
  * pair lets the 5s log line show `default=X exp=Y` so every test
  * session self-documents which controller is active.
  */
-@Mixin(ExperimentalRedstoneController.class)
+@Mixin(AlternateCurrentRedstoneWireEvaluator.class)
 public abstract class ExperimentalRedstoneControllerMixin {
 
 	@Inject(
-		method = "update(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;Lnet/minecraft/world/block/WireOrientation;Z)V",
+		method = "update(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.BlockState;Lnet.minecraft.world.level.redstone.Orientation;Z)V",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onExperimentalControllerUpdate(
-			World world, BlockPos pos, BlockState state, WireOrientation orientation, boolean blockAdded,
+			Level world, BlockPos pos, BlockState state, Orientation orientation, boolean blockAdded,
 			CallbackInfo ci) {
 		if (world.isClient()) return;
 		RedstonePhaseMonitor.onExperimentalController();

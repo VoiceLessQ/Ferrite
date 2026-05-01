@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Sub-phase breakdown inside noise-sync.
  *
- * Times two non-overlapping stages of ChunkNoiseSampler:
+ * Times two non-overlapping stages of NoiseChunk:
  *   start : sampleStartDensity() — one call per chunk, sets up start buffer
  *   end   : sampleEndDensity(int cellX) — called per cellX (~4×/chunk)
  *

@@ -7,8 +7,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.MovementInternalsMonitor;
 
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 
 /**
  * Times LivingEntity.tickCramming() for mobs only — the nearby-entity
@@ -19,7 +19,7 @@ public abstract class CrammingMixin {
 
 	@Inject(method = "tickCramming()V", at = @At("HEAD"))
 	private void ferrite$onCrammingBegin(CallbackInfo ci) {
-		if (!((Object) this instanceof MobEntity)) {
+		if (!((Object) this instanceof Mob)) {
 			return;
 		}
 		MovementInternalsMonitor.onCrammingBegin();
@@ -27,7 +27,7 @@ public abstract class CrammingMixin {
 
 	@Inject(method = "tickCramming()V", at = @At("RETURN"))
 	private void ferrite$onCrammingEnd(CallbackInfo ci) {
-		if (!((Object) this instanceof MobEntity)) {
+		if (!((Object) this instanceof Mob)) {
 			return;
 		}
 		MovementInternalsMonitor.onCrammingEnd();

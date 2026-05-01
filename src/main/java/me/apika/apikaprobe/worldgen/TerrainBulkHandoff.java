@@ -12,9 +12,9 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.gen.densityfunction.DensityFunction;
-import net.minecraft.world.gen.noise.NoiseConfig;
+import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.levelgen.DensityFunction;
+import net.minecraft.world.level.levelgen.RandomState;
 
 /**
  * v1 bulk-terrain handoff — "run alongside" mode.
@@ -78,7 +78,7 @@ public final class TerrainBulkHandoff {
 	 * Compute chunk terrain via Rust bulk handoff. Result is discarded —
 	 * this is the A/B timing run. Safe to call from chunk-gen workers.
 	 */
-	public static void apply(Chunk chunk, NoiseConfig noiseConfig) {
+	public static void apply(Chunk chunk, RandomState noiseConfig) {
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			return;
 		}

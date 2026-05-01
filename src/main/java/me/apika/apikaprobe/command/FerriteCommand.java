@@ -39,9 +39,9 @@ import me.apika.apikaprobe.surface.SurfaceRuleEvaluator;
 import me.apika.apikaprobe.surface.SurfaceValidator;
 import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
 
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.text.Text;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.Component;
 
 /**
  * /ferrite command — runtime toggles for Ferrite's optional paths.
@@ -59,7 +59,7 @@ import net.minecraft.text.Text;
  * rust and ac are independent: rust takes effect via the per-cascade
  * Rust BFS mixin, ac takes effect via FerriteRedstoneController.
  * Don't enable both at the same time — the Rust path expects to see
- * DefaultRedstoneController's behavior underneath, not AC's.
+ * VanillaRedstoneWireEvaluator's behavior underneath, not AC's.
  *
  * All subcommands require op-level 2. Logs to both the command feedback
  * channel (visible in chat) and the [ferrite] logger (visible in
@@ -75,152 +75,152 @@ public final class FerriteCommand {
 				(dispatcher, registryAccess, environment) -> registerRoot(dispatcher));
 	}
 
-	private static void registerRoot(CommandDispatcher<ServerCommandSource> dispatcher) {
-		dispatcher.register(CommandManager.literal("ferrite")
-				.requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
-				.then(CommandManager.literal("cramming")
-						.then(CommandManager.literal("on").executes(FerriteCommand::enableCramming))
-						.then(CommandManager.literal("off").executes(FerriteCommand::disableCramming))
-						.then(CommandManager.literal("status").executes(FerriteCommand::statusCramming)))
-				.then(CommandManager.literal("hopper")
-						.then(CommandManager.literal("highway")
-								.then(CommandManager.literal("on").executes(FerriteCommand::enableHopper))
-								.then(CommandManager.literal("off").executes(FerriteCommand::disableHopper))
-								.then(CommandManager.literal("status").executes(FerriteCommand::statusHopper))))
-				.then(CommandManager.literal("redstone")
-						.then(CommandManager.literal("rust")
-								.then(CommandManager.literal("on").executes(FerriteCommand::enableRust))
-								.then(CommandManager.literal("off").executes(FerriteCommand::disableRust))
-								.then(CommandManager.literal("status").executes(FerriteCommand::statusRust)))
-						.then(CommandManager.literal("ac")
-								.then(CommandManager.literal("on").executes(FerriteCommand::enableAc))
-								.then(CommandManager.literal("off").executes(FerriteCommand::disableAc))
-								.then(CommandManager.literal("status").executes(FerriteCommand::statusAc)))
-						.then(CommandManager.literal("bench").executes(FerriteCommand::redstoneBench))
-						.then(CommandManager.literal("bfs")
-								.then(CommandManager.literal("on").executes(FerriteCommand::enableBfs))
-								.then(CommandManager.literal("off").executes(FerriteCommand::disableBfs))
-								.then(CommandManager.literal("status").executes(FerriteCommand::statusBfs)))
-						.then(CommandManager.literal("bfs-min")
-								.then(CommandManager.argument("n", IntegerArgumentType.integer(1, 4096))
+	private static void registerRoot(CommandDispatcher<CommandSourceStack> dispatcher) {
+		dispatcher.register(Commands.literal("ferrite")
+				.requires(Commands.requirePermissionLevel(Commands.GAMEMASTERS_CHECK))
+				.then(Commands.literal("cramming")
+						.then(Commands.literal("on").executes(FerriteCommand::enableCramming))
+						.then(Commands.literal("off").executes(FerriteCommand::disableCramming))
+						.then(Commands.literal("status").executes(FerriteCommand::statusCramming)))
+				.then(Commands.literal("hopper")
+						.then(Commands.literal("highway")
+								.then(Commands.literal("on").executes(FerriteCommand::enableHopper))
+								.then(Commands.literal("off").executes(FerriteCommand::disableHopper))
+								.then(Commands.literal("status").executes(FerriteCommand::statusHopper))))
+				.then(Commands.literal("redstone")
+						.then(Commands.literal("rust")
+								.then(Commands.literal("on").executes(FerriteCommand::enableRust))
+								.then(Commands.literal("off").executes(FerriteCommand::disableRust))
+								.then(Commands.literal("status").executes(FerriteCommand::statusRust)))
+						.then(Commands.literal("ac")
+								.then(Commands.literal("on").executes(FerriteCommand::enableAc))
+								.then(Commands.literal("off").executes(FerriteCommand::disableAc))
+								.then(Commands.literal("status").executes(FerriteCommand::statusAc)))
+						.then(Commands.literal("bench").executes(FerriteCommand::redstoneBench))
+						.then(Commands.literal("bfs")
+								.then(Commands.literal("on").executes(FerriteCommand::enableBfs))
+								.then(Commands.literal("off").executes(FerriteCommand::disableBfs))
+								.then(Commands.literal("status").executes(FerriteCommand::statusBfs)))
+						.then(Commands.literal("bfs-min")
+								.then(Commands.argument("n", IntegerArgumentType.integer(1, 4096))
 										.executes(FerriteCommand::setBfsMin))))
-				.then(CommandManager.literal("worldgen")
-						.then(CommandManager.literal("status").executes(FerriteCommand::worldgenStatus))
-						.then(CommandManager.literal("sample")
-								.then(CommandManager.argument("name", StringArgumentType.greedyString())
+				.then(Commands.literal("worldgen")
+						.then(Commands.literal("status").executes(FerriteCommand::worldgenStatus))
+						.then(Commands.literal("sample")
+								.then(Commands.argument("name", StringArgumentType.greedyString())
 										.executes(FerriteCommand::worldgenSample)))
-						.then(CommandManager.literal("validate")
+						.then(Commands.literal("validate")
 								.executes(ctx -> worldgenValidate(ctx, 100))
-								.then(CommandManager.argument("samples", IntegerArgumentType.integer(1, 100000))
+								.then(Commands.argument("samples", IntegerArgumentType.integer(1, 100000))
 										.executes(ctx -> worldgenValidate(ctx,
 												IntegerArgumentType.getInteger(ctx, "samples"))))))
-				.then(CommandManager.literal("density")
-						.then(CommandManager.literal("validate")
+				.then(Commands.literal("density")
+						.then(Commands.literal("validate")
 								.executes(ctx -> densityValidate(ctx, 200))
-								.then(CommandManager.argument("samples", IntegerArgumentType.integer(1, 100000))
+								.then(Commands.argument("samples", IntegerArgumentType.integer(1, 100000))
 										.executes(ctx -> densityValidate(ctx,
 												IntegerArgumentType.getInteger(ctx, "samples")))))
-						.then(CommandManager.literal("sample")
-								.then(CommandManager.argument("name", StringArgumentType.greedyString())
+						.then(Commands.literal("sample")
+								.then(Commands.argument("name", StringArgumentType.greedyString())
 										.executes(FerriteCommand::densitySample)))
-						.then(CommandManager.literal("dump")
-								.then(CommandManager.argument("name", StringArgumentType.greedyString())
+						.then(Commands.literal("dump")
+								.then(Commands.argument("name", StringArgumentType.greedyString())
 										.executes(FerriteCommand::densityDump)))
-						.then(CommandManager.literal("bench-region")
+						.then(Commands.literal("bench-region")
 								.executes(FerriteCommand::densityBenchRegion))
-						.then(CommandManager.literal("bench-buffer")
+						.then(Commands.literal("bench-buffer")
 								.executes(FerriteCommand::densityBenchBuffer)))
-				.then(CommandManager.literal("biome")
-						.then(CommandManager.literal("validate")
+				.then(Commands.literal("biome")
+						.then(Commands.literal("validate")
 								.executes(ctx -> biomeValidate(ctx, 1000))
-								.then(CommandManager.argument("samples", IntegerArgumentType.integer(1, 1000000))
+								.then(Commands.argument("samples", IntegerArgumentType.integer(1, 1000000))
 										.executes(ctx -> biomeValidate(ctx,
 												IntegerArgumentType.getInteger(ctx, "samples")))))
-						.then(CommandManager.literal("at")
+						.then(Commands.literal("at")
 								.executes(FerriteCommand::biomeAtPlayer)
-								.then(CommandManager.argument("x", IntegerArgumentType.integer())
-										.then(CommandManager.argument("y", IntegerArgumentType.integer())
-												.then(CommandManager.argument("z", IntegerArgumentType.integer())
+								.then(Commands.argument("x", IntegerArgumentType.integer())
+										.then(Commands.argument("y", IntegerArgumentType.integer())
+												.then(Commands.argument("z", IntegerArgumentType.integer())
 														.executes(FerriteCommand::biomeAtCoords)))))
-						.then(CommandManager.literal("chunk")
-								.then(CommandManager.argument("cx", IntegerArgumentType.integer())
-										.then(CommandManager.argument("cz", IntegerArgumentType.integer())
+						.then(Commands.literal("chunk")
+								.then(Commands.argument("cx", IntegerArgumentType.integer())
+										.then(Commands.argument("cz", IntegerArgumentType.integer())
 												.executes(FerriteCommand::biomeAtChunk))))
-						.then(CommandManager.literal("actual")
-								.then(CommandManager.argument("x", IntegerArgumentType.integer())
-										.then(CommandManager.argument("y", IntegerArgumentType.integer())
-												.then(CommandManager.argument("z", IntegerArgumentType.integer())
+						.then(Commands.literal("actual")
+								.then(Commands.argument("x", IntegerArgumentType.integer())
+										.then(Commands.argument("y", IntegerArgumentType.integer())
+												.then(Commands.argument("z", IntegerArgumentType.integer())
 														.executes(FerriteCommand::biomeActual)))))
-						.then(CommandManager.literal("compare")
-								.then(CommandManager.argument("x", IntegerArgumentType.integer())
-										.then(CommandManager.argument("y", IntegerArgumentType.integer())
-												.then(CommandManager.argument("z", IntegerArgumentType.integer())
+						.then(Commands.literal("compare")
+								.then(Commands.argument("x", IntegerArgumentType.integer())
+										.then(Commands.argument("y", IntegerArgumentType.integer())
+												.then(Commands.argument("z", IntegerArgumentType.integer())
 														.executes(FerriteCommand::biomeCompare)))))
-						.then(CommandManager.literal("rust")
+						.then(Commands.literal("rust")
 								.executes(FerriteCommand::biomeRustAtPlayer)
-								.then(CommandManager.argument("x", IntegerArgumentType.integer())
-										.then(CommandManager.argument("y", IntegerArgumentType.integer())
-												.then(CommandManager.argument("z", IntegerArgumentType.integer())
+								.then(Commands.argument("x", IntegerArgumentType.integer())
+										.then(Commands.argument("y", IntegerArgumentType.integer())
+												.then(Commands.argument("z", IntegerArgumentType.integer())
 														.executes(FerriteCommand::biomeRustAtCoords)))))
-						.then(CommandManager.literal("predict")
+						.then(Commands.literal("predict")
 								.executes(ctx -> biomePredict(ctx, 256))
-								.then(CommandManager.argument("radius", IntegerArgumentType.integer(16, 8192))
+								.then(Commands.argument("radius", IntegerArgumentType.integer(16, 8192))
 										.executes(ctx -> biomePredict(ctx,
 												IntegerArgumentType.getInteger(ctx, "radius")))))
-						.then(CommandManager.literal("route")
-								.then(CommandManager.literal("on").executes(FerriteCommand::biomeRouteOn))
-								.then(CommandManager.literal("off").executes(FerriteCommand::biomeRouteOff))
-								.then(CommandManager.literal("status").executes(FerriteCommand::biomeRouteStatus))))
-				.then(CommandManager.literal("prewarm")
-						.then(CommandManager.literal("on").executes(FerriteCommand::prewarmOn))
-						.then(CommandManager.literal("off").executes(FerriteCommand::prewarmOff))
-						.then(CommandManager.literal("status").executes(FerriteCommand::prewarmStatus))
-						.then(CommandManager.literal("clear").executes(FerriteCommand::prewarmClear)))
-				.then(CommandManager.literal("chunkforce")
-						.then(CommandManager.literal("on").executes(FerriteCommand::chunkForceOn))
-						.then(CommandManager.literal("off").executes(FerriteCommand::chunkForceOff))
-						.then(CommandManager.literal("status").executes(FerriteCommand::chunkForceStatus)))
-				.then(CommandManager.literal("noise")
-						.then(CommandManager.literal("rust")
-								.then(CommandManager.literal("on").executes(FerriteCommand::noiseRustOn))
-								.then(CommandManager.literal("off").executes(FerriteCommand::noiseRustOff))
-								.then(CommandManager.literal("status").executes(FerriteCommand::noiseRustStatus))
-								.then(CommandManager.literal("diag").executes(FerriteCommand::noiseRustDiag))
-								.then(CommandManager.literal("reset").executes(FerriteCommand::noiseRustReset))))
-				.then(CommandManager.literal("surface")
-						.then(CommandManager.literal("compile").executes(FerriteCommand::surfaceCompile))
-						.then(CommandManager.literal("stats").executes(FerriteCommand::surfaceStats))
-						.then(CommandManager.literal("validate").executes(FerriteCommand::surfaceValidate))
-						.then(CommandManager.literal("validate-off").executes(FerriteCommand::surfaceValidateOff))
-						.then(CommandManager.literal("validate-stats").executes(FerriteCommand::surfaceValidateStats))
-						.then(CommandManager.literal("batch-test").executes(FerriteCommand::surfaceBatchTest))
-						.then(CommandManager.literal("trace-next").executes(FerriteCommand::surfaceTraceNext))
-						.then(CommandManager.literal("dump-biomes").executes(FerriteCommand::surfaceDumpBiomes))
-						.then(CommandManager.literal("dump").executes(FerriteCommand::surfaceDump))
-						.then(CommandManager.literal("dispatch")
-								.then(CommandManager.literal("on").executes(FerriteCommand::enableSurfaceDispatch))
-								.then(CommandManager.literal("off").executes(FerriteCommand::disableSurfaceDispatch))
-								.then(CommandManager.literal("status").executes(FerriteCommand::statusSurfaceDispatch)))
-						.then(CommandManager.literal("heightmap-parity")
-								.then(CommandManager.literal("on").executes(FerriteCommand::heightmapParityOn))
-								.then(CommandManager.literal("off").executes(FerriteCommand::heightmapParityOff))
-								.then(CommandManager.literal("stats").executes(FerriteCommand::heightmapParityStats))
-								.then(CommandManager.literal("reset").executes(FerriteCommand::heightmapParityReset))))
-				.then(CommandManager.literal("aquifer")
-						.then(CommandManager.literal("rust")
-								.then(CommandManager.literal("on").executes(FerriteCommand::aquiferRustOn))
-								.then(CommandManager.literal("off").executes(FerriteCommand::aquiferRustOff))
-								.then(CommandManager.literal("status").executes(FerriteCommand::aquiferRustStatus)))
-						.then(CommandManager.literal("parity")
-								.then(CommandManager.literal("on").executes(FerriteCommand::aquiferParityOn))
-								.then(CommandManager.literal("off").executes(FerriteCommand::aquiferParityOff))
-								.then(CommandManager.literal("reset").executes(FerriteCommand::aquiferParityReset))))
-				.then(CommandManager.literal("probe")
-						.then(CommandManager.literal("dispatcher")
-								.then(CommandManager.literal("on").executes(FerriteCommand::dispatcherProbeOn))
-								.then(CommandManager.literal("off").executes(FerriteCommand::dispatcherProbeOff))
-								.then(CommandManager.literal("status").executes(FerriteCommand::dispatcherProbeStatus))
-								.then(CommandManager.literal("reset").executes(FerriteCommand::dispatcherProbeReset)))));
+						.then(Commands.literal("route")
+								.then(Commands.literal("on").executes(FerriteCommand::biomeRouteOn))
+								.then(Commands.literal("off").executes(FerriteCommand::biomeRouteOff))
+								.then(Commands.literal("status").executes(FerriteCommand::biomeRouteStatus))))
+				.then(Commands.literal("prewarm")
+						.then(Commands.literal("on").executes(FerriteCommand::prewarmOn))
+						.then(Commands.literal("off").executes(FerriteCommand::prewarmOff))
+						.then(Commands.literal("status").executes(FerriteCommand::prewarmStatus))
+						.then(Commands.literal("clear").executes(FerriteCommand::prewarmClear)))
+				.then(Commands.literal("chunkforce")
+						.then(Commands.literal("on").executes(FerriteCommand::chunkForceOn))
+						.then(Commands.literal("off").executes(FerriteCommand::chunkForceOff))
+						.then(Commands.literal("status").executes(FerriteCommand::chunkForceStatus)))
+				.then(Commands.literal("noise")
+						.then(Commands.literal("rust")
+								.then(Commands.literal("on").executes(FerriteCommand::noiseRustOn))
+								.then(Commands.literal("off").executes(FerriteCommand::noiseRustOff))
+								.then(Commands.literal("status").executes(FerriteCommand::noiseRustStatus))
+								.then(Commands.literal("diag").executes(FerriteCommand::noiseRustDiag))
+								.then(Commands.literal("reset").executes(FerriteCommand::noiseRustReset))))
+				.then(Commands.literal("surface")
+						.then(Commands.literal("compile").executes(FerriteCommand::surfaceCompile))
+						.then(Commands.literal("stats").executes(FerriteCommand::surfaceStats))
+						.then(Commands.literal("validate").executes(FerriteCommand::surfaceValidate))
+						.then(Commands.literal("validate-off").executes(FerriteCommand::surfaceValidateOff))
+						.then(Commands.literal("validate-stats").executes(FerriteCommand::surfaceValidateStats))
+						.then(Commands.literal("batch-test").executes(FerriteCommand::surfaceBatchTest))
+						.then(Commands.literal("trace-next").executes(FerriteCommand::surfaceTraceNext))
+						.then(Commands.literal("dump-biomes").executes(FerriteCommand::surfaceDumpBiomes))
+						.then(Commands.literal("dump").executes(FerriteCommand::surfaceDump))
+						.then(Commands.literal("dispatch")
+								.then(Commands.literal("on").executes(FerriteCommand::enableSurfaceDispatch))
+								.then(Commands.literal("off").executes(FerriteCommand::disableSurfaceDispatch))
+								.then(Commands.literal("status").executes(FerriteCommand::statusSurfaceDispatch)))
+						.then(Commands.literal("heightmap-parity")
+								.then(Commands.literal("on").executes(FerriteCommand::heightmapParityOn))
+								.then(Commands.literal("off").executes(FerriteCommand::heightmapParityOff))
+								.then(Commands.literal("stats").executes(FerriteCommand::heightmapParityStats))
+								.then(Commands.literal("reset").executes(FerriteCommand::heightmapParityReset))))
+				.then(Commands.literal("aquifer")
+						.then(Commands.literal("rust")
+								.then(Commands.literal("on").executes(FerriteCommand::aquiferRustOn))
+								.then(Commands.literal("off").executes(FerriteCommand::aquiferRustOff))
+								.then(Commands.literal("status").executes(FerriteCommand::aquiferRustStatus)))
+						.then(Commands.literal("parity")
+								.then(Commands.literal("on").executes(FerriteCommand::aquiferParityOn))
+								.then(Commands.literal("off").executes(FerriteCommand::aquiferParityOff))
+								.then(Commands.literal("reset").executes(FerriteCommand::aquiferParityReset))))
+				.then(Commands.literal("probe")
+						.then(Commands.literal("dispatcher")
+								.then(Commands.literal("on").executes(FerriteCommand::dispatcherProbeOn))
+								.then(Commands.literal("off").executes(FerriteCommand::dispatcherProbeOff))
+								.then(Commands.literal("status").executes(FerriteCommand::dispatcherProbeStatus))
+								.then(Commands.literal("reset").executes(FerriteCommand::dispatcherProbeReset)))));
 	}
 
 	/**
@@ -230,7 +230,7 @@ public final class FerriteCommand {
 	 * the perf claim ("stable TPS at 1000+ mobs") in their own world.
 	 * Volatile, not persisted.
 	 */
-	private static int enableCramming(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int enableCramming(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		CrammingDispatcher.ENABLED = true;
 		String msg = "[cramming] Ferrite cramming enabled — batched Rust path active (vanilla cramming damage NOT applied)";
 		sendFeedback(ctx, msg, true);
@@ -238,7 +238,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int disableCramming(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int disableCramming(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		CrammingDispatcher.ENABLED = false;
 		String msg = "[cramming] Ferrite cramming disabled — vanilla path active (cramming damage will fire per maxEntityCramming gamerule)";
 		sendFeedback(ctx, msg, true);
@@ -246,7 +246,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int statusCramming(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int statusCramming(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = String.format(
 			"[cramming] ENABLED=%s native=%s  (watch [cramming-dispatch] in latest.log for batch counts)",
 			CrammingDispatcher.ENABLED,
@@ -256,7 +256,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int enableHopper(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int enableHopper(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		me.apika.apikaprobe.monitor.HopperHintMonitor.USE_HINT = true;
 		me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE = true;
 		me.apika.apikaprobe.hopper.HopperLaneRouteConfig.ENABLE = true;
@@ -266,7 +266,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int disableHopper(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int disableHopper(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		me.apika.apikaprobe.monitor.HopperHintMonitor.USE_HINT = false;
 		me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE = false;
 		me.apika.apikaprobe.hopper.HopperLaneRouteConfig.ENABLE = false;
@@ -276,7 +276,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int statusHopper(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int statusHopper(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = String.format(
 			"[hopper] hint=%s perslot=%s lane=%s  (validate flags: hint=%s perslot=%s)",
 			me.apika.apikaprobe.monitor.HopperHintMonitor.USE_HINT,
@@ -294,7 +294,7 @@ public final class FerriteCommand {
 	 * Setting is held in a static volatile field, NOT persisted — flips
 	 * back to the default ({@code false}) on server restart.
 	 */
-	private static int enableRust(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int enableRust(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			sendFeedback(ctx, "Rust native unavailable — flag set but no route will take effect.", false);
 		}
@@ -304,14 +304,14 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int disableRust(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int disableRust(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		RedstoneHandoff.USE_RUST = false;
 		sendFeedback(ctx, "[redstone] Rust BFS disabled (vanilla path)", true);
 		ExampleMod.LOGGER.info("[redstone] Rust BFS disabled (via /ferrite)");
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int statusRust(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int statusRust(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = String.format(
 				"[redstone] rust USE_RUST=%s native=%s  (watch latest.log for [redstone] phase numbers every 5s)",
 				RedstoneHandoff.USE_RUST,
@@ -327,7 +327,7 @@ public final class FerriteCommand {
 	 * persisted — flips back to the default ({@code false}) on server
 	 * restart. Re-issue the command after each restart if you want it on.
 	 */
-	private static int enableAc(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int enableAc(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		if (RedstoneHandoff.USE_RUST) {
 			sendFeedback(ctx, "Warning: Rust BFS is also enabled. Running both paths at once is untested and not recommended.", false);
 		}
@@ -337,7 +337,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int disableAc(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int disableAc(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		FerriteWireConfig.ENABLED = false;
 		sendFeedback(ctx, "[redstone] Alternate-Current wire algorithm disabled (vanilla path)", true);
 		ExampleMod.LOGGER.info("[redstone] AC wire algorithm disabled (via /ferrite)");
@@ -366,7 +366,7 @@ public final class FerriteCommand {
 	 * ({@code /ferrite redstone ac on}); the BFS path runs inside
 	 * {@code FerriteRedstoneController}.
 	 */
-	private static int enableBfs(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int enableBfs(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			sendFeedback(ctx, "Rust native unavailable — flag set but no batch will run.", false);
 		}
@@ -377,7 +377,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int disableBfs(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int disableBfs(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		FerriteWireConfig.RUST_BFS = false;
 		String msg = "[redstone] Rust BFS Phase 2 disabled (Java path)";
 		sendFeedback(ctx, msg, true);
@@ -392,7 +392,7 @@ public final class FerriteCommand {
 	 * timing data on small cascades that the production gate would skip.
 	 * Volatile, not persisted.
 	 */
-	private static int setBfsMin(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int setBfsMin(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		int n = IntegerArgumentType.getInteger(ctx, "n");
 		FerriteWireConfig.RUST_BFS_MIN_NODES = n;
 		String msg = "[redstone] bfs-min set to " + n + " (production default is 1)";
@@ -401,7 +401,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int statusBfs(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int statusBfs(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = String.format(
 			"[redstone] bfs RUST_BFS=%s minNodes=%d native=%s ac=%s",
 			FerriteWireConfig.RUST_BFS,
@@ -413,7 +413,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int redstoneBench(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int redstoneBench(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		int[] sizes = {100, 1000, 10000};
 		sendFeedback(ctx, "[redstone-bench] running (see latest.log for full results)", false);
 		ExampleMod.LOGGER.info("[redstone-bench] Phase 1 priority queue bench — gate: Rust ≥2× Java at N≥1000");
@@ -438,7 +438,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int statusAc(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int statusAc(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = String.format(
 				"[redstone] ac ENABLED=%s update-order=%s  (watch latest.log for [redstone] phase numbers every 5s)",
 				FerriteWireConfig.ENABLED,
@@ -455,7 +455,7 @@ public final class FerriteCommand {
 	 * verdict is the headline number — until every condition node in
 	 * the default tree has operand extraction, this will be true.
 	 */
-	private static int surfaceCompile(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int surfaceCompile(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
 		if (!extracted.ok()) {
 			String msg = "[surface] compile failed: " + extracted.error();
@@ -484,7 +484,7 @@ public final class FerriteCommand {
 	 * appear as "_UNKNOWN:Foo" entries — those are what the operand
 	 * extractor pass needs to handle next. Answers spec open-item #1.
 	 */
-	private static int surfaceStats(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int surfaceStats(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
 		if (!extracted.ok()) {
 			String msg = "[surface] stats failed: " + extracted.error();
@@ -525,7 +525,7 @@ public final class FerriteCommand {
 	 * That's the perf signal for whether the bytecode evaluator beats
 	 * vanilla's tree walk on the same workload.
 	 */
-	private static int enableSurfaceDispatch(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int enableSurfaceDispatch(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		SurfaceDispatcher.ENABLED = true;
 		String msg = SurfaceValidator.isEnabled()
 				? "[surface-dispatch] enabled — tryApply now routes through bytecode evaluator (validator tree present)"
@@ -535,7 +535,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int disableSurfaceDispatch(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int disableSurfaceDispatch(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		SurfaceDispatcher.ENABLED = false;
 		String msg = "[surface-dispatch] disabled — tryApply runs vanilla (validator behavior restored if /ferrite surface validate is on)";
 		sendFeedback(ctx, msg, true);
@@ -543,7 +543,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int statusSurfaceDispatch(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int statusSurfaceDispatch(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = String.format(
 			"[surface-dispatch] ENABLED=%s treeInstalled=%s  (watch [surface-phase] tryApply slot for perf delta)",
 			SurfaceDispatcher.ENABLED, SurfaceValidator.isEnabled());
@@ -552,7 +552,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int heightmapParityOn(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int heightmapParityOn(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		me.apika.apikaprobe.surface.SurfaceHeightmapValidator.ENABLED = true;
 		String msg = "[surface-heightmap-parity] ENABLED — diffing path-A (vanilla per-write trackUpdate) vs path-B (per-column batched) per chunk; requires /ferrite surface dispatch on";
 		sendFeedback(ctx, msg, true);
@@ -560,7 +560,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int heightmapParityOff(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int heightmapParityOff(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		me.apika.apikaprobe.surface.SurfaceHeightmapValidator.ENABLED = false;
 		String msg = "[surface-heightmap-parity] disabled";
 		sendFeedback(ctx, msg, true);
@@ -568,14 +568,14 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int heightmapParityStats(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int heightmapParityStats(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = me.apika.apikaprobe.surface.SurfaceHeightmapValidator.statsLine();
 		sendFeedback(ctx, msg, false);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int heightmapParityReset(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int heightmapParityReset(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		me.apika.apikaprobe.surface.SurfaceHeightmapValidator.resetCounters();
 		String msg = "[surface-heightmap-parity] counters reset";
 		sendFeedback(ctx, msg, true);
@@ -583,7 +583,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int surfaceValidate(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int surfaceValidate(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
 		if (!extracted.ok()) {
 			String msg = "[surface-validate] install failed: " + extracted.error();
@@ -601,7 +601,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int surfaceValidateOff(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int surfaceValidateOff(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String finalStats = SurfaceValidator.statsLine();
 		SurfaceValidator.uninstall();
 		sendFeedback(ctx, "[surface-validate] disabled — final stats: " + finalStats, false);
@@ -622,7 +622,7 @@ public final class FerriteCommand {
 	 * batched mode — if per-call ≡ batched on synthetic input, the
 	 * batched path is safe to use against real chunks.
 	 */
-	private static int surfaceBatchTest(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int surfaceBatchTest(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
 		if (!extracted.ok()) {
 			sendFeedback(ctx, "[surface-batch] extract failed: " + extracted.error(), false);
@@ -738,7 +738,7 @@ public final class FerriteCommand {
 	 * so we can map "ip 58-429" to the rule structure that should fire
 	 * but didn't.
 	 */
-	private static int surfaceDump(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int surfaceDump(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
 		if (!extracted.ok()) {
 			sendFeedback(ctx, "[surface-dump] extract failed: " + extracted.error(), false);
@@ -763,7 +763,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int surfaceDumpBiomes(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int surfaceDumpBiomes(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		SurfaceRuleAccess.Result extracted = SurfaceRuleAccess.extract(ctx.getSource().getWorld());
 		if (!extracted.ok()) {
 			sendFeedback(ctx, "[surface-dump] extract failed: " + extracted.error(), false);
@@ -782,7 +782,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int surfaceTraceNext(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int surfaceTraceNext(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		if (!SurfaceValidator.isEnabled()) {
 			sendFeedback(ctx, "[surface-validate] not enabled — run /ferrite surface validate first", false);
 			return 0;
@@ -794,14 +794,14 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int surfaceValidateStats(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+	private static int surfaceValidateStats(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String line = SurfaceValidator.statsLine();
 		sendFeedback(ctx, line, false);
 		ExampleMod.LOGGER.info(line);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int worldgenStatus(CommandContext<ServerCommandSource> ctx) {
+	private static int worldgenStatus(CommandContext<CommandSourceStack> ctx) {
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			sendFeedback(ctx, "[worldgen] native unavailable — Rust state will never finalize", false);
 			return Command.SINGLE_SUCCESS;
@@ -815,7 +815,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int worldgenSample(CommandContext<ServerCommandSource> ctx) {
+	private static int worldgenSample(CommandContext<CommandSourceStack> ctx) {
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			sendFeedback(ctx, "[worldgen] native unavailable", false);
 			return Command.SINGLE_SUCCESS;
@@ -823,7 +823,7 @@ public final class FerriteCommand {
 		String rawName = StringArgumentType.getString(ctx, "name").trim();
 		// Be forgiving about the namespace: if the user typed `temperature`
 		// (no colon), treat it as `minecraft:temperature`. Rust hashes the
-		// full `Identifier.toString()` form, so the colon must be present.
+		// full `ResourceLocation.toString()` form, so the colon must be present.
 		String name = rawName.contains(":") ? rawName : "minecraft:" + rawName;
 		var source = ctx.getSource();
 		var pos = source.getPosition();
@@ -851,19 +851,19 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int worldgenValidate(CommandContext<ServerCommandSource> ctx, int samples) {
+	private static int worldgenValidate(CommandContext<CommandSourceStack> ctx, int samples) {
 		String result = WorldgenParity.runParityCheck(samples, 10000);
 		sendFeedback(ctx, result, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int biomeValidate(CommandContext<ServerCommandSource> ctx, int samples) {
+	private static int biomeValidate(CommandContext<CommandSourceStack> ctx, int samples) {
 		String result = BiomeParity.runParityCheck(samples);
 		sendFeedback(ctx, result, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int densityValidate(CommandContext<ServerCommandSource> ctx, int samples) {
+	private static int densityValidate(CommandContext<CommandSourceStack> ctx, int samples) {
 		String result = DensityParity.runAll(ctx.getSource().getServer(), samples);
 		sendFeedback(ctx, result, false);
 		return Command.SINGLE_SUCCESS;
@@ -876,7 +876,7 @@ public final class FerriteCommand {
 	/** Phase 2 bench: time the bulk per-chunk density buffer JNI. The
 	 *  output should match what vanilla's per-block compute would
 	 *  produce; we sample-check 16 random positions for parity. */
-	private static int densityBenchBuffer(CommandContext<ServerCommandSource> ctx) {
+	private static int densityBenchBuffer(CommandContext<CommandSourceStack> ctx) {
 		final String name = "ferrite:terrain/final_density";
 		final int chunkMinX = 0;
 		final int chunkMinZ = 0;
@@ -916,7 +916,7 @@ public final class FerriteCommand {
 		// matching vanilla's NoiseInterpolator pattern.
 		outBuf.position(0);
 		java.nio.DoubleBuffer rustDoubles = outBuf.asDoubleBuffer();
-		java.util.Random rng = new java.util.Random(0xCAFEBABEL);
+		java.util.RandomSource rng = new java.util.RandomSource(0xCAFEBABEL);
 		int mismatch = 0;
 		double maxDiff = 0.0;
 		StringBuilder worst = new StringBuilder();
@@ -953,7 +953,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int densityBenchRegion(CommandContext<ServerCommandSource> ctx) {
+	private static int densityBenchRegion(CommandContext<CommandSourceStack> ctx) {
 		final String name = "ferrite:terrain/final_density";
 		// Cell-corner grid: 4 × 97 × 4. Y range -64..320 at step 4 = 97
 		// inclusive cell-Y rows. Same shape NoiseChunk would corner-sample.
@@ -1040,7 +1040,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int densityDump(CommandContext<ServerCommandSource> ctx) {
+	private static int densityDump(CommandContext<CommandSourceStack> ctx) {
 		String name = StringArgumentType.getString(ctx, "name").trim();
 		if (!name.contains(":")) name = "minecraft:" + name;
 		byte[] nameBytes = name.getBytes(java.nio.charset.StandardCharsets.UTF_8);
@@ -1058,7 +1058,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int densitySample(CommandContext<ServerCommandSource> ctx) {
+	private static int densitySample(CommandContext<CommandSourceStack> ctx) {
 		String name = StringArgumentType.getString(ctx, "name").trim();
 		if (!name.contains(":")) name = "minecraft:" + name;
 		var pos = ctx.getSource().getPosition();
@@ -1089,19 +1089,19 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int biomeAtPlayer(CommandContext<ServerCommandSource> ctx) {
+	private static int biomeAtPlayer(CommandContext<CommandSourceStack> ctx) {
 		var pos = ctx.getSource().getPosition();
 		return reportBiomeAt(ctx, (int) pos.x, (int) pos.y, (int) pos.z);
 	}
 
-	private static int biomeAtCoords(CommandContext<ServerCommandSource> ctx) {
+	private static int biomeAtCoords(CommandContext<CommandSourceStack> ctx) {
 		int x = IntegerArgumentType.getInteger(ctx, "x");
 		int y = IntegerArgumentType.getInteger(ctx, "y");
 		int z = IntegerArgumentType.getInteger(ctx, "z");
 		return reportBiomeAt(ctx, x, y, z);
 	}
 
-	private static int biomeAtChunk(CommandContext<ServerCommandSource> ctx) {
+	private static int biomeAtChunk(CommandContext<CommandSourceStack> ctx) {
 		int cx = IntegerArgumentType.getInteger(ctx, "cx");
 		int cz = IntegerArgumentType.getInteger(ctx, "cz");
 		// Center of chunk; y=64 = a stable mid-range height. The biome
@@ -1110,7 +1110,7 @@ public final class FerriteCommand {
 		return reportBiomeAt(ctx, (cx << 4) + 8, 64, (cz << 4) + 8);
 	}
 
-	private static int reportBiomeAt(CommandContext<ServerCommandSource> ctx, int x, int y, int z) {
+	private static int reportBiomeAt(CommandContext<CommandSourceStack> ctx, int x, int y, int z) {
 		String biome = BiomeParity.lookupBiomeAt(x, y, z);
 		String line;
 		if (biome == null) {
@@ -1122,7 +1122,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int biomeActual(CommandContext<ServerCommandSource> ctx) {
+	private static int biomeActual(CommandContext<CommandSourceStack> ctx) {
 		int x = IntegerArgumentType.getInteger(ctx, "x");
 		int y = IntegerArgumentType.getInteger(ctx, "y");
 		int z = IntegerArgumentType.getInteger(ctx, "z");
@@ -1132,19 +1132,19 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int biomeRustAtPlayer(CommandContext<ServerCommandSource> ctx) {
+	private static int biomeRustAtPlayer(CommandContext<CommandSourceStack> ctx) {
 		var pos = ctx.getSource().getPosition();
 		return reportBiomeRust(ctx, (int) pos.x, (int) pos.y, (int) pos.z);
 	}
 
-	private static int biomeRustAtCoords(CommandContext<ServerCommandSource> ctx) {
+	private static int biomeRustAtCoords(CommandContext<CommandSourceStack> ctx) {
 		int x = IntegerArgumentType.getInteger(ctx, "x");
 		int y = IntegerArgumentType.getInteger(ctx, "y");
 		int z = IntegerArgumentType.getInteger(ctx, "z");
 		return reportBiomeRust(ctx, x, y, z);
 	}
 
-	private static int reportBiomeRust(CommandContext<ServerCommandSource> ctx, int x, int y, int z) {
+	private static int reportBiomeRust(CommandContext<CommandSourceStack> ctx, int x, int y, int z) {
 		int rustId = RustBridge.findBiomeAtBlockRust(x, y, z);
 		java.util.List<String> names = WorldgenStateBootstrap.registeredBiomeNames();
 		String rustName = (rustId < 0 || rustId >= names.size())
@@ -1193,7 +1193,7 @@ public final class FerriteCommand {
 	 * findBiomeAtBlockRust depends only on seed-derived climate noises,
 	 * not chunk data.
 	 */
-	private static int biomePredict(CommandContext<ServerCommandSource> ctx, int radiusBlocks) {
+	private static int biomePredict(CommandContext<CommandSourceStack> ctx, int radiusBlocks) {
 		var pos = ctx.getSource().getPosition();
 		int cx = (int) pos.x;
 		int cy = (int) pos.y;
@@ -1255,7 +1255,7 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int biomeRouteOn(CommandContext<ServerCommandSource> ctx) {
+	private static int biomeRouteOn(CommandContext<CommandSourceStack> ctx) {
 		RustBiomeRouter.ENABLED = true;
 		String line = String.format("[biome-route] ENABLED (router has %d holders)",
 				RustBiomeRouter.size());
@@ -1264,20 +1264,20 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int biomeRouteOff(CommandContext<ServerCommandSource> ctx) {
+	private static int biomeRouteOff(CommandContext<CommandSourceStack> ctx) {
 		RustBiomeRouter.ENABLED = false;
 		sendFeedback(ctx, "[biome-route] disabled", false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int biomeRouteStatus(CommandContext<ServerCommandSource> ctx) {
+	private static int biomeRouteStatus(CommandContext<CommandSourceStack> ctx) {
 		String line = String.format("[biome-route] enabled=%s holders=%d",
 				RustBiomeRouter.ENABLED, RustBiomeRouter.size());
 		sendFeedback(ctx, line, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int prewarmOn(CommandContext<ServerCommandSource> ctx) {
+	private static int prewarmOn(CommandContext<CommandSourceStack> ctx) {
 		ChunkPrewarmer.ENABLED = true;
 		ChunkPrewarmer.start();
 		// Auto-enable the router so cache hits actually short-circuit vanilla.
@@ -1289,13 +1289,13 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int prewarmOff(CommandContext<ServerCommandSource> ctx) {
+	private static int prewarmOff(CommandContext<CommandSourceStack> ctx) {
 		ChunkPrewarmer.ENABLED = false;
 		sendFeedback(ctx, "[prewarm] disabled (router untouched)", false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int prewarmStatus(CommandContext<ServerCommandSource> ctx) {
+	private static int prewarmStatus(CommandContext<CommandSourceStack> ctx) {
 		String line = String.format(
 				"[prewarm] enabled=%s cached=%d inflight=%d warmed=%d hits=%d misses=%d avgWarm=%dus",
 				ChunkPrewarmer.ENABLED, ChunkPrewarmer.cachedChunks(),
@@ -1306,25 +1306,25 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int prewarmClear(CommandContext<ServerCommandSource> ctx) {
+	private static int prewarmClear(CommandContext<CommandSourceStack> ctx) {
 		ChunkPrewarmer.clear();
 		sendFeedback(ctx, "[prewarm] cache cleared, stats reset", false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int chunkForceOn(CommandContext<ServerCommandSource> ctx) {
+	private static int chunkForceOn(CommandContext<CommandSourceStack> ctx) {
 		ChunkForcer.ENABLED = true;
 		sendFeedback(ctx, "[chunkforce] ENABLED — vanilla chunkgen forced ahead in rings (viewDist+16)", false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int chunkForceOff(CommandContext<ServerCommandSource> ctx) {
+	private static int chunkForceOff(CommandContext<CommandSourceStack> ctx) {
 		ChunkForcer.ENABLED = false;
 		sendFeedback(ctx, "[chunkforce] disabled (in-flight tickets allowed to complete naturally)", false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int chunkForceStatus(CommandContext<ServerCommandSource> ctx) {
+	private static int chunkForceStatus(CommandContext<CommandSourceStack> ctx) {
 		String line = String.format(
 				"[chunkforce] enabled=%s inflight=%d scheduled=%d completed=%d errored=%d",
 				ChunkForcer.ENABLED, ChunkForcer.inflightCount(),
@@ -1334,24 +1334,24 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int noiseRustOn(CommandContext<ServerCommandSource> ctx) {
+	private static int noiseRustOn(CommandContext<CommandSourceStack> ctx) {
 		RustFinalDensityBufferWrapper.ENABLED = true;
 		sendFeedback(ctx, "[noise-rust] ENABLED — newly-generated chunks bulk-prefill density via Rust (Phase 2). Existing chunks unaffected. Math may drift ~0.02 at sub-cell positions; toggle off if visual artifacts appear.", false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int noiseRustOff(CommandContext<ServerCommandSource> ctx) {
+	private static int noiseRustOff(CommandContext<CommandSourceStack> ctx) {
 		RustFinalDensityBufferWrapper.ENABLED = false;
 		sendFeedback(ctx, "[noise-rust] disabled — newly-generated chunks use vanilla finalDensity.", false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int noiseRustStatus(CommandContext<ServerCommandSource> ctx) {
+	private static int noiseRustStatus(CommandContext<CommandSourceStack> ctx) {
 		sendFeedback(ctx, "[noise-rust] enabled=" + RustFinalDensityBufferWrapper.ENABLED, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int noiseRustDiag(CommandContext<ServerCommandSource> ctx) {
+	private static int noiseRustDiag(CommandContext<CommandSourceStack> ctx) {
 		String bufferLine = RustFinalDensityBufferWrapper.diagSummary();
 		String flatLine = RustFlatCache.diagSummary();
 		ExampleMod.LOGGER.info(bufferLine);
@@ -1361,14 +1361,14 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int noiseRustReset(CommandContext<ServerCommandSource> ctx) {
+	private static int noiseRustReset(CommandContext<CommandSourceStack> ctx) {
 		RustFinalDensityBufferWrapper.resetDiag();
 		RustFlatCache.resetDiag();
 		sendFeedback(ctx, "[noise-rust] diagnostic counters reset", false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int biomeCompare(CommandContext<ServerCommandSource> ctx) {
+	private static int biomeCompare(CommandContext<CommandSourceStack> ctx) {
 		int x = IntegerArgumentType.getInteger(ctx, "x");
 		int y = IntegerArgumentType.getInteger(ctx, "y");
 		int z = IntegerArgumentType.getInteger(ctx, "z");
@@ -1389,7 +1389,7 @@ public final class FerriteCommand {
 	}
 
 	private static int aquiferRustOn(
-			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		RustAquiferDispatch.ENABLED = true;
 		String msg = "[aquifer-rust] enabled — wrappers will be constructed for newly-loaded chunks (existing chunks unchanged)";
 		sendFeedback(ctx, msg, true);
@@ -1398,16 +1398,16 @@ public final class FerriteCommand {
 	}
 
 	private static int aquiferRustOff(
-			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		RustAquiferDispatch.ENABLED = false;
-		String msg = "[aquifer-rust] disabled — vanilla AquiferSampler.Impl path active for newly-loaded chunks";
+		String msg = "[aquifer-rust] disabled — vanilla Aquifer.Impl path active for newly-loaded chunks";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int aquiferRustStatus(
-			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = RustAquiferDispatch.diagSummary();
 		sendFeedback(ctx, msg, false);
 		ExampleMod.LOGGER.info(msg);
@@ -1415,7 +1415,7 @@ public final class FerriteCommand {
 	}
 
 	private static int aquiferParityOn(
-			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		RustAquiferDispatch.PARITY_MODE = true;
 		String msg = "[aquifer-parity] enabled — every Rust apply will also call vanilla and compare (~2x cost). Mismatches log to [aquifer-parity] tag.";
 		sendFeedback(ctx, msg, true);
@@ -1424,14 +1424,14 @@ public final class FerriteCommand {
 	}
 
 	private static int aquiferParityOff(
-			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		RustAquiferDispatch.PARITY_MODE = false;
 		sendFeedback(ctx, "[aquifer-parity] disabled", true);
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int aquiferParityReset(
-			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		RustAquiferDispatch.parityCompared.set(0);
 		RustAquiferDispatch.parityBlockMismatch.set(0);
 		RustAquiferDispatch.parityTickMismatch.set(0);
@@ -1440,7 +1440,7 @@ public final class FerriteCommand {
 	}
 
 	private static int dispatcherProbeOn(
-			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		FerriteDispatcherProbe.ENABLED = true;
 		FerriteDispatcherProbe.resetDiag();
 		String msg = "[ferrite/dispatcher-probe] enabled (samples reset; status with /ferrite probe dispatcher status)";
@@ -1450,7 +1450,7 @@ public final class FerriteCommand {
 	}
 
 	private static int dispatcherProbeOff(
-			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		FerriteDispatcherProbe.ENABLED = false;
 		String msg = "[ferrite/dispatcher-probe] disabled";
 		sendFeedback(ctx, msg, true);
@@ -1459,7 +1459,7 @@ public final class FerriteCommand {
 	}
 
 	private static int dispatcherProbeStatus(
-			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = FerriteDispatcherProbe.diagSummary();
 		sendFeedback(ctx, msg, false);
 		ExampleMod.LOGGER.info(msg);
@@ -1467,7 +1467,7 @@ public final class FerriteCommand {
 	}
 
 	private static int dispatcherProbeReset(
-			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		FerriteDispatcherProbe.resetDiag();
 		String msg = "[ferrite/dispatcher-probe] reset";
 		sendFeedback(ctx, msg, true);
@@ -1476,8 +1476,8 @@ public final class FerriteCommand {
 	}
 
 	private static void sendFeedback(
-			com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx,
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx,
 			String message, boolean broadcast) {
-		ctx.getSource().sendFeedback(() -> Text.literal(message), broadcast);
+		ctx.getSource().sendFeedback(() -> Component.literal(message), broadcast);
 	}
 }

@@ -7,22 +7,22 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.ChainBlock;
-import net.minecraft.block.FenceBlock;
-import net.minecraft.block.FenceGateBlock;
-import net.minecraft.block.PaneBlock;
-import net.minecraft.block.ScaffoldingBlock;
-import net.minecraft.block.WallBlock;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.function.BooleanBiFunction;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.shape.VoxelShape;
-import net.minecraft.util.shape.VoxelShapes;
-import net.minecraft.world.World;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.ChainBlock;
+import net.minecraft.world.level.block.FenceBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.IronBarsBlock;
+import net.minecraft.world.level.block.ScaffoldingBlock;
+import net.minecraft.world.level.block.WallBlock;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.util.BooleanOp;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.level.Level;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -147,7 +147,7 @@ public final class PhysicsHandoff {
 	 * would exceed MAX_PALETTE_ENTRIES — caller must fall back to vanilla
 	 * for this tick.
 	 */
-	public static boolean buildSnapshot(World world, List<? extends Entity> mobs, int snapshotTickId) {
+	public static boolean buildSnapshot(Level world, List<? extends Entity> mobs, int snapshotTickId) {
 		if (mobs.isEmpty()) {
 			// Empty snapshot still valid — write a zero-size header so requests
 			// sharing this tickId with no colliders all fall back cleanly.
@@ -159,7 +159,7 @@ public final class PhysicsHandoff {
 		double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY, minZ = Double.POSITIVE_INFINITY;
 		double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY, maxZ = Double.NEGATIVE_INFINITY;
 		for (Entity e : mobs) {
-			Box b = e.getBoundingBox();
+			AABB b = e.getBoundingBox();
 			if (b.minX < minX) minX = b.minX;
 			if (b.minY < minY) minY = b.minY;
 			if (b.minZ < minZ) minZ = b.minZ;
@@ -301,7 +301,7 @@ public final class PhysicsHandoff {
 	 */
 	public static void buildRequests(
 			List<? extends Entity> mobs,
-			Vec3d[] motions,
+			Vec3[] motions,
 			float[] stepUps,
 			byte[] flags,
 			int snapshotTickId) {
@@ -313,8 +313,8 @@ public final class PhysicsHandoff {
 		REQUEST_BUF.clear();
 		for (int i = 0; i < n; i++) {
 			Entity e = mobs.get(i);
-			Box aabb = e.getBoundingBox();
-			Vec3d m = motions[i];
+			AABB aabb = e.getBoundingBox();
+			Vec3 m = motions[i];
 
 			REQUEST_BUF.putInt(e.getId());     // +0  entityId
 			REQUEST_BUF.putInt(0);             // +4  pad
@@ -350,7 +350,7 @@ public final class PhysicsHandoff {
 		RESULT_BUF.position(0);
 		RESULT_BUF.limit(count * RESULT_STRIDE);
 
-		Vec3d[] adjusted = new Vec3d[count];
+		Vec3[] adjusted = new Vec3[count];
 		byte[] flags = new byte[count];
 		int[] entityIds = new int[count];
 		int fallbackCount = 0;
@@ -364,7 +364,7 @@ public final class PhysicsHandoff {
 			byte f = RESULT_BUF.get(base + 32);
 			flags[i] = f;
 			if ((f & RES_FLAG_FALLBACK) == 0) {
-				adjusted[i] = new Vec3d(x, y, z);
+				adjusted[i] = new Vec3(x, y, z);
 			} else {
 				fallbackCount++;
 			}
@@ -379,11 +379,11 @@ public final class PhysicsHandoff {
 	 */
 	public static void fillSingleRequest(
 			Entity e,
-			Vec3d motion,
+			Vec3 motion,
 			float maxStepUp,
 			byte flags,
 			int snapshotTickId) {
-		Box aabb = e.getBoundingBox();
+		AABB aabb = e.getBoundingBox();
 		REQUEST_BUF.clear();
 		REQUEST_BUF.putInt(e.getId());
 		REQUEST_BUF.putInt(0);
@@ -410,21 +410,21 @@ public final class PhysicsHandoff {
 	 * Reads the single-entity result at offset 0. Returns null when the
 	 * FALLBACK flag is set — caller must invoke vanilla.
 	 */
-	public static Vec3d readSingleResult() {
+	public static Vec3 readSingleResult() {
 		byte f = RESULT_BUF.get(32);
 		if ((f & RES_FLAG_FALLBACK) != 0) return null;
 		double x = RESULT_BUF.getDouble(8);
 		double y = RESULT_BUF.getDouble(16);
 		double z = RESULT_BUF.getDouble(24);
-		return new Vec3d(x, y, z);
+		return new Vec3(x, y, z);
 	}
 
 	public static final class Results {
-		public final Vec3d[] adjusted;     // null entry = must fall back
+		public final Vec3[] adjusted;     // null entry = must fall back
 		public final byte[] flags;         // raw result flag byte per entity
 		public final int[] entityIds;      // echoed from request
 		public final int fallbackCount;
-		Results(Vec3d[] adjusted, byte[] flags, int[] entityIds, int fallbackCount) {
+		Results(Vec3[] adjusted, byte[] flags, int[] entityIds, int fallbackCount) {
 			this.adjusted = adjusted;
 			this.flags = flags;
 			this.entityIds = entityIds;
@@ -441,7 +441,7 @@ public final class PhysicsHandoff {
 	 * already present. Returns -1 if the palette is full. Blocks with
 	 * neighbor-dependent shapes are marked PALETTE_COMPLEX_COUNT.
 	 */
-	private static int registerPaletteEntry(BlockState state, World world, BlockPos pos) {
+	private static int registerPaletteEntry(BlockState state, Level world, BlockPos pos) {
 		int idx = PALETTE_AABBS.size();
 		if (idx >= MAX_PALETTE_ENTRIES) return -1;
 
@@ -462,9 +462,9 @@ public final class PhysicsHandoff {
 		}
 
 		// Extract axis-aligned boxes from the shape. VoxelShape.getBoundingBoxes()
-		// returns a List<Box> in world coords (but because we queried at `pos`,
+		// returns a List<AABB> in world coords (but because we queried at `pos`,
 		// boxes are translated by pos — we need cell-local [0,1] coords).
-		List<Box> boxes = shape.getBoundingBoxes();
+		List<AABB> boxes = shape.getBoundingBoxes();
 		int count = boxes.size();
 		if (count > 32) {
 			// Pathological shape — fall back rather than serialize 200 AABBs.
@@ -479,7 +479,7 @@ public final class PhysicsHandoff {
 		// lookup time, so we store the coords as-is without subtracting pos.
 		float[] arr = new float[count * 6];
 		for (int i = 0; i < count; i++) {
-			Box b = boxes.get(i);
+			AABB b = boxes.get(i);
 			int base = i * 6;
 			arr[base    ] = (float) b.minX;
 			arr[base + 1] = (float) b.minY;
@@ -502,7 +502,7 @@ public final class PhysicsHandoff {
 	private static boolean isNeighborDependent(Block block) {
 		return block instanceof FenceBlock
 				|| block instanceof WallBlock
-				|| block instanceof PaneBlock
+				|| block instanceof IronBarsBlock
 				|| block instanceof FenceGateBlock
 				|| block instanceof ChainBlock
 				|| block instanceof ScaffoldingBlock;
@@ -525,13 +525,13 @@ public final class PhysicsHandoff {
 		SNAPSHOT_BUF.flip();
 	}
 
-	// Silence unused-import tooling; VoxelShapes + BooleanBiFunction are
-	// kept in case we later need VoxelShapes.matchesAnywhere for complex-
+	// Silence unused-import tooling; Shapes + BooleanOp are
+	// kept in case we later need Shapes.matchesAnywhere for complex-
 	// shape normalization.
 	@SuppressWarnings("unused")
-	private static final Class<?> KEEP_VOXEL_SHAPES = VoxelShapes.class;
+	private static final Class<?> KEEP_VOXEL_SHAPES = Shapes.class;
 	@SuppressWarnings("unused")
-	private static final Class<?> KEEP_BOOLEAN_BIFUNCTION = BooleanBiFunction.class;
+	private static final Class<?> KEEP_BOOLEAN_BIFUNCTION = BooleanOp.class;
 
 	private static void maybeLogOverflow(String which, int limit) {
 		long now = System.nanoTime();

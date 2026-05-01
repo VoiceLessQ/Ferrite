@@ -6,7 +6,7 @@ package me.apika.apikaprobe.surface;
  * Spec: docs/SURFACE_RULE_BUFFER_SPEC.md
  *
  * The bytecode is emitted by {@link SurfaceRuleCompiler} from vanilla's
- * {@code MaterialRules} tree at world load and consumed (eventually) by
+ * {@code SurfaceRules} tree at world load and consumed (eventually) by
  * the Rust evaluator one chunk at a time. Opcode numbering matches the
  * spec's condition→opcode table so the same constants can be mirrored
  * on the Rust side without translation.

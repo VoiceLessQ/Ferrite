@@ -10,7 +10,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
  * Per-chunk timing of the {@code INITIALIZE_LIGHT} and {@code LIGHT}
  * phases. Measures the actual async-work duration by attaching a
  * {@code whenComplete} listener to the {@code CompletableFuture}
- * returned by {@code ServerLightingProvider.initializeLight} /
+ * returned by {@code ThreadedLevelLightEngine.initializeLight} /
  * {@code light}, not just the synchronous task-submission overhead.
  *
  * <p>Goal: data-driven decision on whether the {@code LIGHT} phase is

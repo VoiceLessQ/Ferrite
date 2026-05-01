@@ -10,7 +10,7 @@
  */
 package me.apika.apikaprobe.redstone;
 
-import net.minecraft.util.math.Direction;
+import net.minecraft.core.Direction;
 
 /**
  * Shared constants for the redstone wire graph: cardinal direction

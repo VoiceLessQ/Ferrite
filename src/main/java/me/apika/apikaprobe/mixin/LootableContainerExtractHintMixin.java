@@ -9,12 +9,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import me.apika.apikaprobe.hopper.ExtractHint;
 
-import net.minecraft.block.entity.LootableContainerBlockEntity;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.ItemStack;
+import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
 
-@Mixin(LootableContainerBlockEntity.class)
-public abstract class LootableContainerExtractHintMixin implements Inventory, ExtractHint {
+@Mixin(RandomizableContainerBlockEntity.class)
+public abstract class LootableContainerExtractHintMixin implements Container, ExtractHint {
 
 	@Unique
 	private int ferrite$extractHint = 0;
@@ -46,14 +46,14 @@ public abstract class LootableContainerExtractHintMixin implements Inventory, Ex
 		}
 	}
 
-	@Inject(method = "removeStack(II)Lnet/minecraft/item/ItemStack;", at = @At("RETURN"))
+	@Inject(method = "removeStack(II)Lnet.minecraft.world.item.ItemStack;", at = @At("RETURN"))
 	private void ferrite$onRemoveStackAmount(int slot, int amount, CallbackInfoReturnable<ItemStack> cir) {
 		if (slot == this.ferrite$extractHint && this.getStack(slot).isEmpty()) {
 			this.ferrite$advanceHintFrom(slot + 1);
 		}
 	}
 
-	@Inject(method = "removeStack(I)Lnet/minecraft/item/ItemStack;", at = @At("RETURN"))
+	@Inject(method = "removeStack(I)Lnet.minecraft.world.item.ItemStack;", at = @At("RETURN"))
 	private void ferrite$onRemoveStackAll(int slot, CallbackInfoReturnable<ItemStack> cir) {
 		if (slot == this.ferrite$extractHint && this.getStack(slot).isEmpty()) {
 			this.ferrite$advanceHintFrom(slot + 1);

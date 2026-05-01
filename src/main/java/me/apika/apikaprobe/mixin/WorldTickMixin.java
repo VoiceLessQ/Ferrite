@@ -7,21 +7,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.WorldTickMonitor;
 
-import net.minecraft.world.World;
+import net.minecraft.world.level.Level;
 
 /**
- * Times {@code World.tickBlockEntities()} at HEAD and RETURN.
+ * Times {@code Level.tickBlockEntities()} at HEAD and RETURN.
  *
- * World.tickBlockEntities is declared on the abstract World and called
- * from both ServerWorld.tick() and ClientWorld.tickEntities(). We only
+ * Level.tickBlockEntities is declared on the abstract Level and called
+ * from both ServerLevel.tick() and ClientLevel.tickEntities(). We only
  * want server-side samples, so the handlers early-out when isClient.
  */
-@Mixin(World.class)
+@Mixin(Level.class)
 public abstract class WorldTickMixin {
 
 	@Inject(method = "tickBlockEntities", at = @At("HEAD"))
 	private void ferrite$onBlockEntitiesBegin(CallbackInfo ci) {
-		if (((World) (Object) this).isClient()) {
+		if (((Level) (Object) this).isClient()) {
 			return;
 		}
 		WorldTickMonitor.onBlockEntitiesBegin();
@@ -29,7 +29,7 @@ public abstract class WorldTickMixin {
 
 	@Inject(method = "tickBlockEntities", at = @At("RETURN"))
 	private void ferrite$onBlockEntitiesEnd(CallbackInfo ci) {
-		if (((World) (Object) this).isClient()) {
+		if (((Level) (Object) this).isClient()) {
 			return;
 		}
 		WorldTickMonitor.onBlockEntitiesEnd();

@@ -8,24 +8,24 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import me.apika.apikaprobe.hopper.PerSlotFireConfig;
 import me.apika.apikaprobe.hopper.SlotCooldownAccess;
 
-import net.minecraft.block.entity.HopperBlockEntity;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.math.Direction;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.Direction;
 
 @Mixin(HopperBlockEntity.class)
 public abstract class HopperPerSlotChainFeedMixin {
 
 	@Inject(
-		method = "transfer(Lnet/minecraft/inventory/Inventory;Lnet/minecraft/inventory/Inventory;Lnet/minecraft/item/ItemStack;ILnet/minecraft/util/math/Direction;)Lnet/minecraft/item/ItemStack;",
+		method = "transfer(Lnet.minecraft.world.Container;Lnet.minecraft.world.Container;Lnet.minecraft.world.item.ItemStack;ILnet.minecraft.core.Direction;)Lnet.minecraft.world.item.ItemStack;",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/block/entity/HopperBlockEntity;setTransferCooldown(I)V",
+			target = "Lnet.minecraft.world.level.block.entity.HopperBlockEntity;setTransferCooldown(I)V",
 			shift = At.Shift.AFTER
 		)
 	)
 	private static void ferrite$perSlotChainFeed(
-		Inventory from, Inventory to, ItemStack stack, int slot, Direction side,
+		Container from, Container to, ItemStack stack, int slot, Direction side,
 		CallbackInfoReturnable<ItemStack> cir
 	) {
 		if (!PerSlotFireConfig.ENABLE) return;

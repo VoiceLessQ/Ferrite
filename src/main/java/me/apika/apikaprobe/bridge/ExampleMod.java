@@ -104,7 +104,7 @@ public class ExampleMod implements ModInitializer {
 		// cached int[1536] would just hog memory for chunks the cache
 		// will never serve again.
 		ServerChunkEvents.CHUNK_LOAD.register((world, chunk) -> {
-			net.minecraft.util.math.ChunkPos pos = chunk.getPos();
+			net.minecraft.world.level.ChunkPos pos = chunk.getPos();
 			ChunkPrewarmer.evict(pos.x, pos.z);
 		});
 

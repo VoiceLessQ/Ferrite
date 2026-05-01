@@ -13,12 +13,12 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.World;
+import net.minecraft.core.registries.Registry;
+import net.minecraft.core.registries.ResourceKey;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.world.level.Level;
 
 /**
  * One-shot world-load handler that builds the Rust-side seed-derived
@@ -33,7 +33,7 @@ import net.minecraft.world.World;
  *
  * <p>After this runs, Rust holds a {@code WorldgenState} keyed by full
  * identifier strings (e.g. {@code "minecraft:temperature"}) that
- * matches what vanilla's {@code RandomState} (yarn {@code NoiseConfig})
+ * matches what vanilla's {@code RandomState} (yarn {@code RandomState})
  * would produce for the same seed — bit-exact, by construction. Rust
  * evaluators can sample any noise without crossing JNI per-position.
  *
@@ -57,7 +57,7 @@ public final class WorldgenStateBootstrap {
 
 	public static void register() {
 		ServerWorldEvents.LOAD.register((server, world) -> {
-			if (world.getRegistryKey() != World.OVERWORLD) {
+			if (world.getRegistryKey() != Level.OVERWORLD) {
 				return;
 			}
 			if (initialized.getAndSet(true)) {
@@ -73,7 +73,7 @@ public final class WorldgenStateBootstrap {
 		});
 	}
 
-	private static void bootstrap(net.minecraft.server.MinecraftServer server, ServerWorld world) {
+	private static void bootstrap(net.minecraft.server.MinecraftServer server, ServerLevel world) {
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			return;
 		}
@@ -102,7 +102,7 @@ public final class WorldgenStateBootstrap {
 		List<String> names = new ArrayList<>();
 		for (Object entry : noiseRegistry) {
 			@SuppressWarnings("unchecked")
-			Identifier id = noiseRegistry.getId(entry);
+			ResourceLocation id = noiseRegistry.getId(entry);
 			if (id == null) {
 				failed++;
 				continue;
@@ -132,7 +132,7 @@ public final class WorldgenStateBootstrap {
 		int dfCount = registerDensityFunctions(server);
 
 		// Climate DFs from the live noise router (resolved noises bound).
-		// Walked from NoiseConfig (captured by mixin); registered under
+		// Walked from RandomState (captured by mixin); registered under
 		// `ferrite:climate/<axis>` so Rust can sample climate end-to-end
 		// without going through vanilla's Climate.Sampler.
 		int climateCount = registerResolvedRouterClimateDfs(seed);
@@ -156,7 +156,7 @@ public final class WorldgenStateBootstrap {
 	}
 
 	/**
-	 * Walk the live overworld {@code NoiseConfig.noiseRouter()} and
+	 * Walk the live overworld {@code RandomState.noiseRouter()} and
 	 * register its 6 climate DFs (temperature, vegetation, continents,
 	 * erosion, depth, ridges) into the in-progress Rust build under
 	 * {@code ferrite:climate/<axis>} names. These DFs already have their
@@ -164,7 +164,7 @@ public final class WorldgenStateBootstrap {
 	 * via the walker preserves the right noise references.
 	 *
 	 * <p>Must run BEFORE finalize. Uses {@link RustBridge#rootSeedsForSeed}
-	 * to find the matching captured NoiseConfig (worldgenRootSeedLo/Hi
+	 * to find the matching captured RandomState (worldgenRootSeedLo/Hi
 	 * return 0 pre-finalize, so we can't go through that path here).
 	 *
 	 * @return number of climate DFs registered
@@ -177,7 +177,7 @@ public final class WorldgenStateBootstrap {
 		}
 		Object noiseConfig = WorldgenParity.findNoiseConfigBySeeds(expected[0], expected[1]);
 		if (noiseConfig == null) {
-			ExampleMod.LOGGER.info("[worldgen-init] climate-router: no matching NoiseConfig captured (mixin order?)");
+			ExampleMod.LOGGER.info("[worldgen-init] climate-router: no matching RandomState captured (mixin order?)");
 			return 0;
 		}
 		Object router = null;
@@ -388,7 +388,7 @@ public final class WorldgenStateBootstrap {
 	 * BiomeSource / Climate.ParameterList shift across versions, and
 	 * this fires once at world load so perf doesn't matter.
 	 */
-	private static int registerBiomes(ServerWorld world) {
+	private static int registerBiomes(ServerLevel world) {
 		try {
 			Object chunkManager = world.getChunkManager();
 			Method getChunkGenerator = findMethod(chunkManager.getClass(), "getChunkGenerator");
@@ -471,8 +471,8 @@ public final class WorldgenStateBootstrap {
 			int n = entries.size();
 			ByteBuffer buf = ByteBuffer.allocateDirect(n * 112).order(ByteOrder.nativeOrder());
 			List<String> biomeNames = new ArrayList<>(n);
-			net.minecraft.registry.entry.RegistryEntry<?>[] biomeHolders =
-					new net.minecraft.registry.entry.RegistryEntry<?>[n];
+			net.minecraft.core.Holder<?>[] biomeHolders =
+					new net.minecraft.core.Holder<?>[n];
 
 			for (int i = 0; i < n; i++) {
 				Object pair = entries.get(i);
@@ -484,7 +484,7 @@ public final class WorldgenStateBootstrap {
 
 				String biomeName = resolveBiomeIdentifier(biomeHolder);
 				biomeNames.add(biomeName);
-				if (biomeHolder instanceof net.minecraft.registry.entry.RegistryEntry<?> holder) {
+				if (biomeHolder instanceof net.minecraft.core.Holder<?> holder) {
 					biomeHolders[i] = holder;
 				}
 
@@ -552,12 +552,12 @@ public final class WorldgenStateBootstrap {
 		try {
 			Object manager = server.getRegistryManager();
 			// Find the DENSITY_FUNCTION registry key.
-			Class<?> registryKeysClass = Class.forName("net.minecraft.registry.RegistryKeys");
+			Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.BuiltInRegistries");
 			Object dfRegistryKey;
 			try {
 				dfRegistryKey = registryKeysClass.getField("DENSITY_FUNCTION").get(null);
 			} catch (ReflectiveOperationException | RuntimeException e) {
-				ExampleMod.LOGGER.warn("[worldgen-init] RegistryKeys.DENSITY_FUNCTION missing: {}", e.toString());
+				ExampleMod.LOGGER.warn("[worldgen-init] BuiltInRegistries.DENSITY_FUNCTION missing: {}", e.toString());
 				return 0;
 			}
 			// Pull the registry via the same accessor dance we use for noises.
@@ -565,7 +565,7 @@ public final class WorldgenStateBootstrap {
 			Registry dfRegistry = null;
 			for (String methodName : new String[]{"getOrThrow", "get", "getRegistry"}) {
 				try {
-					Method m = manager.getClass().getMethod(methodName, RegistryKey.class);
+					Method m = manager.getClass().getMethod(methodName, ResourceKey.class);
 					Object r = m.invoke(manager, dfRegistryKey);
 					if (r instanceof Registry<?> reg) { dfRegistry = reg; break; }
 				} catch (ReflectiveOperationException ignored) {
@@ -582,7 +582,7 @@ public final class WorldgenStateBootstrap {
 			List<String> names = new ArrayList<>();
 			for (Object entry : dfRegistry) {
 				@SuppressWarnings("unchecked")
-				Identifier id = dfRegistry.getId(entry);
+				ResourceLocation id = dfRegistry.getId(entry);
 				if (id == null) { failed++; continue; }
 				String fullName = id.toString();
 				ByteBuffer bytecode = DensityFunctionWalker.encode(entry);
@@ -618,8 +618,8 @@ public final class WorldgenStateBootstrap {
 
 	/**
 	 * Pull the overworld's {@code Climate.Sampler} (yarn
-	 * {@code MultiNoiseUtil.MultiNoiseSampler}) off the chunk generator
-	 * via the route {@code chunkGenerator → NoiseConfig (per-world
+	 * {@code Climate.MultiNoiseSampler}) off the chunk generator
+	 * via the route {@code chunkGenerator → RandomState (per-world
 	 * RandomState equivalent) → multiNoiseSampler}. Stash it in
 	 * {@link BiomeParity#captureClimateSampler} for unloaded biome
 	 * lookups.
@@ -630,16 +630,16 @@ public final class WorldgenStateBootstrap {
 	 */
 	private static void captureOverworldClimateSampler() {
 		try {
-			// First, find the NoiseConfig (yarn) / RandomState (mojmap) on
-			// the generator. Yarn's NoiseChunkGenerator stores it by name
+			// First, find the RandomState (yarn) / RandomState (mojmap) on
+			// the generator. Yarn's NoiseBasedChunkGenerator stores it by name
 			// "settings" → NoiseGeneratorSettings is wrong; the per-world
 			// instance is built lazily and lives on the chunk manager. The
-			// cleanest path: use the already-captured NoiseConfig that
+			// cleanest path: use the already-captured RandomState that
 			// matches Rust's root seeds (WorldgenParity does this for the
 			// validator already — same picker logic).
 			Object noiseConfig = WorldgenParity.findOverworldNoiseConfig();
 			if (noiseConfig == null) {
-				ExampleMod.LOGGER.info("[worldgen-init] climate sampler: no matching overworld NoiseConfig captured yet — unloaded biome lookup deferred");
+				ExampleMod.LOGGER.info("[worldgen-init] climate sampler: no matching overworld RandomState captured yet — unloaded biome lookup deferred");
 				return;
 			}
 			// Common yarn names for the Climate.Sampler accessor.
@@ -740,7 +740,7 @@ public final class WorldgenStateBootstrap {
 		return "unknown";
 	}
 
-	private static boolean pushToRust(Identifier id, NoiseParamsView view) {
+	private static boolean pushToRust(ResourceLocation id, NoiseParamsView view) {
 		String fullName = id.toString();
 		byte[] nameBytes = fullName.getBytes(StandardCharsets.UTF_8);
 		ByteBuffer nameBuf = ByteBuffer.allocateDirect(nameBytes.length).order(ByteOrder.nativeOrder());
@@ -774,11 +774,11 @@ public final class WorldgenStateBootstrap {
 	@SuppressWarnings("rawtypes")
 	private static Registry resolveNoiseRegistry(net.minecraft.server.MinecraftServer server) {
 		Object manager = server.getRegistryManager();
-		Object key = RegistryKeys.NOISE_PARAMETERS;
+		Object key = BuiltInRegistries.NOISE_PARAMETERS;
 		String[] candidates = {"getOrThrow", "get", "getRegistry"};
 		for (String methodName : candidates) {
 			try {
-				Method method = manager.getClass().getMethod(methodName, RegistryKey.class);
+				Method method = manager.getClass().getMethod(methodName, ResourceKey.class);
 				Object result = method.invoke(manager, key);
 				if (result instanceof Registry<?> r) {
 					return r;
@@ -789,7 +789,7 @@ public final class WorldgenStateBootstrap {
 		}
 		// Fall back: try Optional-returning accessor.
 		try {
-			Method method = manager.getClass().getMethod("getOptional", RegistryKey.class);
+			Method method = manager.getClass().getMethod("getOptional", ResourceKey.class);
 			Object result = method.invoke(manager, key);
 			if (result instanceof java.util.Optional<?> opt && opt.isPresent()
 					&& opt.get() instanceof Registry<?> r) {

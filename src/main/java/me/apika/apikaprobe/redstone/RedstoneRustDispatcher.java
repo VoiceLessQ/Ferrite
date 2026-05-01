@@ -9,15 +9,15 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.RedstoneWireBlock;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.DefaultRedstoneController;
-import net.minecraft.world.RedstoneController;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.redstone.VanillaRedstoneWireEvaluator;
+import net.minecraft.world.level.redstone.RedstoneWireEvaluator;
 
 import me.apika.apikaprobe.mixin.RedstoneControllerInvoker;
 
@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  * and applies the returned power deltas.
  *
  * BFS neighbor-resolution mirrors
- * {@code RedstoneController.calculateWirePowerAt}'s connectivity rules:
+ * {@code RedstoneWireEvaluator.calculateWirePowerAt}'s connectivity rules:
  *   horizontal neighbor always;
  *   up-step iff neighbor is solid AND pos-above is NOT solid;
  *   down-step iff neighbor is NOT solid.
@@ -38,7 +38,7 @@ import org.slf4j.LoggerFactory;
  * hand to Rust matches what vanilla considers connected.
  *
  * Re-entry guard: when we apply deltas via `setBlockState` +
- * `updateNeighbors`, those can trigger further RedstoneWireBlock.update
+ * `updateNeighbors`, those can trigger further RedStoneWireBlock.update
  * calls (downstream wires/consumers). The [isActive] ThreadLocal lets
  * the interceptor mixin recognize recursive entries and fall through
  * to vanilla — which is a no-op at that point because all wire powers
@@ -55,7 +55,7 @@ public final class RedstoneRustDispatcher {
 	private static volatile long lastOverflowLogNs;
 
 	// Lazy controller handle — same pattern as RedstoneOracle.
-	private static volatile RedstoneController dispatchController;
+	private static volatile RedstoneWireEvaluator dispatchController;
 
 	// Dispatch counters — exposed via the 5s [redstone-rust] report so the
 	// next log read confirms whether the Rust path is actually firing.
@@ -111,10 +111,10 @@ public final class RedstoneRustDispatcher {
 		return ACTIVE.get()[0];
 	}
 
-	private static RedstoneController controller() {
-		RedstoneController c = dispatchController;
+	private static RedstoneWireEvaluator controller() {
+		RedstoneWireEvaluator c = dispatchController;
 		if (c == null) {
-			c = new DefaultRedstoneController((RedstoneWireBlock) Blocks.REDSTONE_WIRE);
+			c = new VanillaRedstoneWireEvaluator((RedStoneWireBlock) Blocks.REDSTONE_WIRE);
 			dispatchController = c;
 		}
 		return c;
@@ -127,7 +127,7 @@ public final class RedstoneRustDispatcher {
 	 * update); false if we bailed (too large / native unavailable —
 	 * caller should let vanilla run).
 	 */
-	public static boolean runBfsAndApply(ServerWorld world, BlockPos startPos) {
+	public static boolean runBfsAndApply(ServerLevel world, BlockPos startPos) {
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			BAILED.incrementAndGet();
 			return false;
@@ -163,7 +163,7 @@ public final class RedstoneRustDispatcher {
 	 * assigning each a stable index into the request buffer. Returns
 	 * node count, or -1 on overflow.
 	 */
-	private static int discover(ServerWorld world, BlockPos startPos, ScratchBuffers s) {
+	private static int discover(ServerLevel world, BlockPos startPos, ScratchBuffers s) {
 		if (!world.getBlockState(startPos).isOf(Blocks.REDSTONE_WIRE)) return 0;
 
 		BlockPos startImm = startPos.toImmutable();
@@ -205,7 +205,7 @@ public final class RedstoneRustDispatcher {
 	 * Adds `pos` to the node set if it's a wire and not already seen.
 	 * Returns new node count, or -1 on overflow.
 	 */
-	private static int tryAdd(ServerWorld world, BlockPos pos, ScratchBuffers s, int count) {
+	private static int tryAdd(ServerLevel world, BlockPos pos, ScratchBuffers s, int count) {
 		if (s.indexByPos.containsKey(pos)) return count;
 		if (!world.getBlockState(pos).isOf(Blocks.REDSTONE_WIRE)) return count;
 		if (count >= RedstoneHandoff.MAX_NODES) {
@@ -228,13 +228,13 @@ public final class RedstoneRustDispatcher {
 	 * REQUEST_BUF at `index * REQUEST_STRIDE`.
 	 */
 	private static void serializeToBuffer(
-			ServerWorld world, ScratchBuffers s, int nodeCount,
+			ServerLevel world, ScratchBuffers s, int nodeCount,
 			RedstoneControllerInvoker inv) {
 		RedstoneHandoff.resetRequestBuffer();
 		for (int idx = 0; idx < nodeCount; idx++) {
 			BlockPos pos = s.posByIndex[idx];
 			BlockState state = world.getBlockState(pos);
-			int current = state.get(RedstoneWireBlock.POWER);
+			int current = state.get(RedStoneWireBlock.POWER);
 			int source = inv.apikaprobe$getStrongPowerAt(world, pos);
 
 			Arrays.fill(s.neighborScratch, RedstoneHandoff.NO_NEIGHBOR);
@@ -254,7 +254,7 @@ public final class RedstoneRustDispatcher {
 	 * calculateWirePowerAt. Empty slots remain NO_NEIGHBOR.
 	 */
 	private static void resolveNeighbors(
-			ServerWorld world, BlockPos pos, ScratchBuffers s, int[] out) {
+			ServerLevel world, BlockPos pos, ScratchBuffers s, int[] out) {
 		BlockPos above = pos.up();
 		boolean aboveSolid = world.getBlockState(above).isSolidBlock(world, above);
 		int slot = 0;
@@ -289,7 +289,7 @@ public final class RedstoneRustDispatcher {
 	 * pistons, etc.) see the change. The ACTIVE flag prevents our own
 	 * update-interceptor mixin from re-entering during these calls.
 	 */
-	private static void applyDeltas(ServerWorld world, int deltaCount) {
+	private static void applyDeltas(ServerLevel world, int deltaCount) {
 		if (deltaCount == 0) return;
 		ACTIVE.get()[0] = true;
 		// Single reusable Mutable so the per-delta hot path doesn't allocate
@@ -307,7 +307,7 @@ public final class RedstoneRustDispatcher {
 				if (!state.isOf(Blocks.REDSTONE_WIRE)) continue;
 				world.setBlockState(
 						scratchPos,
-						state.with(RedstoneWireBlock.POWER, newPower),
+						state.with(RedStoneWireBlock.POWER, newPower),
 						Block.NOTIFY_LISTENERS);
 			}
 			for (int i = 0; i < deltaCount; i++) {

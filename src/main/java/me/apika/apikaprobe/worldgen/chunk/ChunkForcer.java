@@ -5,12 +5,12 @@ import me.apika.apikaprobe.bridge.ExampleMod;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
-import net.minecraft.server.world.ChunkTicketType;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registry;
+import net.minecraft.server.level.TicketType;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.world.level.ChunkPos;
 
 /**
  * Background chunk pre-generation via vanilla's public ticket API.
@@ -35,7 +35,7 @@ public final class ChunkForcer {
 
 	public static volatile boolean ENABLED = false;
 
-	private static ChunkTicketType ticketType;
+	private static TicketType ticketType;
 
 	/** Tracks chunks we've submitted that haven't completed yet. */
 	private static final ConcurrentHashMap<Long, Boolean> inflight = new ConcurrentHashMap<>();
@@ -51,15 +51,15 @@ public final class ChunkForcer {
 
 	public static void register() {
 		ticketType = Registry.register(
-				Registries.TICKET_TYPE,
-				Identifier.of(ExampleMod.MOD_ID, "chunkforce"),
-				new ChunkTicketType(80L, ChunkTicketType.FOR_LOADING));
+				BuiltInRegistries.TICKET_TYPE,
+				ResourceLocation.of(ExampleMod.MOD_ID, "chunkforce"),
+				new TicketType(80L, TicketType.FOR_LOADING));
 	}
 
 	/** Submit a force-gen request. Caller must already be on server thread.
 	 *  Returns true if newly queued; false if disabled, capped, already
 	 *  inflight, or registration didn't run. */
-	public static boolean submit(ServerWorld world, int cx, int cz) {
+	public static boolean submit(ServerLevel world, int cx, int cz) {
 		if (!ENABLED) return false;
 		if (ticketType == null) return false;
 		if (inflight.size() >= MAX_INFLIGHT) return false;

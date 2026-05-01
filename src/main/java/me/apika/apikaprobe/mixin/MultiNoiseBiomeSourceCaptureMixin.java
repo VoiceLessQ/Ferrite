@@ -5,7 +5,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import net.minecraft.world.biome.source.MultiNoiseBiomeSource;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
 
 import me.apika.apikaprobe.worldgen.BiomeParity;
 

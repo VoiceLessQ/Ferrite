@@ -9,8 +9,8 @@ import java.nio.DoubleBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicLong;
 
-import net.minecraft.util.dynamic.CodecHolder;
-import net.minecraft.world.gen.densityfunction.DensityFunction;
+import net.minecraft.util.CodecHolder;
+import net.minecraft.world.level.levelgen.DensityFunction;
 
 /**
  * Phase 2.5: drop-in replacement for vanilla's {@code NoiseChunk.FlatCache}.

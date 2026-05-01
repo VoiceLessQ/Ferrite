@@ -11,8 +11,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
-import net.minecraft.world.gen.densityfunction.DensityFunction;
+import net.minecraft.world.level.levelgen.NoiseChunk;
+import net.minecraft.world.level.levelgen.DensityFunction;
 
 /**
  * One-shot diagnostic. Fires on the first sampleStartDensity() completion.
@@ -22,7 +22,7 @@ import net.minecraft.world.gen.densityfunction.DensityFunction;
  *   - each delegate's declared fields (reflection, to peek one level
  *     into wrapping structures like RangeChoice)
  */
-@Mixin(ChunkNoiseSampler.class)
+@Mixin(NoiseChunk.class)
 public abstract class InterpolatorDiagnosticMixin {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");

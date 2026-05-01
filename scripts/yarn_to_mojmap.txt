@@ -1,0 +1,147 @@
+# Yarn -> Mojmap translation table for Ferrite 1.21.11 -> 26.1.2 port.
+# Two sections:
+#   [PACKAGES]   plain-string replacement on package qualifiers (works on imports
+#                AND inline fully-qualified references like `net.minecraft.X.Y`)
+#   [CLASSES]    word-boundary replacement (\b...\b) for renamed classes
+# scripts/apply_mappings.sh consumes this file.
+#
+# Ordering rule: more-specific package prefixes BEFORE broader ones.  Critically,
+# we do NOT use a broad `net.minecraft.world.` rule because its target
+# `net.minecraft.world.level.` starts with the source string, which would re-fire
+# on the output of every more-specific world.X -> world.level.X rule.  Instead
+# the seven net.minecraft.world.<DirectClass> imports are listed explicitly.
+
+[PACKAGES]
+# Deepest sub-packages first, broadest later.
+net.minecraft.world.biome.source.util.|net.minecraft.world.level.biome.
+net.minecraft.world.biome.source.|net.minecraft.world.level.biome.
+net.minecraft.world.biome.|net.minecraft.world.level.biome.
+net.minecraft.world.block.|net.minecraft.world.level.redstone.
+net.minecraft.world.chunk.|net.minecraft.world.level.chunk.
+net.minecraft.world.gen.chunk.|net.minecraft.world.level.levelgen.
+net.minecraft.world.gen.densityfunction.|net.minecraft.world.level.levelgen.
+net.minecraft.world.gen.noise.|net.minecraft.world.level.levelgen.
+net.minecraft.world.gen.surfacebuilder.|net.minecraft.world.level.levelgen.
+net.minecraft.world.gen.|net.minecraft.world.level.levelgen.
+
+# Direct children of net.minecraft.world. listed explicitly to avoid the
+# double-level pollution problem.  These map to multiple destination packages.
+net.minecraft.world.ChunkRegion|net.minecraft.world.level.WorldGenRegion
+net.minecraft.world.DefaultRedstoneController|net.minecraft.world.level.redstone.VanillaRedstoneWireEvaluator
+net.minecraft.world.ExperimentalRedstoneController|net.minecraft.world.level.redstone.AlternateCurrentRedstoneWireEvaluator
+net.minecraft.world.Heightmap|net.minecraft.world.level.levelgen.Heightmap
+net.minecraft.world.RedstoneController|net.minecraft.world.level.redstone.RedstoneWireEvaluator
+net.minecraft.world.StructureWorldAccess|net.minecraft.world.level.WorldGenLevel
+net.minecraft.world.World|net.minecraft.world.level.Level
+
+# Entity sub-packages (deepest first).
+net.minecraft.entity.ai.control.|net.minecraft.world.entity.ai.control.
+net.minecraft.entity.ai.goal.|net.minecraft.world.entity.ai.goal.
+net.minecraft.entity.ai.pathing.|net.minecraft.world.entity.ai.navigation.
+net.minecraft.entity.decoration.|net.minecraft.world.entity.decoration.
+net.minecraft.entity.mob.|net.minecraft.world.entity.
+net.minecraft.entity.player.|net.minecraft.world.entity.player.
+net.minecraft.entity.|net.minecraft.world.entity.
+
+# Block sub-packages.
+net.minecraft.block.entity.|net.minecraft.world.level.block.entity.
+net.minecraft.block.|net.minecraft.world.level.block.
+
+# Other top-level packages.
+net.minecraft.inventory.|net.minecraft.world.
+net.minecraft.item.|net.minecraft.world.item.
+net.minecraft.registry.entry.|net.minecraft.core.
+net.minecraft.registry.|net.minecraft.core.registries.
+net.minecraft.server.command.|net.minecraft.commands.
+net.minecraft.server.network.|net.minecraft.server.level.
+net.minecraft.server.world.|net.minecraft.server.level.
+net.minecraft.storage.|net.minecraft.world.level.storage.
+net.minecraft.text.|net.minecraft.network.chat.
+net.minecraft.util.dynamic.|net.minecraft.util.
+net.minecraft.util.function.|net.minecraft.util.
+net.minecraft.util.math.random.|net.minecraft.util.
+net.minecraft.util.math.|net.minecraft.world.phys.
+net.minecraft.util.shape.|net.minecraft.world.phys.shapes.
+
+# Corrections after the broad util.math -> world.phys rule above:
+# BlockPos / Direction / ChunkPos / Mth live in net.minecraft.core or net.minecraft.util.
+net.minecraft.world.phys.BlockPos|net.minecraft.core.BlockPos
+net.minecraft.world.phys.ChunkPos|net.minecraft.world.level.ChunkPos
+net.minecraft.world.phys.Direction|net.minecraft.core.Direction
+net.minecraft.world.phys.MathHelper|net.minecraft.util.Mth
+
+# Reverse-correct java.util.Random clobber (caused by the [CLASSES] Random -> RandomSource rule below).
+import java.util.RandomSource;|import java.util.Random;
+java.util.RandomSource|java.util.Random
+
+# (No defensive double-level rule. The original bug came from a broad
+# net.minecraft.world. -> net.minecraft.world.level. rule that re-fired
+# against its own output; that rule is now removed.  A defensive cleanup
+# pattern using unescaped dots (like net.minecraft.world.level.level.)
+# would itself be buggy because sed treats `.` as any-char and would
+# match net.minecraft.world.level.levelg and chop off the 'g'.)
+
+[CLASSES]
+# Word-boundary (\b) replacement.  Listing only CHANGED names; same-name classes need no entry.
+LootableContainerBlockEntity|RandomizableContainerBlockEntity
+AbstractRedstoneGateBlock|DiodeBlock
+RedstoneWireBlock|RedStoneWireBlock
+PaneBlock|IronBarsBlock
+ChunkNoiseSampler|NoiseChunk
+NoiseConfig|RandomState
+MaterialRules|SurfaceRules
+MultiNoiseUtil|Climate
+ServerLightingProvider|ThreadedLevelLightEngine
+ChunkTaskScheduler|ChunkTaskDispatcher
+ChunkTicketType|TicketType
+SimpleNeighborUpdater|CollectingNeighborUpdates
+StructureWorldAccess|WorldGenLevel
+ChunkRegion|WorldGenRegion
+HeightContext|WorldGenerationContext
+StructureAccessor|StructureManager
+NoiseChunkGenerator|NoiseBasedChunkGenerator
+SurfaceBuilder|SurfaceRules
+AquiferSampler|Aquifer
+DefaultRedstoneController|VanillaRedstoneWireEvaluator
+ExperimentalRedstoneController|AlternateCurrentRedstoneWireEvaluator
+RedstoneController|RedstoneWireEvaluator
+DoubleInventory|CompoundContainer
+ItemFrameEntity|ItemFrame
+ServerPlayerEntity|ServerPlayer
+PlayerEntity|Player
+MobEntity|Mob
+EntityNavigation|PathNavigation
+ActiveTargetGoal|NearestAttackableTargetGoal
+EntityRenderManager|EntityRenderDispatcher
+MinecraftClient|Minecraft
+ClientWorld|ClientLevel
+MatrixStack|PoseStack
+ServerCommandSource|CommandSourceStack
+CommandManager|Commands
+RegistryKeys|Registries
+Registries|BuiltInRegistries
+RegistryEntry|Holder
+RegistryKey|ResourceKey
+MathHelper|Mth
+Identifier|ResourceLocation
+Vec3d|Vec3
+Box|AABB
+VoxelShapes|Shapes
+SpawnGroup|MobCategory
+MovementType|MoverType
+ServerWorld|ServerLevel
+ChunkSection|LevelChunkSection
+WireOrientation|Orientation
+BiomeAccess|BiomeManager
+ReadView|ValueInput
+WriteView|ValueOutput
+RandomSplitter|PositionalRandomFactory
+BooleanBiFunction|BooleanOp
+TaskExecutor|ProcessorMailbox
+
+# Broad word-boundary renames - safe because \b stops at token boundaries and these
+# don't appear inside other class names that we're not also renaming.
+World|Level
+Random|RandomSource
+Text|Component
+Inventory|Container

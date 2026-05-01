@@ -6,7 +6,7 @@ import java.util.List;
  * Standalone dispatch-table self-test for {@link SurfaceRuleCompiler}.
  *
  * Builds synthetic node trees whose class simple-names match vanilla's
- * {@code MaterialRules} inner classes and runs them through the
+ * {@code SurfaceRules} inner classes and runs them through the
  * compiler. This validates that the visitor's switch covers every node
  * type without needing a running Minecraft server.
  *
@@ -477,7 +477,7 @@ public final class SurfaceRuleCompilerSelfTest {
 
 	private static void opVertGradientFallback() {
 		// VertGradient now emits real opcodes with per-block PRNG support
-		// (random_name index for the validator's RandomSplitter cache).
+		// (random_name index for the validator's PositionalRandomFactory cache).
 		// Synthetic node has no anchor fields → resolveYOffset returns 0,
 		// no randomName field → readRandomName returns "" (interned at idx 0).
 		// Layout: OP(1) + u16 randomNameIdx(2) + i32 trueAtAndBelow(4) +
@@ -554,7 +554,7 @@ public final class SurfaceRuleCompilerSelfTest {
 	}
 
 	// --- synthetic node classes -------------------------------------------
-	// Class simple-names must match vanilla MaterialRules$Inner names so
+	// Class simple-names must match vanilla SurfaceRules$Inner names so
 	// the compiler's switch dispatch hits. Package is irrelevant — the
 	// compiler keys off getSimpleName() and recurseIfRuleNode skips the
 	// children walk for non-vanilla packages, so we mark each child via

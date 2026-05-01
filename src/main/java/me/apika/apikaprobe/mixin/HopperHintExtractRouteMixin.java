@@ -9,29 +9,29 @@ import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 import me.apika.apikaprobe.hopper.ExtractHint;
 import me.apika.apikaprobe.monitor.HopperHintMonitor;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.Hopper;
-import net.minecraft.block.entity.HopperBlockEntity;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.World;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.entity.Hopper;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.Container;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.Level;
 
 @Mixin(HopperBlockEntity.class)
 public abstract class HopperHintExtractRouteMixin {
 
 	@Inject(
-		method = "extract(Lnet/minecraft/world/World;Lnet/minecraft/block/entity/Hopper;)Z",
+		method = "extract(Lnet.minecraft.world.level.Level;Lnet.minecraft.world.level.block.entity.Hopper;)Z",
 		at = @At(
 			value = "INVOKE_ASSIGN",
-			target = "Lnet/minecraft/block/entity/HopperBlockEntity;getInputInventory(Lnet/minecraft/world/World;Lnet/minecraft/block/entity/Hopper;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;)Lnet/minecraft/inventory/Inventory;"
+			target = "Lnet.minecraft.world.level.block.entity.HopperBlockEntity;getInputInventory(Lnet.minecraft.world.level.Level;Lnet.minecraft.world.level.block.entity.Hopper;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.BlockState;)Lnet.minecraft.world.Container;"
 		),
 		locals = LocalCapture.CAPTURE_FAILHARD,
 		cancellable = true
 	)
 	private static void ferrite$hintedExtract(
-		World world, Hopper hopper, CallbackInfoReturnable<Boolean> cir,
-		BlockPos blockPos, BlockState blockState, Inventory inventory
+		Level world, Hopper hopper, CallbackInfoReturnable<Boolean> cir,
+		BlockPos blockPos, BlockState blockState, Container inventory
 	) {
 		if (!HopperHintMonitor.USE_HINT) return;
 		if (inventory == null || !(inventory instanceof ExtractHint h)) {

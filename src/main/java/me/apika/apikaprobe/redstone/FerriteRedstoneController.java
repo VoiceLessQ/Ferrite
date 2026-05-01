@@ -10,20 +10,20 @@ package me.apika.apikaprobe.redstone;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.RedstoneWireBlock;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.DefaultRedstoneController;
-import net.minecraft.world.World;
-import net.minecraft.world.block.WireOrientation;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.redstone.VanillaRedstoneWireEvaluator;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.redstone.Orientation;
 
 import org.jspecify.annotations.Nullable;
 
 /**
- * Extends {@link DefaultRedstoneController} so that the
- * {@link RedstoneWireBlock#redstoneController} field — which the
+ * Extends {@link VanillaRedstoneWireEvaluator} so that the
+ * {@link RedStoneWireBlock#redstoneController} field — which the
  * installation mixin intercepts via {@code @Redirect(value = NEW)} —
  * gets a drop-in replacement that can either delegate to AC's
  * {@link WireHandler} (when {@link FerriteWireConfig#ENABLED}) or
@@ -31,23 +31,23 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Per-world handler map: redstone cascades hold mutable per-cascade
  * state ({@code nodes}, {@code updates}, {@code updating} flag), so
- * each {@link ServerWorld} gets its own {@link WireHandler}. The map
+ * each {@link ServerLevel} gets its own {@link WireHandler}. The map
  * uses {@link WeakHashMap} keys so an unloaded / GC'd world doesn't
  * pin the handler in memory.
  */
-public class FerriteRedstoneController extends DefaultRedstoneController {
+public class FerriteRedstoneController extends VanillaRedstoneWireEvaluator {
 
 	/** One handler per world. Weak keys so unloaded worlds don't leak. */
-	private final Map<ServerWorld, WireHandler> handlers = new WeakHashMap<>();
+	private final Map<ServerLevel, WireHandler> handlers = new WeakHashMap<>();
 
-	public FerriteRedstoneController(RedstoneWireBlock wire) {
+	public FerriteRedstoneController(RedStoneWireBlock wire) {
 		super(wire);
 	}
 
 	@Override
-	public void update(World world, BlockPos pos, BlockState state, @Nullable WireOrientation orientation, boolean blockAdded) {
+	public void update(Level world, BlockPos pos, BlockState state, @Nullable Orientation orientation, boolean blockAdded) {
 		// Client-side, non-server, or A/B flag off — defer to vanilla.
-		if (world.isClient() || !(world instanceof ServerWorld serverWorld) || !FerriteWireConfig.ENABLED) {
+		if (world.isClient() || !(world instanceof ServerLevel serverWorld) || !FerriteWireConfig.ENABLED) {
 			super.update(world, pos, state, orientation, blockAdded);
 			return;
 		}

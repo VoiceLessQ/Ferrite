@@ -7,14 +7,14 @@ import me.apika.apikaprobe.RustBridge;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.world.biome.Biome;
+import net.minecraft.core.Holder;
+import net.minecraft.world.level.biome.Biome;
 
 /**
  * Routes vanilla biome lookups to the Rust path during chunk gen.
  *
  * <p>{@link WorldgenStateBootstrap} populates {@link #holdersById} with
- * the per-Rust-ID {@code RegistryEntry<Biome>} extracted from the
+ * the per-Rust-ID {@code Holder<Biome>} extracted from the
  * overworld's MultiNoiseBiomeSource parameter list. The mixin on
  * {@code MultiNoiseBiomeSource.getBiome(...)} consults this router
  * whenever {@link #ENABLED} is true.
@@ -30,7 +30,7 @@ public final class RustBiomeRouter {
 
 	/** Set once at world load by {@link WorldgenStateBootstrap}. Index =
 	 *  Rust biome ID; entry = the live holder vanilla would have returned. */
-	private static volatile RegistryEntry<Biome>[] holdersById = null;
+	private static volatile Holder<Biome>[] holdersById = null;
 
 	// Diagnostic counters live on the COLD path only. Per-call hit
 	// tracking was removed: under vanilla's parallel chunkgen worker pool,
@@ -45,8 +45,8 @@ public final class RustBiomeRouter {
 			new java.util.concurrent.atomic.AtomicLong();
 
 	@SuppressWarnings("unchecked")
-	public static void install(RegistryEntry<?>[] entries) {
-		holdersById = (RegistryEntry<Biome>[]) entries;
+	public static void install(Holder<?>[] entries) {
+		holdersById = (Holder<Biome>[]) entries;
 	}
 
 	/** Per-thread 4×4 slab cache. Vanilla's biome supplier is called
@@ -79,9 +79,9 @@ public final class RustBiomeRouter {
 	 *  The prewarm cache is populated off the chunkgen worker by
 	 *  {@link ChunkPrewarmer} as the player approaches; on hit, vanilla's
 	 *  biome supplier returns at memory speed. */
-	public static RegistryEntry<Biome> tryRoute(int blockX, int blockY, int blockZ) {
+	public static Holder<Biome> tryRoute(int blockX, int blockY, int blockZ) {
 		if (!ENABLED) return null;
-		RegistryEntry<Biome>[] table = holdersById;
+		Holder<Biome>[] table = holdersById;
 		if (table == null) return null;
 
 		// Cache-first: try prewarm cache. Lock-free read; on hit we
@@ -133,7 +133,7 @@ public final class RustBiomeRouter {
 	}
 
 	public static int size() {
-		RegistryEntry<Biome>[] table = holdersById;
+		Holder<Biome>[] table = holdersById;
 		return table == null ? 0 : table.length;
 	}
 

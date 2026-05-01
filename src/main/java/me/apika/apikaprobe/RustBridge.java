@@ -173,7 +173,7 @@ public class RustBridge {
   /**
    * Begin a fresh worldgen-state build on the Rust side. Derives the
    * root positional random factory from {@code seed} the same way
-   * vanilla's {@code RandomState} (yarn {@code NoiseConfig}) does:
+   * vanilla's {@code RandomState} (yarn {@code RandomState}) does:
    * {@code Xoroshiro(seed).forkPositional()}.
    *
    * <p>Pair with one {@link #registerNoiseParameter} call per named
@@ -188,9 +188,9 @@ public class RustBridge {
 
   /**
    * Register one named noise into the in-progress build. {@code name}
-   * is the UTF-8-encoded full identifier ({@code Identifier.toString()}
+   * is the UTF-8-encoded full identifier ({@code ResourceLocation.toString()}
    * form, e.g. {@code "minecraft:temperature"}) — that's what vanilla
-   * hashes via {@code PositionalRandomFactory.fromHashOf(Identifier)}.
+   * hashes via {@code PositionalRandomFactory.fromHashOf(ResourceLocation)}.
    *
    * <p>{@code amplitudes} is a direct {@link java.nio.ByteBuffer} of
    * {@code ampCount} f64 values in little-endian order (host byte order
@@ -229,7 +229,7 @@ public class RustBridge {
 
   /**
    * End-to-end Rust biome lookup at a block coord. Samples the 6
-   * `ferrite:climate/<axis>` DFs (resolved from the live NoiseConfig
+   * `ferrite:climate/<axis>` DFs (resolved from the live RandomState
    * router at world load), quantizes, runs the R-tree. Returns biome
    * ID, or -1 if any climate DF or the biome tree isn't registered.
    * Block coords are snapped to quart-aligned values internally.
@@ -473,7 +473,7 @@ public class RustBridge {
    * </ul>
    *
    * <p>Mirrors vanilla's
-   * {@code AquiferSampler.Impl.apply(NoisePos, double)} return.
+   * {@code Aquifer.Impl.apply(NoisePos, double)} return.
    */
   public static native long applyAquifer(
       long handle, int blockX, int blockY, int blockZ, double density);

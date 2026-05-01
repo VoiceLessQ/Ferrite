@@ -5,12 +5,12 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.decoration.ItemFrameEntity;
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.decoration.ItemFrame;
+import net.minecraft.server.level.ServerLevel;
 
 /**
- * Counts loaded ItemFrameEntity (and GlowItemFrameEntity, which extends it)
+ * Counts loaded ItemFrame (and GlowItemFrameEntity, which extends it)
  * across all server worlds so misc-bucket cost can be divided into a per-frame
  * number.
  *
@@ -38,9 +38,9 @@ public final class ItemFrameMonitor {
 			lastReportNs = now;
 
 			int total = 0;
-			for (ServerWorld world : server.getWorlds()) {
+			for (ServerLevel world : server.getWorlds()) {
 				for (Entity e : world.iterateEntities()) {
-					if (e instanceof ItemFrameEntity) {
+					if (e instanceof ItemFrame) {
 						total++;
 					}
 				}

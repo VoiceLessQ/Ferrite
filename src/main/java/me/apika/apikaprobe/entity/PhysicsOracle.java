@@ -4,8 +4,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
  * Correctness oracle for the Rust physics dispatcher.
  *
  * <p>When {@link PhysicsDispatcher#PARITY_MODE} is true,
- * {@link PhysicsDispatcher#adjust(Entity, Vec3d)} ALWAYS returns vanilla's
+ * {@link PhysicsDispatcher#adjust(Entity, Vec3)} ALWAYS returns vanilla's
  * result (so the live world is unaffected) but ALSO shadow-runs the Rust
  * path and feeds the (vanilla, rust) pair through {@link #record}. This
  * gives a real-load parity dataset without risking visible mob clipping
@@ -58,7 +58,7 @@ public final class PhysicsOracle {
 	}
 
 	/** Rust returned a result; compare against vanilla. */
-	public static void record(Entity self, Vec3d motion, Vec3d vanilla, Vec3d rust) {
+	public static void record(Entity self, Vec3 motion, Vec3 vanilla, Vec3 rust) {
 		COMPARED.incrementAndGet();
 		double dx = rust.x - vanilla.x;
 		double dy = rust.y - vanilla.y;

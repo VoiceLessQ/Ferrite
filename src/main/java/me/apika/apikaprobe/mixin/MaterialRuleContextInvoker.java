@@ -4,7 +4,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
 /**
- * Exposes {@code MaterialRules$MaterialRuleContext.initVerticalContext}
+ * Exposes {@code SurfaceRules$MaterialRuleContext.initVerticalContext}
  * (package-private inner class, protected method) as a synthetic
  * {@code ferrite$invokeInitVerticalContext} method that {@link
  * SurfaceValidatorMixin}'s {@code @Redirect} can call directly via
@@ -23,7 +23,7 @@ import org.spongepowered.asm.mixin.gen.Invoker;
  * <p>JFR profile (2026-04-28) identified this site as the dominant
  * dispatch overhead — see {@code docs/PIANO_STATUS.md}.
  */
-@Mixin(targets = "net.minecraft.world.gen.surfacebuilder.MaterialRules$MaterialRuleContext")
+@Mixin(targets = "net.minecraft.world.level.levelgen.SurfaceRules$MaterialRuleContext")
 public interface MaterialRuleContextInvoker {
 	@Invoker("initVerticalContext")
 	void ferrite$invokeInitVerticalContext(

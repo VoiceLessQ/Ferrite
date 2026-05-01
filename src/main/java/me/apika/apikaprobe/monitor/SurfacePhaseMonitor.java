@@ -8,17 +8,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Splits SurfaceBuilder.buildSurface's per-chunk cost into seven buckets
+ * Splits SurfaceRules.buildSurface's per-chunk cost into seven buckets
  * so we can decide whether a Rust port of the surface-rule evaluator is
  * worth the architectural lift.
  *
- *   [0] tryApply       — MaterialRules$BlockStateRule.tryApply(x,y,z)
+ *   [0] tryApply       — SurfaceRules$BlockStateRule.tryApply(x,y,z)
  *                        (the hot rule-tree walk; 16K-65K calls per chunk)
  *   [1] blockRead      — BlockColumn.getBlock(y)
  *   [2] blockWrite     — BlockColumn.setBlock(y, state)
  *   [3] contextUpdate  — MaterialRuleContext.initHorizontalContext /
  *                        initVerticalContext
- *   [4] biomeLookup    — BiomeAccess.getBiome(pos)
+ *   [4] biomeLookup    — BiomeManager.getBiome(pos)
  *   [5] heightmap      — Chunk.sampleHeightmap(type, x, z)
  *        other          — buildSurface_total - sum(above)
  *

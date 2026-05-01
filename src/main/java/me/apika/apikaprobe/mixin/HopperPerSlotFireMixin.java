@@ -11,22 +11,22 @@ import me.apika.apikaprobe.hopper.PerSlotFireConfig;
 import me.apika.apikaprobe.hopper.SlotCooldownAccess;
 import me.apika.apikaprobe.monitor.HopperPerSlotMonitor;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.block.HopperBlock;
-import net.minecraft.block.entity.HopperBlockEntity;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.HopperBlock;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
 
 @Mixin(HopperBlockEntity.class)
 public abstract class HopperPerSlotFireMixin {
 
 	@Inject(
-		method = "insertAndExtract(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;Lnet/minecraft/block/entity/HopperBlockEntity;Ljava/util/function/BooleanSupplier;)Z",
+		method = "insertAndExtract(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.BlockState;Lnet.minecraft.world.level.block.entity.HopperBlockEntity;Ljava/util/function/BooleanSupplier;)Z",
 		at = @At("HEAD"),
 		cancellable = true
 	)
 	private static void ferrite$perSlotFire(
-		World world, BlockPos pos, BlockState state, HopperBlockEntity blockEntity, BooleanSupplier extractSupplier,
+		Level world, BlockPos pos, BlockState state, HopperBlockEntity blockEntity, BooleanSupplier extractSupplier,
 		CallbackInfoReturnable<Boolean> cir
 	) {
 		if (!PerSlotFireConfig.ENABLE) return;
@@ -108,7 +108,7 @@ public abstract class HopperPerSlotFireMixin {
 	private static boolean ferrite$isFull(HopperBlockEntity be) {
 		int n = be.size();
 		for (int i = 0; i < n; i++) {
-			net.minecraft.item.ItemStack s = be.getStack(i);
+			net.minecraft.world.item.ItemStack s = be.getStack(i);
 			if (s.isEmpty() || s.getCount() != s.getMaxCount()) return false;
 		}
 		return true;

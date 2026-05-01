@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Toggle + diagnostics for the Rust aquifer port.
  *
  * <p>When enabled, {@code AquiferRouteMixin} substitutes vanilla's
- * {@code AquiferSampler.Impl} with {@link RustAquiferSampler} at chunk
+ * {@code Aquifer.Impl} with {@link RustAquiferSampler} at chunk
  * noise-sampler construction time. Each chunk allocates a per-chunk
  * Rust handle (via {@code RustBridge.initAquifer}) and frees it when
  * the wrapper is no longer reachable.
@@ -44,7 +44,7 @@ public final class RustAquiferDispatch {
     public static final AtomicLong wrappersFreed = new AtomicLong();
 
     /** Number of times the wrapper bailed out to the vanilla
-     *  AquiferSampler.Impl because Rust returned a 0 handle (worldgen
+     *  Aquifer.Impl because Rust returned a 0 handle (worldgen
      *  state not finalized, surface grid invalid, etc.). Should be 0
      *  after the first chunk loads cleanly. */
     public static final AtomicLong constructionFallbacks = new AtomicLong();

@@ -1,8 +1,8 @@
 package me.apika.apikaprobe.worldgen.chunk;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
 
 /**
  * Per-server-tick driver for {@link ChunkForcer}. Walks concentric rings
@@ -33,10 +33,10 @@ public final class ChunkForceTrigger {
 	private static void onTick(net.minecraft.server.MinecraftServer server) {
 		if (!ChunkForcer.ENABLED) return;
 		int budget = SCHEDULE_BUDGET_PER_TICK;
-		for (ServerWorld world : server.getWorlds()) {
+		for (ServerLevel world : server.getWorlds()) {
 			int viewDistance = server.getPlayerManager().getViewDistance();
 			int radius = viewDistance + LOOK_AHEAD;
-			for (ServerPlayerEntity player : world.getPlayers()) {
+			for (ServerPlayer player : world.getPlayers()) {
 				int pcx = player.getBlockPos().getX() >> 4;
 				int pcz = player.getBlockPos().getZ() >> 4;
 				budget = scheduleRings(world, pcx, pcz, radius, budget);
@@ -45,7 +45,7 @@ public final class ChunkForceTrigger {
 		}
 	}
 
-	private static int scheduleRings(ServerWorld world, int pcx, int pcz, int radius, int budget) {
+	private static int scheduleRings(ServerLevel world, int pcx, int pcz, int radius, int budget) {
 		for (int r = 0; r <= radius && budget > 0; r++) {
 			if (r == 0) {
 				if (trySubmit(world, pcx, pcz)) budget--;
@@ -68,7 +68,7 @@ public final class ChunkForceTrigger {
 	/** Skip chunks vanilla already has loaded — already done, and the
 	 *  prewarm cache for those should also go (vanilla owns biome data
 	 *  now). */
-	private static boolean trySubmit(ServerWorld world, int cx, int cz) {
+	private static boolean trySubmit(ServerLevel world, int cx, int cz) {
 		if (world.isChunkLoaded(cx, cz)) {
 			ChunkPrewarmer.evict(cx, cz);
 			return false;

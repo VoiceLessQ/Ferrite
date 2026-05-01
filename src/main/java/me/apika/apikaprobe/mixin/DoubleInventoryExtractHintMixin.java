@@ -6,14 +6,14 @@ import org.spongepowered.asm.mixin.Shadow;
 
 import me.apika.apikaprobe.hopper.ExtractHint;
 
-import net.minecraft.inventory.DoubleInventory;
-import net.minecraft.inventory.Inventory;
+import net.minecraft.world.CompoundContainer;
+import net.minecraft.world.Container;
 
-@Mixin(DoubleInventory.class)
-public abstract class DoubleInventoryExtractHintMixin implements Inventory, ExtractHint {
+@Mixin(CompoundContainer.class)
+public abstract class DoubleInventoryExtractHintMixin implements Container, ExtractHint {
 
-	@Shadow @Final private Inventory first;
-	@Shadow @Final private Inventory second;
+	@Shadow @Final private Container first;
+	@Shadow @Final private Container second;
 
 	@Override
 	public int ferrite$getExtractHint() {

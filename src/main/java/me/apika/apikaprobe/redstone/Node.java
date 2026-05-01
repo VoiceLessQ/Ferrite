@@ -9,10 +9,10 @@ package me.apika.apikaprobe.redstone;
 
 import java.util.Arrays;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
 
 /**
  * A {@code Node} represents a block in the world — redstone-related or
@@ -32,7 +32,7 @@ public class Node {
 	private static final int CONDUCTOR = 0b01;
 	private static final int SOURCE    = 0b10;
 
-	final ServerWorld world;
+	final ServerLevel world;
 	final Node[] neighbors;
 
 	BlockPos pos;
@@ -50,7 +50,7 @@ public class Node {
 	/** The wire that enqueued this node for an update. */
 	WireNode neighborWire;
 
-	Node(ServerWorld world) {
+	Node(ServerLevel world) {
 		this.world = world;
 		this.neighbors = new Node[WireConstants.Directions.ALL.length];
 	}

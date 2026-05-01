@@ -5,21 +5,21 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.math.random.RandomSplitter;
-import net.minecraft.world.gen.chunk.AquiferSampler;
-import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
-import net.minecraft.world.gen.noise.NoiseRouter;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.util.PositionalRandomFactory;
+import net.minecraft.world.level.levelgen.Aquifer;
+import net.minecraft.world.level.levelgen.NoiseChunk;
+import net.minecraft.world.level.levelgen.NoiseRouter;
 
 import me.apika.apikaprobe.bridge.ExampleMod;
 import me.apika.apikaprobe.worldgen.RustAquiferDispatch;
 import me.apika.apikaprobe.worldgen.RustAquiferSampler;
 
 /**
- * Redirects the {@link AquiferSampler#aquifer(ChunkNoiseSampler,
- * ChunkPos, NoiseRouter, RandomSplitter, int, int,
- * AquiferSampler.FluidLevelSampler)} factory call inside
- * {@link ChunkNoiseSampler}'s constructor. When
+ * Redirects the {@link Aquifer#aquifer(NoiseChunk,
+ * ChunkPos, NoiseRouter, PositionalRandomFactory, int, int,
+ * Aquifer.FluidLevelSampler)} factory call inside
+ * {@link NoiseChunk}'s constructor. When
  * {@link RustAquiferDispatch#ENABLED} is true, wraps the vanilla
  * sampler with {@link RustAquiferSampler} so per-block
  * {@code apply()} calls go through the Rust port.
@@ -27,7 +27,7 @@ import me.apika.apikaprobe.worldgen.RustAquiferSampler;
  * <p>When the toggle is off, the redirect transparently returns the
  * vanilla sampler unchanged.
  */
-@Mixin(ChunkNoiseSampler.class)
+@Mixin(NoiseChunk.class)
 public abstract class AquiferRouteMixin {
 
     /** Vanilla per-column surface-height estimator. Used to populate
@@ -37,7 +37,7 @@ public abstract class AquiferRouteMixin {
     abstract int estimateSurfaceHeight(int x, int z);
 
     /** Vanilla rectangle-max surface-height estimator. Vanilla's
-     *  `AquiferSampler.Impl` constructor (line 140-141) feeds this
+     *  `Aquifer.Impl` constructor (line 140-141) feeds this
      *  into the `field_61452` high-Y cap calculation. Mirroring the
      *  exact call site is needed for parity — approximating with
      *  `max` over our sparse surface grid drifts by a few blocks and
@@ -50,27 +50,27 @@ public abstract class AquiferRouteMixin {
             method = "<init>",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/world/gen/chunk/AquiferSampler;"
-                            + "aquifer(Lnet/minecraft/world/gen/chunk/ChunkNoiseSampler;"
-                            + "Lnet/minecraft/util/math/ChunkPos;"
-                            + "Lnet/minecraft/world/gen/noise/NoiseRouter;"
-                            + "Lnet/minecraft/util/math/random/RandomSplitter;"
+                    target = "Lnet.minecraft.world.level.levelgen.Aquifer;"
+                            + "aquifer(Lnet.minecraft.world.level.levelgen.NoiseChunk;"
+                            + "Lnet.minecraft.world.level.ChunkPos;"
+                            + "Lnet.minecraft.world.level.levelgen.NoiseRouter;"
+                            + "Lnet.minecraft.util.PositionalRandomFactory;"
                             + "II"
-                            + "Lnet/minecraft/world/gen/chunk/AquiferSampler$FluidLevelSampler;)"
-                            + "Lnet/minecraft/world/gen/chunk/AquiferSampler;"))
-    private AquiferSampler ferrite$wrapAquifer(
-            ChunkNoiseSampler chunkNoiseSampler,
+                            + "Lnet.minecraft.world.level.levelgen.Aquifer$FluidLevelSampler;)"
+                            + "Lnet.minecraft.world.level.levelgen.Aquifer;"))
+    private Aquifer ferrite$wrapAquifer(
+            NoiseChunk chunkNoiseSampler,
             ChunkPos chunkPos,
             NoiseRouter noiseRouter,
-            RandomSplitter randomSplitter,
+            PositionalRandomFactory randomSplitter,
             int minimumY,
             int height,
-            AquiferSampler.FluidLevelSampler fluidLevelSampler) {
+            Aquifer.FluidLevelSampler fluidLevelSampler) {
         // Always build the vanilla sampler — used as fallback when
         // Rust init fails AND keeps vanilla's lazy state consistent
         // with the wrapper's. Cost: one extra Impl alloc per chunk
         // (~16 KB), worth it for the simpler fallback path.
-        AquiferSampler vanilla = AquiferSampler.aquifer(
+        Aquifer vanilla = Aquifer.aquifer(
                 chunkNoiseSampler, chunkPos, noiseRouter, randomSplitter,
                 minimumY, height, fluidLevelSampler);
 
@@ -92,7 +92,7 @@ public abstract class AquiferRouteMixin {
                     chunkMinBlockX, chunkMinBlockZ, this::estimateSurfaceHeight);
 
             // High surface estimate — replicate vanilla's exact call
-            // from `AquiferSampler.Impl` constructor (line 140-141).
+            // from `Aquifer.Impl` constructor (line 140-141).
             // Vanilla feeds this through `field_61452` math to
             // determine the high-Y bailout cap; bit-exact agreement
             // here closes the dominant Pattern-1 mismatch documented

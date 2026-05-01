@@ -7,11 +7,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import me.apika.apikaprobe.monitor.AquiferMonitor;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.world.gen.densityfunction.DensityFunction;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.levelgen.DensityFunction;
 
 /**
- * Targets AquiferSampler$Impl — the concrete (non-disabled) aquifer
+ * Targets Aquifer$Impl — the concrete (non-disabled) aquifer
  * implementation used in overworld generation. The interface method
  * can't be directly hooked; only the Impl class has a body to inject into.
  *
@@ -19,11 +19,11 @@ import net.minecraft.world.gen.densityfunction.DensityFunction;
  * transformer has no ambiguity:
  *   apply(DensityFunction$NoisePos, double) → BlockState
  */
-@Mixin(targets = "net.minecraft.world.gen.chunk.AquiferSampler$Impl")
+@Mixin(targets = "net.minecraft.world.level.levelgen.Aquifer$Impl")
 public abstract class AquiferMixin {
 
 	@Inject(
-		method = "apply(Lnet/minecraft/world/gen/densityfunction/DensityFunction$NoisePos;D)Lnet/minecraft/block/BlockState;",
+		method = "apply(Lnet.minecraft.world.level.levelgen.DensityFunction$NoisePos;D)Lnet.minecraft.world.level.block.BlockState;",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onApplyBegin(
@@ -35,7 +35,7 @@ public abstract class AquiferMixin {
 	}
 
 	@Inject(
-		method = "apply(Lnet/minecraft/world/gen/densityfunction/DensityFunction$NoisePos;D)Lnet/minecraft/block/BlockState;",
+		method = "apply(Lnet.minecraft.world.level.levelgen.DensityFunction$NoisePos;D)Lnet.minecraft.world.level.block.BlockState;",
 		at = @At("RETURN")
 	)
 	private void apikaprobe$onApplyEnd(

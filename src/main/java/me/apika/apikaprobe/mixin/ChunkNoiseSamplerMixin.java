@@ -7,8 +7,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import net.minecraft.world.gen.chunk.ChunkNoiseSampler;
-import net.minecraft.world.gen.densityfunction.DensityFunction;
+import net.minecraft.world.level.levelgen.NoiseChunk;
+import net.minecraft.world.level.levelgen.DensityFunction;
 
 import me.apika.apikaprobe.worldgen.RustFlatCache;
 import me.apika.apikaprobe.worldgen.RustFinalDensityBufferWrapper;
@@ -30,7 +30,7 @@ import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
  * <p>Toggle: {@link RustFinalDensityBufferWrapper#ENABLED} (re-used for
  * the {@code /ferrite noise rust on/off} command surface).
  */
-@Mixin(ChunkNoiseSampler.class)
+@Mixin(NoiseChunk.class)
 public abstract class ChunkNoiseSamplerMixin {
 
 	@Shadow

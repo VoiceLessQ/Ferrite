@@ -3,11 +3,11 @@
  * Copyright (c) 2022 Space Walker — MIT License
  *
  * Yarn-remapped for Fabric 1.21.11. Key yarn renames:
- *   net.minecraft.core.BlockPos          -> net.minecraft.util.math.BlockPos
- *   net.minecraft.server.level.ServerLevel -> net.minecraft.server.world.ServerWorld
- *   net.minecraft.util.Mth               -> net.minecraft.util.math.MathHelper
- *   net.minecraft.world.level.block.*    -> net.minecraft.block.*
- *   RedStoneWireBlock                    -> RedstoneWireBlock
+ *   net.minecraft.core.BlockPos          -> net.minecraft.core.BlockPos
+ *   net.minecraft.server.level.ServerLevel -> net.minecraft.server.level.ServerLevel
+ *   net.minecraft.util.Mth               -> net.minecraft.util.Mth
+ *   net.minecraft.world.level.block.*    -> net.minecraft.world.level.block.*
+ *   RedStoneWireBlock                    -> RedStoneWireBlock
  *   state.is(Blocks.X)                   -> state.isOf(Blocks.X)
  *   state.getValue / setValue            -> state.get / with
  *   Redstone.SIGNAL_MIN / MAX            -> WireConstants.SIGNAL_MIN / MAX (inlined 0 / 15)
@@ -17,13 +17,13 @@
  */
 package me.apika.apikaprobe.redstone;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.RedstoneWireBlock;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.Mth;
 
 /**
  * A {@link Node} that represents a redstone wire in the world. Extends
@@ -82,7 +82,7 @@ public class WireNode extends Node {
 	 */
 	int rustIndex = -1;
 
-	WireNode(ServerWorld world, BlockPos pos, BlockState state) {
+	WireNode(ServerLevel world, BlockPos pos, BlockState state) {
 		super(world);
 
 		this.pos = pos.toImmutable();
@@ -90,7 +90,7 @@ public class WireNode extends Node {
 
 		this.connections = new WireConnectionManager(this);
 
-		this.virtualPower = this.currentPower = this.state.get(RedstoneWireBlock.POWER);
+		this.virtualPower = this.currentPower = this.state.get(RedStoneWireBlock.POWER);
 		this.priority = priority();
 	}
 
@@ -101,7 +101,7 @@ public class WireNode extends Node {
 
 	@Override
 	int priority() {
-		return MathHelper.clamp(virtualPower, WireConstants.SIGNAL_MIN, WireConstants.SIGNAL_MAX);
+		return Mth.clamp(virtualPower, WireConstants.SIGNAL_MIN, WireConstants.SIGNAL_MAX);
 	}
 
 	@Override
@@ -162,8 +162,8 @@ public class WireNode extends Node {
 			return true;
 		}
 
-		currentPower = MathHelper.clamp(virtualPower, WireConstants.SIGNAL_MIN, WireConstants.SIGNAL_MAX);
-		state = state.with(RedstoneWireBlock.POWER, currentPower);
+		currentPower = Mth.clamp(virtualPower, WireConstants.SIGNAL_MIN, WireConstants.SIGNAL_MAX);
+		state = state.with(RedStoneWireBlock.POWER, currentPower);
 
 		return LevelHelper.setWireState(world, pos, state, added);
 	}

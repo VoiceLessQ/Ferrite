@@ -1,8 +1,8 @@
 package me.apika.apikaprobe.worldgen.chunk;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
 
 /**
  * Drives {@link ChunkPrewarmer} from per-server-tick player position
@@ -37,10 +37,10 @@ public final class ChunkPrewarmTrigger {
 		if (!ChunkPrewarmer.ENABLED) return;
 		ChunkPrewarmer.start(); // idempotent
 		int budget = SCHEDULE_BUDGET_PER_TICK;
-		for (ServerWorld world : server.getWorlds()) {
+		for (ServerLevel world : server.getWorlds()) {
 			int viewDistance = world.getServer().getPlayerManager().getViewDistance();
 			int radius = viewDistance + LOOK_AHEAD;
-			for (ServerPlayerEntity player : world.getPlayers()) {
+			for (ServerPlayer player : world.getPlayers()) {
 				int pcx = player.getBlockPos().getX() >> 4;
 				int pcz = player.getBlockPos().getZ() >> 4;
 				budget = scheduleRings(world, pcx, pcz, radius, budget);
@@ -51,7 +51,7 @@ public final class ChunkPrewarmTrigger {
 
 	/** Walk concentric rings r=0..radius and schedule each (cx,cz).
 	 *  Stops when budget is exhausted. */
-	private static int scheduleRings(ServerWorld world, int pcx, int pcz, int radius, int budget) {
+	private static int scheduleRings(ServerLevel world, int pcx, int pcz, int radius, int budget) {
 		for (int r = 0; r <= radius && budget > 0; r++) {
 			if (r == 0) {
 				if (trySchedule(world, pcx, pcz)) budget--;
@@ -76,7 +76,7 @@ public final class ChunkPrewarmTrigger {
 	/** Skip chunks vanilla already has loaded — once a chunk is loaded,
 	 *  vanilla owns the biome data and our predicted cache would just
 	 *  shadow memory we don't need. Evict in case it was cached earlier. */
-	private static boolean trySchedule(ServerWorld world, int cx, int cz) {
+	private static boolean trySchedule(ServerLevel world, int cx, int cz) {
 		if (world.isChunkLoaded(cx, cz)) {
 			ChunkPrewarmer.evict(cx, cz);
 			return false;

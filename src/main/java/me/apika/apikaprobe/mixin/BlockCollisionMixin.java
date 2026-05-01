@@ -7,8 +7,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.MovementInternalsMonitor;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
 
 /**
  * Times Entity.tickBlockCollision() for mobs only — the per-tick
@@ -21,7 +21,7 @@ public abstract class BlockCollisionMixin {
 
 	@Inject(method = "tickBlockCollision()V", at = @At("HEAD"))
 	private void ferrite$onBlockCollisionBegin(CallbackInfo ci) {
-		if (!((Object) this instanceof MobEntity)) {
+		if (!((Object) this instanceof Mob)) {
 			return;
 		}
 		MovementInternalsMonitor.onBlockCollisionBegin();
@@ -29,7 +29,7 @@ public abstract class BlockCollisionMixin {
 
 	@Inject(method = "tickBlockCollision()V", at = @At("RETURN"))
 	private void ferrite$onBlockCollisionEnd(CallbackInfo ci) {
-		if (!((Object) this instanceof MobEntity)) {
+		if (!((Object) this instanceof Mob)) {
 			return;
 		}
 		MovementInternalsMonitor.onBlockCollisionEnd();

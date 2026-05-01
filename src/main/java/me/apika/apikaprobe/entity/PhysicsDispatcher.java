@@ -13,17 +13,17 @@ import org.slf4j.LoggerFactory;
 import me.apika.apikaprobe.RustBridge;
 import me.apika.apikaprobe.mixin.EntityAdjustInvoker;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Option A — chunk-column bucketing with lazy snapshot rebuild.
  *
  * Per tick:
- *   1. PhysicsPreTickMixin fires at ServerWorld.tick HEAD →
- *      onPreEntityTick(world). Walk entities once, partition MobEntity
+ *   1. PhysicsPreTickMixin fires at ServerLevel.tick HEAD →
+ *      onPreEntityTick(world). Walk entities once, partition Mob
  *      into HashMap<chunkKey, List<Entity>>. No snapshots built yet.
  *   2. Each mob's move() triggers MovementRedirectMixin → adjust().
  *      Compute the mob's chunk key; if SNAPSHOT_BUF currently holds a
@@ -69,7 +69,7 @@ public final class PhysicsDispatcher {
 
 	private static long currentlyLoadedBucketKey = BUCKET_KEY_NONE;
 	private static int  currentlyLoadedTickId   = 0;
-	private static ServerWorld currentWorld     = null;
+	private static ServerLevel currentWorld     = null;
 
 	// --- Diagnostics --------------------------------------------------------
 	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
@@ -89,7 +89,7 @@ public final class PhysicsDispatcher {
 	// Called from PhysicsPreTickMixin
 	// =========================================================================
 
-	public static void onPreEntityTick(ServerWorld world) {
+	public static void onPreEntityTick(ServerLevel world) {
 		// Return any lists we kept around to the pool, then clear the map.
 		releaseBuckets();
 		currentlyLoadedBucketKey = BUCKET_KEY_NONE;
@@ -102,10 +102,10 @@ public final class PhysicsDispatcher {
 			return;
 		}
 
-		// Partition all MobEntity in this world into 16x16 chunk-column buckets.
+		// Partition all Mob in this world into 16x16 chunk-column buckets.
 		int mobCount = 0;
 		for (Entity e : world.iterateEntities()) {
-			if (!(e instanceof MobEntity)) continue;
+			if (!(e instanceof Mob)) continue;
 			long key = chunkKey(e);
 			List<Entity> bucket = BUCKETS.get(key);
 			if (bucket == null) {
@@ -125,15 +125,15 @@ public final class PhysicsDispatcher {
 	// Called from MovementRedirectMixin (once per mob per move() call)
 	// =========================================================================
 
-	public static Vec3d adjust(Entity self, Vec3d motion) {
+	public static Vec3 adjust(Entity self, Vec3 motion) {
 		if (PARITY_MODE) {
 			// Always run vanilla — that's what we return.
-			Vec3d vanillaResult = ((EntityAdjustInvoker) self).ferrite$invokeAdjust(motion);
+			Vec3 vanillaResult = ((EntityAdjustInvoker) self).ferrite$invokeAdjust(motion);
 			// Shadow-run Rust if eligible. Unaffected by ENABLED — parity
 			// validation happens with ENABLED=false so the live world stays
 			// on vanilla while we collect the dataset.
 			if (RustBridge.NATIVE_AVAILABLE && currentWorld != null) {
-				Vec3d rustResult = runRust(self, motion);
+				Vec3 rustResult = runRust(self, motion);
 				if (rustResult != null) {
 					PhysicsOracle.record(self, motion, vanillaResult, rustResult);
 				}
@@ -146,7 +146,7 @@ public final class PhysicsDispatcher {
 			return ((EntityAdjustInvoker) self).ferrite$invokeAdjust(motion);
 		}
 
-		Vec3d result = runRust(self, motion);
+		Vec3 result = runRust(self, motion);
 		if (result == null) {
 			diagFallback++;
 			return ((EntityAdjustInvoker) self).ferrite$invokeAdjust(motion);
@@ -163,7 +163,7 @@ public final class PhysicsDispatcher {
 	 * {@link PhysicsOracle} side counters so PARITY_MODE captures the
 	 * eligibility breakdown without mutating the existing diag log shape.
 	 */
-	private static Vec3d runRust(Entity self, Vec3d motion) {
+	private static Vec3 runRust(Entity self, Vec3 motion) {
 		long key = chunkKey(self);
 		List<Entity> bucket = BUCKETS.get(key);
 		if (bucket == null) {
@@ -200,7 +200,7 @@ public final class PhysicsDispatcher {
 			1
 		);
 
-		Vec3d result = PhysicsHandoff.readSingleResult();
+		Vec3 result = PhysicsHandoff.readSingleResult();
 		if (result == null) {
 			PhysicsOracle.recordRustFallback();
 		}

@@ -7,19 +7,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.MovementInternalsMonitor;
 
-import net.minecraft.entity.ai.pathing.EntityNavigation;
+import net.minecraft.world.entity.ai.navigation.PathNavigation;
 
 /**
- * Times EntityNavigation.tick() — path step execution for mob navigators.
+ * Times PathNavigation.tick() — path step execution for mob navigators.
  *
- * No entity-type guard here — EntityNavigation is owned by MobEntity
+ * No entity-type guard here — PathNavigation is owned by Mob
  * by construction. Targets the abstract base class; subclasses
  * (MobNavigation, BirdNavigation, etc.) that override tick() and call
  * super.tick() will be counted. If a subclass overrides without calling
  * super, its calls will be missed — if diagnostic shows suspiciously
  * low navigator time, we'd need to add subclass-specific Mixins.
  */
-@Mixin(EntityNavigation.class)
+@Mixin(PathNavigation.class)
 public abstract class NavigatorTickMixin {
 
 	@Inject(method = "tick()V", at = @At("HEAD"))

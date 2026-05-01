@@ -12,17 +12,17 @@ import org.slf4j.LoggerFactory;
  *
  * Two independent metric streams:
  *
- * 1. Wire cascades — RedstoneWireBlock.update is the single private
- *    dispatcher that routes to DefaultRedstoneController or
- *    ExperimentalRedstoneController. Wire power propagation is recursive:
+ * 1. Wire cascades — RedStoneWireBlock.update is the single private
+ *    dispatcher that routes to VanillaRedstoneWireEvaluator or
+ *    AlternateCurrentRedstoneWireEvaluator. Wire power propagation is recursive:
  *    controller.update() → world.updateNeighbors(...) → neighbor's
- *    neighborUpdate → potentially another RedstoneWireBlock.update. To
+ *    neighborUpdate → potentially another RedStoneWireBlock.update. To
  *    avoid double-counting, a ThreadLocal depth counter makes only the
  *    outermost entry (0 → 1) start the timer, and only the matching exit
  *    (1 → 0) records duration. Inner calls are counted as part of their
  *    enclosing cascade's wall time.
  *
- * 2. Gate scheduled-ticks — AbstractRedstoneGateBlock.scheduledTick.
+ * 2. Gate scheduled-ticks — DiodeBlock.scheduledTick.
  *    Repeaters and comparators fire this via the vanilla block tick
  *    scheduler. Single-level timing (no recursion concern — gates never
  *    re-enter their own scheduledTick within the same call stack).
@@ -86,7 +86,7 @@ public final class RedstonePhaseMonitor {
 		}
 	}
 
-	// Controller split — which RedstoneController impl handled the update.
+	// Controller split — which RedstoneWireEvaluator impl handled the update.
 	// Lets us verify at a glance whether the world is running default or
 	// experimental redstone; crucial because the two have very different
 	// cost profiles and a Rust port should benchmark against the default
