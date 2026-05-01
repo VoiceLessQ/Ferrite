@@ -102,7 +102,7 @@ public final class WorldgenStateBootstrap {
 		List<String> names = new ArrayList<>();
 		for (Object entry : noiseRegistry) {
 			@SuppressWarnings("unchecked")
-			Identifier id = noiseRegistry.getId(entry);
+			Identifier id = noiseRegistry.getKey(entry);
 			if (id == null) {
 				failed++;
 				continue;
@@ -582,7 +582,7 @@ public final class WorldgenStateBootstrap {
 			List<String> names = new ArrayList<>();
 			for (Object entry : dfRegistry) {
 				@SuppressWarnings("unchecked")
-				Identifier id = dfRegistry.getId(entry);
+				Identifier id = dfRegistry.getKey(entry);
 				if (id == null) { failed++; continue; }
 				String fullName = id.toString();
 				ByteBuffer bytecode = DensityFunctionWalker.encode(entry);
@@ -774,7 +774,7 @@ public final class WorldgenStateBootstrap {
 	@SuppressWarnings("rawtypes")
 	private static Registry resolveNoiseRegistry(net.minecraft.server.MinecraftServer server) {
 		Object manager = server.registryAccess();
-		Object key = Registries.NOISE_PARAMETERS;
+		Object key = Registries.NOISE;
 		String[] candidates = {"getOrThrow", "get", "getRegistry"};
 		for (String methodName : candidates) {
 			try {
