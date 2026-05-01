@@ -12,7 +12,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.registries.Registries;
@@ -56,8 +56,17 @@ public final class WorldgenStateBootstrap {
 	}
 
 	public static void register() {
-		ServerWorldEvents.LOAD.register((server, world) -> {
-			if (world.getRegistryKey() != Level.OVERWORLD) {
+		// Hook SERVER_STARTED instead of per-world LOAD: the per-world
+		// lifecycle event (ServerWorldEvents.LOAD) takes a ServerLevel
+		// in its lambda which our architectury-loom + disableObfuscation
+		// classpath fails to remap from intermediary (class_3218) to
+		// mojmap (ServerLevel).  STARTED fires once per server start
+		// with just MinecraftServer in the lambda - no MC types, so
+		// the fabric-api jar's signature matches.  Bootstrap runs on
+		// the overworld, which exists by SERVER_STARTED.
+		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+			ServerLevel world = server.getLevel(Level.OVERWORLD);
+			if (world == null) {
 				return;
 			}
 			if (initialized.getAndSet(true)) {

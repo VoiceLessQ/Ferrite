@@ -103,10 +103,13 @@ public class ExampleMod implements ModInitializer {
 		// Vanilla now owns the authoritative biome data; keeping our
 		// cached int[1536] would just hog memory for chunks the cache
 		// will never serve again.
-		ServerChunkEvents.CHUNK_LOAD.register((world, chunk) -> {
-			net.minecraft.world.level.ChunkPos pos = chunk.getPos();
-			ChunkPrewarmer.evict(pos.x(), pos.z());
-		});
+		// DISABLED on 26.1.2: ServerChunkEvents.CHUNK_LOAD's lambda type
+		// uses class_3218 / class_2818 (intermediary names) in the fabric-api
+		// jar, which our architectury-loom + disableObfuscation setup doesn't
+		// remap to mojmap (ServerLevel / LevelChunk).  The eviction is a
+		// memory-housekeeping nicety, not correctness-critical.  Re-enable
+		// once fabric-api remapping is sorted, or replace with a mixin into
+		// ServerChunkCache.onChunkReadyToSend.
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			// Explicitly disable every Rust-backed dispatcher so vanilla
