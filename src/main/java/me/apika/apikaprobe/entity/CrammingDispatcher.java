@@ -131,7 +131,7 @@ public final class CrammingDispatcher {
 		// Yarn 1.21.11: GameRules moved to net.minecraft.world.level.gamerules.GameRules
 		// and the typed getInt accessor is gone — only getValue(rule)→Object
 		// remains. Cast Integer for the int rule.
-		int maxCramming = (Integer) world.getGameRules().getValue(
+		int maxCramming = (Integer) world.getGameRules().get(
 				net.minecraft.world.level.gamerules.GameRules.MAX_ENTITY_CRAMMING);
 		int pushedThisBatch = 0;
 		int damagedThisBatch = 0;

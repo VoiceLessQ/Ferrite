@@ -30,7 +30,7 @@ public final class SurfaceRuleAccess {
 		if (world == null) return Result.fail("world is null");
 		Object generator;
 		try {
-			generator = world.getChunkSource().getChunkGenerator();
+			generator = world.getChunkSource().getGenerator();
 		} catch (RuntimeException e) {
 			return Result.fail("getChunkGenerator threw: " + e.getMessage());
 		}

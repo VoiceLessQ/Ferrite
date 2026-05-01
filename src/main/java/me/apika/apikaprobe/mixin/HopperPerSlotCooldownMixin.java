@@ -95,14 +95,14 @@ public abstract class HopperPerSlotCooldownMixin implements SlotCooldownAccess {
 
 	@Inject(method = "readData(Lnet/minecraft/world/level/storage/ValueInput;)V", at = @At("RETURN"))
 	private void ferrite$readSlotCooldowns(ValueInput view, CallbackInfo ci) {
-		Optional<int[]> saved = view.getOptionalIntArray("FerriteSlotCooldowns");
+		Optional<int[]> saved = view.getIntArray("FerriteSlotCooldowns");
 		if (saved.isPresent() && saved.get().length == this.ferrite$slotCooldowns.length) {
 			int[] src = saved.get();
 			for (int i = 0; i < this.ferrite$slotCooldowns.length; i++) {
 				this.ferrite$slotCooldowns[i] = src[i];
 			}
 		} else {
-			int legacy = view.getInt("TransferCooldown", -1);
+			int legacy = view.getIntOr("TransferCooldown", -1);
 			this.ferrite$broadcastCooldown(legacy);
 		}
 	}

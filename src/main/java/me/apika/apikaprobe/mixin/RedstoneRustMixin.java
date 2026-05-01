@@ -62,13 +62,13 @@ public abstract class RedstoneRustMixin {
 			RedstoneWireEvaluator controller,
 			Level world, BlockPos pos, BlockState state, Orientation orientation, boolean blockAdded) {
 		if (!RedstoneHandoff.USE_RUST || world.isClientSide() || RedstoneRustDispatcher.isActive()) {
-			controller.update(world, pos, state, orientation, blockAdded);
+			controller.updatePowerStrength(world, pos, state, orientation, blockAdded);
 			return;
 		}
 		if (!RedstoneRustDispatcher.runBfsAndApply((ServerLevel) world, pos)) {
 			// Rust bailed (overflow / native missing) — fall back so the
 			// wire still gets updated.
-			controller.update(world, pos, state, orientation, blockAdded);
+			controller.updatePowerStrength(world, pos, state, orientation, blockAdded);
 		}
 	}
 }
