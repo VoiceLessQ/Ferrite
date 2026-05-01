@@ -93,33 +93,33 @@ public final class TerrainBulkHandoff {
 		final int startX = chunk.getPos().getStartX();
 		final int startZ = chunk.getPos().getStartZ();
 
-		// Batched fill via DensityFunction.fill(double[], EachApplier).
-		// Concrete density function implementations can override fill to
-		// batch-process more efficiently than 1225 individual sample() calls.
-		// Applier.at(i) maps flat-array index to cell-corner world position.
+		// Batched fillArray via DensityFunction.fillArray(double[], ContextProvider).
+		// Concrete density function implementations can override fillArray to
+		// batch-process more efficiently than 1225 individual compute() calls.
+		// ContextProvider.forIndex(i) maps flat-array index to cell-corner world position.
 		double[] cornerValues = new double[CORNER_COUNT];
-		DensityFunction.EachApplier applier = new DensityFunction.EachApplier() {
+		DensityFunction.ContextProvider applier = new DensityFunction.ContextProvider() {
 			@Override
-			public DensityFunction.FunctionContext at(int index) {
+			public DensityFunction.FunctionContext forIndex(int index) {
 				int cy = index / (CORNERS_X * CORNERS_Z);
 				int cz = (index / CORNERS_X) % CORNERS_Z;
 				int cx = index % CORNERS_X;
-				return new DensityFunction.UnblendedNoisePos(
+				return new DensityFunction.SinglePointContext(
 						startX + cx * CELL_WIDTH,
 						MIN_Y + cy * CELL_HEIGHT,
 						startZ + cz * CELL_WIDTH);
 			}
 
 			@Override
-			public void fill(double[] densities, DensityFunction function) {
+			public void fillAllDirectly(double[] densities, DensityFunction function) {
 				for (int i = 0; i < densities.length; i++) {
-					densities[i] = function.sample(at(i));
+					densities[i] = function.compute(forIndex(i));
 				}
 			}
 		};
 
 		long tSampleStart = System.nanoTime();
-		finalDensity.fill(cornerValues, applier);
+		finalDensity.fillArray(cornerValues, applier);
 		long sampleNs = System.nanoTime() - tSampleStart;
 
 		for (int i = 0; i < CORNER_COUNT; i++) {

@@ -87,9 +87,9 @@ public final class RustFinalDensityBufferWrapper implements DensityFunction.Simp
 	 * </ul>
 	 */
 	@Override
-	public double sample(DensityFunction.FunctionContext pos) {
+	public double compute(DensityFunction.FunctionContext pos) {
 		double[] buf = this.buffer;
-		if (buf == null) return slowSample(pos);
+		if (buf == null) return slowCompute(pos);
 		int relX = pos.blockX() - this.chunkMinBlockX;
 		int relY = pos.blockY() - MIN_BLOCK_Y;
 		int relZ = pos.blockZ() - this.chunkMinBlockZ;
@@ -97,26 +97,26 @@ public final class RustFinalDensityBufferWrapper implements DensityFunction.Simp
 		// flips on any out-of-range value. JIT predicts the in-range case.
 		if ((relX | (15 - relX) | relY | (383 - relY) | relZ | (15 - relZ)) < 0) {
 			fallbacks.incrementAndGet();
-			return original.sample(pos);
+			return original.compute(pos);
 		}
 		// Layout matches Rust JNI: (by, bz, bx) row-major.
 		// Bitwise: relY * 256 + relZ * 16 + relX.
 		return buf[(relY << 8) | (relZ << 4) | relX];
 	}
 
-	/** Cold path split out to keep {@link #sample} inlinable. */
-	private double slowSample(DensityFunction.FunctionContext pos) {
+	/** Cold path split out to keep {@link #compute} inlinable. */
+	private double slowCompute(DensityFunction.FunctionContext pos) {
 		double[] buf = ensureBuffer();
 		if (buf == null) {
 			fallbacks.incrementAndGet();
-			return original.sample(pos);
+			return original.compute(pos);
 		}
 		int relX = pos.blockX() - this.chunkMinBlockX;
 		int relY = pos.blockY() - MIN_BLOCK_Y;
 		int relZ = pos.blockZ() - this.chunkMinBlockZ;
 		if ((relX | (15 - relX) | relY | (383 - relY) | relZ | (15 - relZ)) < 0) {
 			fallbacks.incrementAndGet();
-			return original.sample(pos);
+			return original.compute(pos);
 		}
 		return buf[(relY << 8) | (relZ << 4) | relX];
 	}
@@ -154,7 +154,7 @@ public final class RustFinalDensityBufferWrapper implements DensityFunction.Simp
 	}
 
 	@Override
-	public DensityFunction apply(DensityFunction.Visitor visitor) {
+	public DensityFunction mapAll(DensityFunction.Visitor visitor) {
 		return visitor.apply(this);
 	}
 
@@ -165,7 +165,7 @@ public final class RustFinalDensityBufferWrapper implements DensityFunction.Simp
 	public double maxValue() { return original.maxValue(); }
 
 	@Override
-	public KeyDispatchDataCodec<? extends DensityFunction> getCodecHolder() {
+	public KeyDispatchDataCodec<? extends DensityFunction> codec() {
 		throw new UnsupportedOperationException(
 				"RustFinalDensityBufferWrapper is runtime-only");
 	}

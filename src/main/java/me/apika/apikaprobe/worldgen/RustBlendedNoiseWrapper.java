@@ -90,20 +90,20 @@ public final class RustBlendedNoiseWrapper implements DensityFunction.SimpleFunc
 	}
 
 	@Override
-	public double sample(DensityFunction.FunctionContext pos) {
+	public double compute(DensityFunction.FunctionContext pos) {
 		int blockX = pos.blockX();
 		int blockY = pos.blockY();
 		int blockZ = pos.blockZ();
 
 		if (registeredName == null) {
 			fallbacks.incrementAndGet();
-			return original.sample(pos);
+			return original.compute(pos);
 		}
 
 		double[] cache = ensureCache();
 		if (cache == null) {
 			fallbacks.incrementAndGet();
-			return original.sample(pos);
+			return original.compute(pos);
 		}
 
 		int relX = blockX - chunkMinBlockX;
@@ -124,7 +124,7 @@ public final class RustBlendedNoiseWrapper implements DensityFunction.SimpleFunc
 				|| relZ < 0 || qzLow >= SIDE_Z - 1
 				|| qyIdxLow < 0 || qyIdxLow >= SIDE_Y - 1) {
 			fallbacks.incrementAndGet();
-			return original.sample(pos);
+			return original.compute(pos);
 		}
 
 		double fx = (relX & 3) / 4.0;
@@ -187,7 +187,7 @@ public final class RustBlendedNoiseWrapper implements DensityFunction.SimpleFunc
 	}
 
 	@Override
-	public DensityFunction apply(DensityFunction.Visitor visitor) {
+	public DensityFunction mapAll(DensityFunction.Visitor visitor) {
 		return visitor.apply(this);
 	}
 
@@ -202,7 +202,7 @@ public final class RustBlendedNoiseWrapper implements DensityFunction.SimpleFunc
 	}
 
 	@Override
-	public KeyDispatchDataCodec<? extends DensityFunction> getCodecHolder() {
+	public KeyDispatchDataCodec<? extends DensityFunction> codec() {
 		throw new UnsupportedOperationException(
 				"RustBlendedNoiseWrapper is runtime-only and cannot be serialized");
 	}

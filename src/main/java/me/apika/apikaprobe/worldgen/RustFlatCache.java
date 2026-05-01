@@ -55,18 +55,18 @@ public final class RustFlatCache implements DensityFunction.SimpleFunction {
 	}
 
 	@Override
-	public double sample(DensityFunction.FunctionContext pos) {
+	public double compute(DensityFunction.FunctionContext pos) {
 		double[] c = ensureCache();
 		if (c == null) {
 			fallbacks.incrementAndGet();
-			return original.sample(pos);
+			return original.compute(pos);
 		}
 		// Vanilla FlatCache uses quart-grid: qx = (blockX >> 2) - chunkQuartMinX
 		int qx = (pos.blockX() >> 2) - (chunkMinBlockX >> 2);
 		int qz = (pos.blockZ() >> 2) - (chunkMinBlockZ >> 2);
 		if (qx < 0 || qx >= SIDE || qz < 0 || qz >= SIDE) {
 			fallbacks.incrementAndGet();
-			return original.sample(pos);
+			return original.compute(pos);
 		}
 		return c[qz * SIDE + qx];
 	}
@@ -107,7 +107,7 @@ public final class RustFlatCache implements DensityFunction.SimpleFunction {
 	}
 
 	@Override
-	public DensityFunction apply(DensityFunction.Visitor visitor) {
+	public DensityFunction mapAll(DensityFunction.Visitor visitor) {
 		return visitor.apply(this);
 	}
 
@@ -118,7 +118,7 @@ public final class RustFlatCache implements DensityFunction.SimpleFunction {
 	public double maxValue() { return original.maxValue(); }
 
 	@Override
-	public KeyDispatchDataCodec<? extends DensityFunction> getCodecHolder() {
+	public KeyDispatchDataCodec<? extends DensityFunction> codec() {
 		throw new UnsupportedOperationException(
 				"RustFlatCache is runtime-only");
 	}
