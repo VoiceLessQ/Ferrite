@@ -30,7 +30,7 @@ public abstract class HopperLaneRouteMixin {
 		if (!(to instanceof HopperBlockEntity)) return;
 		if (!(to instanceof SlotCooldownAccess access)) return;
 
-		int n = to.size();
+		int n = to.getContainerSize();
 		int last = access.ferrite$getLastInsertSlot();
 		int startAt = ((last + 1) % n + n) % n;
 

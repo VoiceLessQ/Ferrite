@@ -26,7 +26,7 @@ public abstract class HopperExtractHintMaintainMixin implements Container, Extra
 	private void ferrite$onRemoveStack(int slot, int amount, CallbackInfoReturnable<ItemStack> cir) {
 		if (slot != this.ferrite$getExtractHint()) return;
 		if (!this.getItem(slot).isEmpty()) return;
-		int n = this.size();
+		int n = this.getContainerSize();
 		int next = n;
 		for (int i = slot + 1; i < n; i++) {
 			if (!this.getItem(i).isEmpty()) { next = i; break; }

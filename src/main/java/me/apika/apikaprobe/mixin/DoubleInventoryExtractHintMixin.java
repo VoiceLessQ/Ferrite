@@ -17,7 +17,7 @@ public abstract class DoubleInventoryExtractHintMixin implements Container, Extr
 
 	@Override
 	public int ferrite$getExtractHint() {
-		int firstSize = this.first.size();
+		int firstSize = this.first.getContainerSize();
 		if (this.first instanceof ExtractHint h1) {
 			int h = h1.ferrite$getExtractHint();
 			if (h < firstSize) return h;

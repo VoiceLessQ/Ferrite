@@ -188,9 +188,9 @@ public final class PhysicsDispatcher {
 			}
 		}
 
-		float stepUp = self.getStepHeight();
+		float stepUp = self.maxUpStep();
 		byte flags = 0;
-		if (self.isOnGround()) flags |= PhysicsHandoff.REQ_FLAG_ON_GROUND;
+		if (self.onGround()) flags |= PhysicsHandoff.REQ_FLAG_ON_GROUND;
 
 		PhysicsHandoff.fillSingleRequest(self, motion, stepUp, flags, currentlyLoadedTickId);
 		RustBridge.computeEntityPhysics(

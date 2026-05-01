@@ -1478,6 +1478,6 @@ public final class FerriteCommand {
 	private static void sendFeedback(
 			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx,
 			String message, boolean broadcast) {
-		ctx.getSource().sendFeedback(() -> Component.literal(message), broadcast);
+		ctx.getSource().sendSuccess(() -> Component.literal(message), broadcast);
 	}
 }

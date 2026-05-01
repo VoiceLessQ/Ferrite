@@ -461,10 +461,10 @@ public final class PhysicsHandoff {
 			return idx;
 		}
 
-		// Extract axis-aligned boxes from the shape. VoxelShape.getBoundingBoxes()
+		// Extract axis-aligned boxes from the shape. VoxelShape.toAabbs()
 		// returns a List<AABB> in world coords (but because we queried at `pos`,
 		// boxes are translated by pos — we need cell-local [0,1] coords).
-		List<AABB> boxes = shape.getBoundingBoxes();
+		List<AABB> boxes = shape.toAabbs();
 		int count = boxes.size();
 		if (count > 32) {
 			// Pathological shape — fall back rather than serialize 200 AABBs.

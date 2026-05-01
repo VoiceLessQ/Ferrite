@@ -69,7 +69,7 @@ public final class CrammingHandoff {
 
 			byte flags = 0;
 			if (e.isPushable())    flags |= FLAG_PUSHABLE;
-			if (e.hasPassengers()) flags |= FLAG_VEHICLE;
+			if (e.isVehicle()) flags |= FLAG_VEHICLE;
 			if (e.isPassenger())    flags |= FLAG_PASSENGER;
 			if (e.noClip)          flags |= FLAG_NO_PHYSICS;
 

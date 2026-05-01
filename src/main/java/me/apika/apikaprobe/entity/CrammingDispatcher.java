@@ -147,7 +147,7 @@ public final class CrammingDispatcher {
 			if (maxCramming > 0
 					&& CROWDED_COUNT[i] > maxCramming - 1
 					&& e.getRandom().nextInt(4) == 0) {
-				e.damage(world, world.damageSources().cramming(), 6.0F);
+				e.hurtServer(world, world.damageSources().cramming(), 6.0F);
 				damagedThisBatch++;
 			}
 		}

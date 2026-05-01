@@ -31,7 +31,7 @@ public abstract class LootableContainerExtractHintMixin implements Container, Ex
 
 	@Unique
 	private void ferrite$advanceHintFrom(int from) {
-		int n = this.size();
+		int n = this.getContainerSize();
 		int next = n;
 		for (int i = from; i < n; i++) {
 			if (!this.getItem(i).isEmpty()) { next = i; break; }
