@@ -29,6 +29,8 @@ cls_count=0
 post_count=0
 
 while IFS= read -r line; do
+    # Strip trailing CR (table file may be CRLF on Windows checkouts).
+    line="${line%$'\r'}"
     # Skip blanks and comments.
     [[ -z "$line" || "${line:0:1}" == "#" ]] && continue
 

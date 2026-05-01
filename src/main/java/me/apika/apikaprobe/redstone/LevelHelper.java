@@ -25,7 +25,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.level.chunk.ChunkStatus;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 /**
  * Small bypass for vanilla's {@code Level.setBlockState} optimized for
@@ -53,7 +53,7 @@ final class LevelHelper {
 	static boolean setWireState(ServerLevel world, BlockPos pos, BlockState state, boolean updateNeighborShapes) {
 		int y = pos.getY();
 
-		if (y < world.getBottomY() || y > world.getTopYInclusive()) {
+		if (y < world.getMinY() || y > world.getMaxY()) {
 			return false;
 		}
 
@@ -62,7 +62,7 @@ final class LevelHelper {
 		int index = world.getSectionIndex(y);
 
 		ChunkAccess chunk = world.getChunk(x >> 4, z >> 4, ChunkStatus.FULL, true);
-		LevelChunkSection section = chunk.getSectionArray()[index];
+		LevelChunkSection section = chunk.getSections()[index];
 
 		if (section == null) {
 			return false; // should never get here
@@ -75,14 +75,14 @@ final class LevelHelper {
 		}
 
 		// Notify clients of the block-state change.
-		world.getChunkSource().markForUpdate(pos);
+		world.getChunkSource().blockChanged(pos);
 		// Mark the chunk for saving.
-		chunk.markNeedsSaving();
+		chunk.markUnsaved();
 
 		if (updateNeighborShapes) {
-			prevState.prepare(world, pos, Block.UPDATE_CLIENTS);
-			state.updateNeighbors(world, pos, Block.UPDATE_CLIENTS);
-			state.prepare(world, pos, Block.UPDATE_CLIENTS);
+			prevState.updateIndirectNeighbourShapes(world, pos, Block.UPDATE_CLIENTS);
+			state.updateNeighbourShapes(world, pos, Block.UPDATE_CLIENTS);
+			state.updateIndirectNeighbourShapes(world, pos, Block.UPDATE_CLIENTS);
 		}
 
 		return true;

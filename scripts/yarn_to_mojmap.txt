@@ -239,6 +239,17 @@ net.minecraft.world.level.WorldGenRegion|net.minecraft.server.level.WorldGenRegi
 \.down()|.below()
 \.getUuid()|.getUUID()
 \.hasVehicle()|.isPassenger()
+# .getWorld() is safe in this codebase: all 8 callers are CommandSourceStack.
+\.getWorld()|.getLevel()
+# Level / ChunkAccess / ChunkSource / BlockState method renames (verified in jar).
+\.getBottomY()|.getMinY()
+\.getTopYInclusive()|.getMaxY()
+\.getSectionArray()|.getSections()
+\.markNeedsSaving()|.markUnsaved()
+\.markForUpdate(|.blockChanged(
+\.updateNeighbors(|.updateNeighbourShapes(
+# ChunkStatus moved to chunk.status sub-package in mojmap.
+net.minecraft.world.level.chunk.ChunkStatus|net.minecraft.world.level.chunk.status.ChunkStatus
 # .getWorld() is safe in this codebase: all 8 callers are CommandSourceStack
 # (formerly ServerCommandSource); none are Entity/Minecraft.
 \.getWorld()|.getLevel()
