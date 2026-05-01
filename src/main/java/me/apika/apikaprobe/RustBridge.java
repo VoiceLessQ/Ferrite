@@ -188,9 +188,9 @@ public class RustBridge {
 
   /**
    * Register one named noise into the in-progress build. {@code name}
-   * is the UTF-8-encoded full identifier ({@code ResourceLocation.toString()}
+   * is the UTF-8-encoded full identifier ({@code Identifier.toString()}
    * form, e.g. {@code "minecraft:temperature"}) — that's what vanilla
-   * hashes via {@code PositionalRandomFactory.fromHashOf(ResourceLocation)}.
+   * hashes via {@code PositionalRandomFactory.fromHashOf(Identifier)}.
    *
    * <p>{@code amplitudes} is a direct {@link java.nio.ByteBuffer} of
    * {@code ampCount} f64 values in little-endian order (host byte order
@@ -473,7 +473,7 @@ public class RustBridge {
    * </ul>
    *
    * <p>Mirrors vanilla's
-   * {@code Aquifer.Impl.apply(NoisePos, double)} return.
+   * {@code Aquifer.Impl.apply(DensityFunction.FunctionContext, double)} return.
    */
   public static native long applyAquifer(
       long handle, int blockX, int blockY, int blockZ, double density);

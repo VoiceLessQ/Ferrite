@@ -10,9 +10,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import me.apika.apikaprobe.monitor.HopperMonitor;
 
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
-import net.minecraft.world.entity.ItemEntity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 

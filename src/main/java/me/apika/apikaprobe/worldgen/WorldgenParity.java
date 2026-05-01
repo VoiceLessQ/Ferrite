@@ -9,7 +9,7 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.RandomSource;
+import java.util.Random;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -147,7 +147,7 @@ public final class WorldgenParity {
 					rustLo, rustHi);
 		}
 
-		RandomSource rng = new RandomSource(0xDECAFBADL);
+		Random rng = new Random(0xDECAFBADL);
 		int pass = 0;
 		int fail = 0;
 		double worstDiff = 0.0;
@@ -335,9 +335,9 @@ public final class WorldgenParity {
 
 		static YarnSampler resolve(Object noiseConfig) {
 			try {
-				Class<?> identifierClass = Class.forName("net.minecraft.util.ResourceLocation");
-				Class<?> registryKeyClass = Class.forName("net.minecraft.core.registries.ResourceKey");
-				Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.BuiltInRegistries");
+				Class<?> identifierClass = Class.forName("net.minecraft.resources.Identifier");
+				Class<?> registryKeyClass = Class.forName("net.minecraft.resources.ResourceKey");
+				Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.Registries");
 				Method identifierOf = identifierClass.getMethod("of", String.class);
 				Method registryKeyOf = registryKeyClass.getMethod("of", registryKeyClass, identifierClass);
 				Object noiseParamsRegistryKey = registryKeysClass.getField("NOISE_PARAMETERS").get(null);

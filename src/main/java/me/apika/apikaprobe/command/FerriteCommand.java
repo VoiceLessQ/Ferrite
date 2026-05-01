@@ -823,7 +823,7 @@ public final class FerriteCommand {
 		String rawName = StringArgumentType.getString(ctx, "name").trim();
 		// Be forgiving about the namespace: if the user typed `temperature`
 		// (no colon), treat it as `minecraft:temperature`. Rust hashes the
-		// full `ResourceLocation.toString()` form, so the colon must be present.
+		// full `Identifier.toString()` form, so the colon must be present.
 		String name = rawName.contains(":") ? rawName : "minecraft:" + rawName;
 		var source = ctx.getSource();
 		var pos = source.getPosition();
@@ -916,7 +916,7 @@ public final class FerriteCommand {
 		// matching vanilla's NoiseInterpolator pattern.
 		outBuf.position(0);
 		java.nio.DoubleBuffer rustDoubles = outBuf.asDoubleBuffer();
-		java.util.RandomSource rng = new java.util.RandomSource(0xCAFEBABEL);
+		java.util.Random rng = new java.util.Random(0xCAFEBABEL);
 		int mismatch = 0;
 		double maxDiff = 0.0;
 		StringBuilder worst = new StringBuilder();

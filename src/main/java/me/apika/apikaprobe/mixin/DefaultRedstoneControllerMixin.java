@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.monitor.RedstonePhaseMonitor;
 
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.redstone.VanillaRedstoneWireEvaluator;
 import net.minecraft.world.level.Level;
@@ -25,7 +25,7 @@ import net.minecraft.world.level.redstone.Orientation;
 public abstract class DefaultRedstoneControllerMixin {
 
 	@Inject(
-		method = "update(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.BlockState;Lnet.minecraft.world.level.redstone.Orientation;Z)V",
+		method = "update(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.state.BlockState;Lnet.minecraft.world.level.redstone.Orientation;Z)V",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onDefaultControllerUpdate(

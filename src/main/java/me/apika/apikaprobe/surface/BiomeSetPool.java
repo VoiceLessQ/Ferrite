@@ -116,7 +116,7 @@ public final class BiomeSetPool {
 	 */
 	private static String registryNameOf(Object o) {
 		if (o == null) return "";
-		// ResourceKey has getValue() returning ResourceLocation
+		// ResourceKey has getValue() returning Identifier
 		String s = invokeAndStringify(o, "getValue");
 		if (s != null) return s;
 		// Holder has getKey() returning Optional<ResourceKey<T>>

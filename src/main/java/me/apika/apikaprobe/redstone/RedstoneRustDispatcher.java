@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.server.level.ServerLevel;
@@ -178,7 +178,7 @@ public final class RedstoneRustDispatcher {
 			BlockState aboveState = world.getBlockState(above);
 			boolean aboveSolid = aboveState.isSolidBlock(world, above);
 
-			for (Direction dir : Direction.Type.HORIZONTAL) {
+			for (Direction dir : Direction.Plane.HORIZONTAL) {
 				BlockPos neighbor = pos.offset(dir);
 				BlockState neighborState = world.getBlockState(neighbor);
 
@@ -259,7 +259,7 @@ public final class RedstoneRustDispatcher {
 		boolean aboveSolid = world.getBlockState(above).isSolidBlock(world, above);
 		int slot = 0;
 
-		for (Direction dir : Direction.Type.HORIZONTAL) {
+		for (Direction dir : Direction.Plane.HORIZONTAL) {
 			BlockPos neighbor = pos.offset(dir);
 			BlockState neighborState = world.getBlockState(neighbor);
 
@@ -295,7 +295,7 @@ public final class RedstoneRustDispatcher {
 		// Single reusable Mutable so the per-delta hot path doesn't allocate
 		// two BlockPos per result. setBlockState/updateNeighbors only read
 		// coordinates from the parameter, so a Mutable is safe to reuse.
-		BlockPos.Mutable scratchPos = new BlockPos.Mutable();
+		BlockPos.MutableBlockPos scratchPos = new BlockPos.MutableBlockPos();
 		try {
 			for (int i = 0; i < deltaCount; i++) {
 				scratchPos.set(

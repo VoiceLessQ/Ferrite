@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 import me.apika.apikaprobe.hopper.ExtractHint;
 import me.apika.apikaprobe.monitor.HopperHintMonitor;
 
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.entity.Hopper;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.Container;
@@ -24,7 +24,7 @@ public abstract class HopperHintExtractRouteMixin {
 		method = "extract(Lnet.minecraft.world.level.Level;Lnet.minecraft.world.level.block.entity.Hopper;)Z",
 		at = @At(
 			value = "INVOKE_ASSIGN",
-			target = "Lnet.minecraft.world.level.block.entity.HopperBlockEntity;getInputInventory(Lnet.minecraft.world.level.Level;Lnet.minecraft.world.level.block.entity.Hopper;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.BlockState;)Lnet.minecraft.world.Container;"
+			target = "Lnet.minecraft.world.level.block.entity.HopperBlockEntity;getInputInventory(Lnet.minecraft.world.level.Level;Lnet.minecraft.world.level.block.entity.Hopper;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.state.BlockState;)Lnet.minecraft.world.Container;"
 		),
 		locals = LocalCapture.CAPTURE_FAILHARD,
 		cancellable = true

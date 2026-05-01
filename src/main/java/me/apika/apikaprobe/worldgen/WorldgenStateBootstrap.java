@@ -13,11 +13,11 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
-import net.minecraft.core.registries.Registry;
-import net.minecraft.core.registries.ResourceKey;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.Level;
 
 /**
@@ -102,7 +102,7 @@ public final class WorldgenStateBootstrap {
 		List<String> names = new ArrayList<>();
 		for (Object entry : noiseRegistry) {
 			@SuppressWarnings("unchecked")
-			ResourceLocation id = noiseRegistry.getId(entry);
+			Identifier id = noiseRegistry.getId(entry);
 			if (id == null) {
 				failed++;
 				continue;
@@ -552,12 +552,12 @@ public final class WorldgenStateBootstrap {
 		try {
 			Object manager = server.getRegistryManager();
 			// Find the DENSITY_FUNCTION registry key.
-			Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.BuiltInRegistries");
+			Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.Registries");
 			Object dfRegistryKey;
 			try {
 				dfRegistryKey = registryKeysClass.getField("DENSITY_FUNCTION").get(null);
 			} catch (ReflectiveOperationException | RuntimeException e) {
-				ExampleMod.LOGGER.warn("[worldgen-init] BuiltInRegistries.DENSITY_FUNCTION missing: {}", e.toString());
+				ExampleMod.LOGGER.warn("[worldgen-init] Registries.DENSITY_FUNCTION missing: {}", e.toString());
 				return 0;
 			}
 			// Pull the registry via the same accessor dance we use for noises.
@@ -582,7 +582,7 @@ public final class WorldgenStateBootstrap {
 			List<String> names = new ArrayList<>();
 			for (Object entry : dfRegistry) {
 				@SuppressWarnings("unchecked")
-				ResourceLocation id = dfRegistry.getId(entry);
+				Identifier id = dfRegistry.getId(entry);
 				if (id == null) { failed++; continue; }
 				String fullName = id.toString();
 				ByteBuffer bytecode = DensityFunctionWalker.encode(entry);
@@ -740,7 +740,7 @@ public final class WorldgenStateBootstrap {
 		return "unknown";
 	}
 
-	private static boolean pushToRust(ResourceLocation id, NoiseParamsView view) {
+	private static boolean pushToRust(Identifier id, NoiseParamsView view) {
 		String fullName = id.toString();
 		byte[] nameBytes = fullName.getBytes(StandardCharsets.UTF_8);
 		ByteBuffer nameBuf = ByteBuffer.allocateDirect(nameBytes.length).order(ByteOrder.nativeOrder());
@@ -774,7 +774,7 @@ public final class WorldgenStateBootstrap {
 	@SuppressWarnings("rawtypes")
 	private static Registry resolveNoiseRegistry(net.minecraft.server.MinecraftServer server) {
 		Object manager = server.getRegistryManager();
-		Object key = BuiltInRegistries.NOISE_PARAMETERS;
+		Object key = Registries.NOISE_PARAMETERS;
 		String[] candidates = {"getOrThrow", "get", "getRegistry"};
 		for (String methodName : candidates) {
 			try {

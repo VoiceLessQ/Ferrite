@@ -16,7 +16,7 @@ public record CompiledRuleTree(
 		Object[] blockstateTable,
 		java.util.List<String>[] biomeSetTable,
 		String[] noiseChannelTable,
-		/** ResourceLocation strings for each VerticalGradient rule's random_name (e.g.
+		/** Identifier strings for each VerticalGradient rule's random_name (e.g.
 		 * "minecraft:bedrock_floor", "minecraft:deepslate"). OP_VERT_GRADIENT
 		 * indexes into this table to look up the per-block PRNG splitter at
 		 * runtime. */

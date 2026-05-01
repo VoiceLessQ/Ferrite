@@ -5,9 +5,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import me.apika.apikaprobe.bridge.ExampleMod;
 
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
-import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.chunk.ChunkAccess;
 
 /**
  * Heightmap parity regression check for the batched dispatcher path.
@@ -72,7 +72,7 @@ public final class SurfaceHeightmapValidator {
 	/** Defensively clone the heightmap's packed long-storage array.
 	 *  {@link Heightmap#asLongArray()} returns the live storage and a
 	 *  snapshot must survive across mutations. */
-	public static long[] snapshot(Chunk chunk, Heightmap.Type type) {
+	public static long[] snapshot(ChunkAccess chunk, Heightmap.Types type) {
 		Heightmap hm = chunk.getHeightmap(type);
 		if (hm == null) return null;
 		return hm.asLongArray().clone();
@@ -91,16 +91,16 @@ public final class SurfaceHeightmapValidator {
 	 *        wasn't initialized at snapshot time (validation skipped
 	 *        for that type)
 	 */
-	public static void validate(Chunk chunk, int[] xs, int[] ys, int[] zs,
+	public static void validate(ChunkAccess chunk, int[] xs, int[] ys, int[] zs,
 			BlockState[] writtenStates, int n,
 			long[] preWSWG, long[] preOFWG) {
-		Heightmap hmWS = chunk.getHeightmap(Heightmap.Type.WORLD_SURFACE_WG);
-		Heightmap hmOF = chunk.getHeightmap(Heightmap.Type.OCEAN_FLOOR_WG);
+		Heightmap hmWS = chunk.getHeightmap(Heightmap.Types.WORLD_SURFACE_WG);
+		Heightmap hmOF = chunk.getHeightmap(Heightmap.Types.OCEAN_FLOOR_WG);
 		if (hmWS == null && hmOF == null) return;
 
-		long mmWSWG = diffOne(chunk, hmWS, Heightmap.Type.WORLD_SURFACE_WG,
+		long mmWSWG = diffOne(chunk, hmWS, Heightmap.Types.WORLD_SURFACE_WG,
 				preWSWG, xs, ys, zs, writtenStates, n);
-		long mmOFWG = diffOne(chunk, hmOF, Heightmap.Type.OCEAN_FLOOR_WG,
+		long mmOFWG = diffOne(chunk, hmOF, Heightmap.Types.OCEAN_FLOOR_WG,
 				preOFWG, xs, ys, zs, writtenStates, n);
 
 		chunksValidated.incrementAndGet();
@@ -122,7 +122,7 @@ public final class SurfaceHeightmapValidator {
 	 *  {@code trackUpdate}), capture Path A's cells, restore Path B so
 	 *  the chunk stays correct for downstream phases, return cell-level
 	 *  mismatch count. Returns 0 if heightmap or snapshot is null. */
-	private static long diffOne(Chunk chunk, Heightmap hm, Heightmap.Type type,
+	private static long diffOne(ChunkAccess chunk, Heightmap hm, Heightmap.Types type,
 			long[] preSnapshot, int[] xs, int[] ys, int[] zs,
 			BlockState[] writtenStates, int n) {
 		if (hm == null || preSnapshot == null) return 0;

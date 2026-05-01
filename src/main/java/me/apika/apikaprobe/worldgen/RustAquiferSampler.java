@@ -10,7 +10,7 @@ import java.nio.IntBuffer;
 
 import org.jspecify.annotations.Nullable;
 
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.Aquifer;
 import net.minecraft.world.level.levelgen.DensityFunction;
@@ -177,7 +177,7 @@ public final class RustAquiferSampler implements Aquifer {
 
     @Nullable
     @Override
-    public BlockState apply(DensityFunction.NoisePos pos, double density) {
+    public BlockState apply(DensityFunction.FunctionContext pos, double density) {
         if (this.handle == 0L) {
             BlockState fallbackResult = this.vanillaFallback.apply(pos, density);
             this.lastNeedsFluidTick = this.vanillaFallback.needsFluidTick();

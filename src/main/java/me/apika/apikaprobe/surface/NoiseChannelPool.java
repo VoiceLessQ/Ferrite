@@ -62,7 +62,7 @@ public final class NoiseChannelPool {
 	public int size() { return idToChannel.length; }
 
 	/**
-	 * Resolve a noise reference (ResourceKey or bare ResourceLocation or
+	 * Resolve a noise reference (ResourceKey or bare Identifier or
 	 * String) to its registry-name string. Tries getValue() first
 	 * (ResourceKey path), falls back to toString.
 	 */

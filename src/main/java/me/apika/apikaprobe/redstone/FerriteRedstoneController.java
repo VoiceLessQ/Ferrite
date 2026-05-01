@@ -10,7 +10,7 @@ package me.apika.apikaprobe.redstone;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.server.level.ServerLevel;

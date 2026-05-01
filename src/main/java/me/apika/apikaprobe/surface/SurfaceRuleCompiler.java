@@ -92,7 +92,7 @@ public final class SurfaceRuleCompiler {
 	}
 
 	/**
-	 * Intern a random_name ResourceLocation (or its string form) into the pool.
+	 * Intern a random_name Identifier (or its string form) into the pool.
 	 * Returns the stable index used by OP_VERT_GRADIENT operands.
 	 * Idempotent — repeated names get the same id.
 	 */
@@ -295,7 +295,7 @@ public final class SurfaceRuleCompiler {
 
 	/**
 	 * Read the {@code randomName} field from a VerticalGradientMaterialCondition
-	 * node and stringify the resulting ResourceLocation. Falls back to the empty
+	 * node and stringify the resulting Identifier. Falls back to the empty
 	 * string if the field can't be read; the validator's splitter cache will
 	 * then produce a null sampler for that index and the evaluator falls back
 	 * to the midpoint behavior for that one rule.
@@ -303,8 +303,8 @@ public final class SurfaceRuleCompiler {
 	private static String readRandomName(Object node) {
 		Object id = readField(node, "randomName");
 		if (id == null) return "";
-		// ResourceLocation.toString() returns "namespace:path" — same format the
-		// validator passes to ResourceLocation.of() at runtime.
+		// Identifier.toString() returns "namespace:path" — same format the
+		// validator passes to Identifier.of() at runtime.
 		return id.toString();
 	}
 

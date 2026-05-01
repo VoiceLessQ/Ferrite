@@ -6,8 +6,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import net.minecraft.world.level.WorldGenLevel;
-import net.minecraft.world.level.chunk.Chunk;
-import net.minecraft.world.level.levelgen.StructureManager;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.levelgen.ChunkGenerator;
 
 import me.apika.apikaprobe.worldgen.chunk.ChunkDecoratorTiming;
@@ -27,13 +27,13 @@ import me.apika.apikaprobe.worldgen.chunk.ChunkDecoratorTiming;
 @Mixin(ChunkGenerator.class)
 public abstract class ChunkDecoratorTimingMixin {
 	@Inject(method = "generateFeatures", at = @At("HEAD"))
-	private void ferrite$startTiming(WorldGenLevel world, Chunk chunk,
+	private void ferrite$startTiming(WorldGenLevel world, ChunkAccess chunk,
 			StructureManager structureAccessor, CallbackInfo ci) {
 		ChunkDecoratorTiming.start();
 	}
 
 	@Inject(method = "generateFeatures", at = @At("RETURN"))
-	private void ferrite$endTiming(WorldGenLevel world, Chunk chunk,
+	private void ferrite$endTiming(WorldGenLevel world, ChunkAccess chunk,
 			StructureManager structureAccessor, CallbackInfo ci) {
 		// Center of chunk in block coords. ChunkPos.x/z are chunk coords;
 		// (cx << 4) + 8 is the center block.

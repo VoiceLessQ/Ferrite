@@ -26,6 +26,7 @@ echo "[apply_mappings] found ${#FILES[@]} java files under $SRC_ROOT"
 section=""
 pkg_count=0
 cls_count=0
+post_count=0
 
 while IFS= read -r line; do
     # Skip blanks and comments.
@@ -34,6 +35,7 @@ while IFS= read -r line; do
     # Section markers.
     if [[ "$line" == "[PACKAGES]" ]]; then section="pkg"; continue; fi
     if [[ "$line" == "[CLASSES]"  ]]; then section="cls"; continue; fi
+    if [[ "$line" == "[POST]"     ]]; then section="post"; continue; fi
     [[ -z "$section" ]] && continue
 
     # Split on first '|'.
@@ -41,22 +43,25 @@ while IFS= read -r line; do
     new="${line#*|}"
     [[ -z "$old" || -z "$new" ]] && continue
 
-    # Escape for sed: only / matters because we use / as the sed delimiter.
-    # (Both sides will contain dots and braces, which are fine in BRE when paired
-    # with literal text.  We use the alternative delimiter | actually no, | is
-    # already in our table format — use # as sed delimiter.)
+    # Escape for sed: # is delimiter, & is back-reference.
     old_esc=$(printf '%s' "$old" | sed 's/[#&]/\\&/g')
     new_esc=$(printf '%s' "$new" | sed 's/[#&]/\\&/g')
 
     if [[ "$section" == "pkg" ]]; then
-        # Plain string replacement (regex but only literal chars matter).
+        # Plain string replacement.
         sed -i "s#${old_esc}#${new_esc}#g" "${FILES[@]}"
         pkg_count=$((pkg_count + 1))
     elif [[ "$section" == "cls" ]]; then
         # Word-boundary replacement.  GNU sed supports \b.
         sed -i "s#\b${old_esc}\b#${new_esc}#g" "${FILES[@]}"
         cls_count=$((cls_count + 1))
+    elif [[ "$section" == "post" ]]; then
+        # Plain string replacement, runs AFTER [CLASSES] - used for cleanups
+        # of class-rename clobbers (e.g. java.util.RandomSource -> java.util.Random
+        # after the broad Random -> RandomSource rename).
+        sed -i "s#${old_esc}#${new_esc}#g" "${FILES[@]}"
+        post_count=$((post_count + 1))
     fi
 done < "$TABLE"
 
-echo "[apply_mappings] applied $pkg_count package rules and $cls_count class rules"
+echo "[apply_mappings] applied $pkg_count package rules, $cls_count class rules, $post_count post rules"

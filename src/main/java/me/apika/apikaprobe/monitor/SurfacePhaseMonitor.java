@@ -19,14 +19,14 @@ import org.slf4j.LoggerFactory;
  *   [3] contextUpdate  — MaterialRuleContext.initHorizontalContext /
  *                        initVerticalContext
  *   [4] biomeLookup    — BiomeManager.getBiome(pos)
- *   [5] heightmap      — Chunk.sampleHeightmap(type, x, z)
+ *   [5] heightmap      — ChunkAccess.sampleHeightmap(type, x, z)
  *        other          — buildSurface_total - sum(above)
  *
  * Accumulated per-chunk, logged every 5 seconds with per-chunk averages.
  * Same AtomicLong + ThreadLocal start + window-reset pattern as
  * MovementInternalsMonitor.
  *
- * Chunk generation runs off-thread (worker pool), so ThreadLocal-based
+ * ChunkAccess generation runs off-thread (worker pool), so ThreadLocal-based
  * start timestamps are per-worker — matches how the existing chunkgen
  * monitors measure.
  */

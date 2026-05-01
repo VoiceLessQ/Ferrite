@@ -12,7 +12,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.RandomState;
 
@@ -78,7 +78,7 @@ public final class TerrainBulkHandoff {
 	 * Compute chunk terrain via Rust bulk handoff. Result is discarded —
 	 * this is the A/B timing run. Safe to call from chunk-gen workers.
 	 */
-	public static void apply(Chunk chunk, RandomState noiseConfig) {
+	public static void apply(ChunkAccess chunk, RandomState noiseConfig) {
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			return;
 		}
@@ -100,7 +100,7 @@ public final class TerrainBulkHandoff {
 		double[] cornerValues = new double[CORNER_COUNT];
 		DensityFunction.EachApplier applier = new DensityFunction.EachApplier() {
 			@Override
-			public DensityFunction.NoisePos at(int index) {
+			public DensityFunction.FunctionContext at(int index) {
 				int cy = index / (CORNERS_X * CORNERS_Z);
 				int cz = (index / CORNERS_X) % CORNERS_Z;
 				int cx = index % CORNERS_X;

@@ -5,7 +5,7 @@ import me.apika.apikaprobe.RustBridge;
 
 import java.lang.reflect.Method;
 import java.util.List;
-import java.util.RandomSource;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -216,7 +216,7 @@ public final class BiomeParity {
 			return "[biome-parity] could not resolve MultiNoiseBiomeSource.getNoiseBiome(TargetPoint)";
 		}
 
-		RandomSource rng = new RandomSource(0xBEEFCAFEL);
+		Random rng = new Random(0xBEEFCAFEL);
 		int pass = 0;
 		int fail = 0;
 		int firstFailIdx = -1;

@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import me.apika.apikaprobe.monitor.AquiferMonitor;
 
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.DensityFunction;
 
 /**
@@ -17,17 +17,17 @@ import net.minecraft.world.level.levelgen.DensityFunction;
  *
  * Uses a fully qualified descriptor for the apply method so Mixin's
  * transformer has no ambiguity:
- *   apply(DensityFunction$NoisePos, double) → BlockState
+ *   apply(DensityFunction.FunctionContext, double) → BlockState
  */
 @Mixin(targets = "net.minecraft.world.level.levelgen.Aquifer$Impl")
 public abstract class AquiferMixin {
 
 	@Inject(
-		method = "apply(Lnet.minecraft.world.level.levelgen.DensityFunction$NoisePos;D)Lnet.minecraft.world.level.block.BlockState;",
+		method = "apply(Lnet.minecraft.world.level.levelgen.DensityFunction.FunctionContext;D)Lnet.minecraft.world.level.block.state.BlockState;",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onApplyBegin(
-			DensityFunction.NoisePos pos,
+			DensityFunction.FunctionContext pos,
 			double density,
 			CallbackInfoReturnable<BlockState> cir) {
 		if (!AquiferMonitor.ENABLED) return;
@@ -35,11 +35,11 @@ public abstract class AquiferMixin {
 	}
 
 	@Inject(
-		method = "apply(Lnet.minecraft.world.level.levelgen.DensityFunction$NoisePos;D)Lnet.minecraft.world.level.block.BlockState;",
+		method = "apply(Lnet.minecraft.world.level.levelgen.DensityFunction.FunctionContext;D)Lnet.minecraft.world.level.block.state.BlockState;",
 		at = @At("RETURN")
 	)
 	private void apikaprobe$onApplyEnd(
-			DensityFunction.NoisePos pos,
+			DensityFunction.FunctionContext pos,
 			double density,
 			CallbackInfoReturnable<BlockState> cir) {
 		if (!AquiferMonitor.ENABLED) return;

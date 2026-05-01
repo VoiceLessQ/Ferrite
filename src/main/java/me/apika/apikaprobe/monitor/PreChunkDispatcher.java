@@ -11,12 +11,12 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registry;
+import net.minecraft.core.Registry;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.ChunkPos;
 
 /**
@@ -64,7 +64,7 @@ public final class PreChunkDispatcher {
 	public static void register() {
 		ticketType = Registry.register(
 				BuiltInRegistries.TICKET_TYPE,
-				ResourceLocation.of(ExampleMod.MOD_ID, "prechunk"),
+				Identifier.of(ExampleMod.MOD_ID, "prechunk"),
 				new TicketType(80L, TicketType.FOR_LOADING));
 		ServerTickEvents.END_SERVER_TICK.register(PreChunkDispatcher::onTick);
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->

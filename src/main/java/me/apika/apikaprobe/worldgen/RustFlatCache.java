@@ -9,7 +9,7 @@ import java.nio.DoubleBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicLong;
 
-import net.minecraft.util.CodecHolder;
+import net.minecraft.util.KeyDispatchDataCodec;
 import net.minecraft.world.level.levelgen.DensityFunction;
 
 /**
@@ -25,7 +25,7 @@ import net.minecraft.world.level.levelgen.DensityFunction;
  * <p>Per chunk: one bulk JNI call (sampleDensityRegion3DRust with
  * sideY=1) → 25 corner samples. Per sample: one array index lookup.
  */
-public final class RustFlatCache implements DensityFunction.Base {
+public final class RustFlatCache implements DensityFunction.SimpleFunction {
 	// Diagnostic counters live on the COLD path only. Per-block sample is
 	// JIT-critical AND multi-thread-hot under vanilla's parallel chunkgen
 	// worker pool — hot-path AtomicLong incrs cause cache-line ping-pong
@@ -55,7 +55,7 @@ public final class RustFlatCache implements DensityFunction.Base {
 	}
 
 	@Override
-	public double sample(NoisePos pos) {
+	public double sample(DensityFunction.FunctionContext pos) {
 		double[] c = ensureCache();
 		if (c == null) {
 			fallbacks.incrementAndGet();
@@ -107,7 +107,7 @@ public final class RustFlatCache implements DensityFunction.Base {
 	}
 
 	@Override
-	public DensityFunction apply(DensityFunctionVisitor visitor) {
+	public DensityFunction apply(DensityFunction.Visitor visitor) {
 		return visitor.apply(this);
 	}
 
@@ -118,7 +118,7 @@ public final class RustFlatCache implements DensityFunction.Base {
 	public double maxValue() { return original.maxValue(); }
 
 	@Override
-	public CodecHolder<? extends DensityFunction> getCodecHolder() {
+	public KeyDispatchDataCodec<? extends DensityFunction> getCodecHolder() {
 		throw new UnsupportedOperationException(
 				"RustFlatCache is runtime-only");
 	}

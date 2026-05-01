@@ -45,7 +45,7 @@ public final class SurfaceRuleEvaluator {
 	 * {@code PositionalRandomFactory.split(x, y, z).nextFloat()} call.
 	 *
 	 * <p>The validator builds an instance backed by reflective calls to
-	 * {@code RandomState.getOrCreateRandomDeriver(ResourceLocation)} →
+	 * {@code RandomState.getOrCreateRandomDeriver(Identifier)} →
 	 * {@code PositionalRandomFactory.split(x, y, z)} → {@code RandomSource.nextFloat()}.
 	 * Self-tests pass {@code null}, which falls back to the midpoint
 	 * approximation that the spike originally shipped with — preserves

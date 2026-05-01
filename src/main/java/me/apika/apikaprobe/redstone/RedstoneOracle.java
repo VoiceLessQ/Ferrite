@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.core.BlockPos;
@@ -234,7 +234,7 @@ public final class RedstoneOracle {
 		BlockState aboveState = world.getBlockState(above);
 		boolean aboveSolid = aboveState.isSolidBlock(world, above);
 
-		for (Direction dir : Direction.Type.HORIZONTAL) {
+		for (Direction dir : Direction.Plane.HORIZONTAL) {
 			BlockPos neighbor = pos.offset(dir);
 			BlockState neighborState = world.getBlockState(neighbor);
 

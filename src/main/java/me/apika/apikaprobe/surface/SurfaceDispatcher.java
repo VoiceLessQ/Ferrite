@@ -1,7 +1,7 @@
 package me.apika.apikaprobe.surface;
 
 import me.apika.apikaprobe.bridge.ExampleMod;
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
 
 /**
@@ -218,7 +218,7 @@ public final class SurfaceDispatcher {
 		//     highest changed Y produces bit-identical heightmap state
 		//     to per-write trackUpdate.
 
-		net.minecraft.world.level.chunk.Chunk c = (net.minecraft.world.level.chunk.Chunk) st.protoChunk;
+		net.minecraft.world.level.chunk.ChunkAccess c = (net.minecraft.world.level.chunk.ChunkAccess) st.protoChunk;
 
 		// Heightmap parity validator (Step 1 — kept as regression check).
 		// When ON, snapshot pre-flush heightmaps and record per-write
@@ -229,8 +229,8 @@ public final class SurfaceDispatcher {
 		long[] preWSWG = null;
 		long[] preOFWG = null;
 		if (validating) {
-			preWSWG = SurfaceHeightmapValidator.snapshot(c, net.minecraft.world.level.levelgen.Heightmap.Type.WORLD_SURFACE_WG);
-			preOFWG = SurfaceHeightmapValidator.snapshot(c, net.minecraft.world.level.levelgen.Heightmap.Type.OCEAN_FLOOR_WG);
+			preWSWG = SurfaceHeightmapValidator.snapshot(c, net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG);
+			preOFWG = SurfaceHeightmapValidator.snapshot(c, net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG);
 			if (st.writtenStates == null) {
 				st.writtenStates = new BlockState[CAPACITY];
 			}
@@ -242,18 +242,18 @@ public final class SurfaceDispatcher {
 		// have populated both, so this is normally a no-op (2 cheap
 		// hasHeightmap calls). Required for safety when the first surface
 		// write would have triggered creation in vanilla.
-		java.util.EnumSet<net.minecraft.world.level.levelgen.Heightmap.Type> missingTypes = null;
-		if (!c.hasHeightmap(net.minecraft.world.level.levelgen.Heightmap.Type.WORLD_SURFACE_WG)) {
-			missingTypes = java.util.EnumSet.of(net.minecraft.world.level.levelgen.Heightmap.Type.WORLD_SURFACE_WG);
+		java.util.EnumSet<net.minecraft.world.level.levelgen.Heightmap.Types> missingTypes = null;
+		if (!c.hasHeightmap(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG)) {
+			missingTypes = java.util.EnumSet.of(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG);
 		}
-		if (!c.hasHeightmap(net.minecraft.world.level.levelgen.Heightmap.Type.OCEAN_FLOOR_WG)) {
-			if (missingTypes == null) missingTypes = java.util.EnumSet.noneOf(net.minecraft.world.level.levelgen.Heightmap.Type.class);
-			missingTypes.add(net.minecraft.world.level.levelgen.Heightmap.Type.OCEAN_FLOOR_WG);
+		if (!c.hasHeightmap(net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG)) {
+			if (missingTypes == null) missingTypes = java.util.EnumSet.noneOf(net.minecraft.world.level.levelgen.Heightmap.Types.class);
+			missingTypes.add(net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG);
 		}
 		if (missingTypes != null) net.minecraft.world.level.levelgen.Heightmap.populateHeightmaps(c, missingTypes);
 
-		net.minecraft.world.level.levelgen.Heightmap hmWS = c.getHeightmap(net.minecraft.world.level.levelgen.Heightmap.Type.WORLD_SURFACE_WG);
-		net.minecraft.world.level.levelgen.Heightmap hmOF = c.getHeightmap(net.minecraft.world.level.levelgen.Heightmap.Type.OCEAN_FLOOR_WG);
+		net.minecraft.world.level.levelgen.Heightmap hmWS = c.getHeightmap(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG);
+		net.minecraft.world.level.levelgen.Heightmap hmOF = c.getHeightmap(net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG);
 
 		net.minecraft.world.level.chunk.LevelChunkSection[] sections = c.getSectionArray();
 

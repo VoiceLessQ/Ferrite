@@ -1,15 +1,31 @@
 # Yarn -> Mojmap translation table for Ferrite 1.21.11 -> 26.1.2 port.
-# Two sections:
+# Three sections:
 #   [PACKAGES]   plain-string replacement on package qualifiers (works on imports
 #                AND inline fully-qualified references like `net.minecraft.X.Y`)
 #   [CLASSES]    word-boundary replacement (\b...\b) for renamed classes
+#   [POST]       plain-string replacement, runs AFTER [CLASSES] - used to
+#                undo class-rename clobbers (e.g. java.util.Random getting
+#                clobbered by the broad Random -> RandomSource rule)
 # scripts/apply_mappings.sh consumes this file.
 #
-# Ordering rule: more-specific package prefixes BEFORE broader ones.  Critically,
-# we do NOT use a broad `net.minecraft.world.` rule because its target
-# `net.minecraft.world.level.` starts with the source string, which would re-fire
-# on the output of every more-specific world.X -> world.level.X rule.  Instead
-# the seven net.minecraft.world.<DirectClass> imports are listed explicitly.
+# Ordering rules:
+#   - Packages:  more-specific prefixes BEFORE broader ones (longer-first wins).
+#   - Classes:   when one rule's output token is another rule's input token (e.g.
+#                `Registries -> BuiltInRegistries` and `RegistryKeys -> Registries`),
+#                run the consumer FIRST so the producer's output isn't re-eaten.
+#   - World vs world.X: NO broad `net.minecraft.world.` rule because its target
+#                `net.minecraft.world.level.` starts with the source string and
+#                would re-fire on the output of every more-specific world.X rule.
+#                The seven net.minecraft.world.<DirectClass> imports are listed
+#                explicitly instead.
+#
+# IMPORTANT NOTE on 26.1.x mojmap quirks (verified against OreVein):
+#   - Identifier kept its name (NOT renamed to ResourceLocation), only moved
+#     packages: net.minecraft.util.Identifier -> net.minecraft.resources.Identifier.
+#   - ItemEntity moved to net.minecraft.world.entity.item (not just world.entity).
+#   - BlockState in net.minecraft.world.level.block.state (extra .state. segment).
+#   - Registry in net.minecraft.core (NOT core.registries).  But Registries and
+#     BuiltInRegistries ARE in core.registries.
 
 [PACKAGES]
 # Deepest sub-packages first, broadest later.
@@ -25,7 +41,7 @@ net.minecraft.world.gen.surfacebuilder.|net.minecraft.world.level.levelgen.
 net.minecraft.world.gen.|net.minecraft.world.level.levelgen.
 
 # Direct children of net.minecraft.world. listed explicitly to avoid the
-# double-level pollution problem.  These map to multiple destination packages.
+# double-level pollution problem.
 net.minecraft.world.ChunkRegion|net.minecraft.world.level.WorldGenRegion
 net.minecraft.world.DefaultRedstoneController|net.minecraft.world.level.redstone.VanillaRedstoneWireEvaluator
 net.minecraft.world.ExperimentalRedstoneController|net.minecraft.world.level.redstone.AlternateCurrentRedstoneWireEvaluator
@@ -63,23 +79,43 @@ net.minecraft.util.math.random.|net.minecraft.util.
 net.minecraft.util.math.|net.minecraft.world.phys.
 net.minecraft.util.shape.|net.minecraft.world.phys.shapes.
 
-# Corrections after the broad util.math -> world.phys rule above:
-# BlockPos / Direction / ChunkPos / Mth live in net.minecraft.core or net.minecraft.util.
+# === Corrections after the broad rules above ===
+# BlockPos / Direction / ChunkPos / Mth move to net.minecraft.core or net.minecraft.util.
 net.minecraft.world.phys.BlockPos|net.minecraft.core.BlockPos
 net.minecraft.world.phys.ChunkPos|net.minecraft.world.level.ChunkPos
 net.minecraft.world.phys.Direction|net.minecraft.core.Direction
 net.minecraft.world.phys.MathHelper|net.minecraft.util.Mth
 
-# Reverse-correct java.util.Random clobber (caused by the [CLASSES] Random -> RandomSource rule below).
-import java.util.RandomSource;|import java.util.Random;
-java.util.RandomSource|java.util.Random
+# Identifier kept its name in 26.1.x; just changed packages.
+net.minecraft.util.Identifier|net.minecraft.resources.Identifier
 
-# (No defensive double-level rule. The original bug came from a broad
-# net.minecraft.world. -> net.minecraft.world.level. rule that re-fired
-# against its own output; that rule is now removed.  A defensive cleanup
-# pattern using unescaped dots (like net.minecraft.world.level.level.)
-# would itself be buggy because sed treats `.` as any-char and would
-# match net.minecraft.world.level.levelg and chop off the 'g'.)
+# BlockState lives in net.minecraft.world.level.block.state (extra .state. segment).
+net.minecraft.world.level.block.BlockState|net.minecraft.world.level.block.state.BlockState
+
+# ItemEntity is in net.minecraft.world.entity.item (extra .item. segment).
+net.minecraft.world.entity.ItemEntity|net.minecraft.world.entity.item.ItemEntity
+
+# Registry (single) is in net.minecraft.core (NOT core.registries).  Note: this
+# rule has trailing ; to avoid matching the BuiltInRegistries / Registries imports.
+net.minecraft.core.registries.Registry;|net.minecraft.core.Registry;
+
+# Blender lives in levelgen.blending sub-package.
+net.minecraft.world.level.levelgen.Blender|net.minecraft.world.level.levelgen.blending.Blender
+
+# StructureManager and BooleanOp corrections moved to [POST]: they require the
+# class rename (StructureAccessor -> StructureManager, BooleanBiFunction -> BooleanOp)
+# to happen first, which means waiting until after the [CLASSES] pass.
+
+# CodecHolder was renamed to KeyDispatchDataCodec.
+net.minecraft.util.CodecHolder|net.minecraft.util.KeyDispatchDataCodec
+
+# Inner-class renames (BlockPos.Mutable, Heightmap.Type, etc.).
+BlockPos.Mutable|BlockPos.MutableBlockPos
+Heightmap.Type|Heightmap.Types
+Direction.Type|Direction.Plane
+DensityFunction.NoisePos|DensityFunction.FunctionContext
+DensityFunction.Base|DensityFunction.SimpleFunction
+DensityFunction.DensityFunctionVisitor|DensityFunction.Visitor
 
 [CLASSES]
 # Word-boundary (\b) replacement.  Listing only CHANGED names; same-name classes need no entry.
@@ -118,12 +154,15 @@ ClientWorld|ClientLevel
 MatrixStack|PoseStack
 ServerCommandSource|CommandSourceStack
 CommandManager|Commands
-RegistryKeys|Registries
+# Order matters: Registries -> BuiltInRegistries MUST run BEFORE
+# RegistryKeys -> Registries, otherwise the latter's output (`Registries`)
+# gets re-eaten by the former.
 Registries|BuiltInRegistries
+RegistryKeys|Registries
 RegistryEntry|Holder
 RegistryKey|ResourceKey
 MathHelper|Mth
-Identifier|ResourceLocation
+# Identifier kept its name in 26.1.x (NO rename).  Package change only - see [PACKAGES].
 Vec3d|Vec3
 Box|AABB
 VoxelShapes|Shapes
@@ -139,9 +178,37 @@ RandomSplitter|PositionalRandomFactory
 BooleanBiFunction|BooleanOp
 TaskExecutor|ProcessorMailbox
 
-# Broad word-boundary renames - safe because \b stops at token boundaries and these
-# don't appear inside other class names that we're not also renaming.
+# Broad word-boundary renames - safe because \b stops at token boundaries.
 World|Level
 Random|RandomSource
 Text|Component
 Inventory|Container
+Chunk|ChunkAccess
+CodecHolder|KeyDispatchDataCodec
+# Inner-class bare references that the [PACKAGES] qualified rules don't catch.
+# `Visitor visitor` won't resolve as a top-level class - rewrite to qualified form.
+DensityFunctionVisitor|DensityFunction.Visitor
+NoisePos|DensityFunction.FunctionContext
+
+[POST]
+# Reverse-correct java.util.Random clobber from \bRandom\b -> RandomSource above.
+import java.util.RandomSource;|import java.util.Random;
+java.util.RandomSource|java.util.Random
+# Inline `new RandomSource(0x...)` was actually `new Random(0x...)` (java.util)
+# - MC's RandomSource interface has no public ctor taking long, so this is unambiguous.
+RandomSource rng = new RandomSource(0x|Random rng = new Random(0x
+
+# Class-rename followed by package correction must run here, because the package
+# correction needs the class name to have already been renamed.
+# StructureManager (Yarn StructureAccessor): ends up at ...levelgen.StructureManager,
+# but mojmap puts it at ...level.StructureManager (no levelgen.).
+net.minecraft.world.level.levelgen.StructureManager|net.minecraft.world.level.StructureManager
+# BooleanOp (Yarn BooleanBiFunction): ends up at ...util.BooleanOp,
+# but mojmap puts it at ...world.phys.shapes.BooleanOp.
+net.minecraft.util.BooleanOp|net.minecraft.world.phys.shapes.BooleanOp
+# ResourceKey (Yarn RegistryKey): ends up at ...core.registries.ResourceKey,
+# but mojmap puts it at ...resources.ResourceKey.
+net.minecraft.core.registries.ResourceKey|net.minecraft.resources.ResourceKey
+# WorldGenRegion (Yarn ChunkRegion): ends up at ...world.level.WorldGenRegion,
+# but mojmap puts it at ...server.level.WorldGenRegion.
+net.minecraft.world.level.WorldGenRegion|net.minecraft.server.level.WorldGenRegion

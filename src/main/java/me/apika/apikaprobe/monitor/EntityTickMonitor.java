@@ -8,7 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.ItemEntity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.MobCategory;
 
 /**

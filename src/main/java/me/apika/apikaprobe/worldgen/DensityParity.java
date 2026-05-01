@@ -8,7 +8,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.RandomSource;
+import java.util.Random;
 
 import net.minecraft.server.MinecraftServer;
 
@@ -51,7 +51,7 @@ public final class DensityParity {
 		if (dfRegistry == null) {
 			return "[df-parity] could not resolve DENSITY_FUNCTION registry";
 		}
-		RandomSource rng = new RandomSource(0xABCDEFABL);
+		Random rng = new Random(0xABCDEFABL);
 		int totalPass = 0;
 		int totalFail = 0;
 		double worstDiff = 0.0;
@@ -228,9 +228,9 @@ public final class DensityParity {
 			// First try literal candidate names.
 			for (String name : new String[]{
 					"net.minecraft.world.level.levelgen.DensityFunction$Visitor",
-					"net.minecraft.world.level.levelgen.DensityFunction$DensityFunctionVisitor",
+					"net.minecraft.world.level.levelgen.DensityFunction.Visitor",
 					"net.minecraft.world.level.levelgen.DensityFunction$Visitor",
-					"net.minecraft.world.level.levelgen.DensityFunctionVisitor",
+					"net.minecraft.world.level.levelgen.DensityFunction.Visitor",
 			}) {
 				try { visitorClass = Class.forName(name); break; }
 				catch (ClassNotFoundException ignored) { /* next */ }
@@ -545,7 +545,7 @@ public final class DensityParity {
 	/** Compute vanilla's DF at integer coords. Returns null on failure. */
 	private static Double computeVanilla(Object vanillaDf, int x, int y, int z) {
 		// Vanilla `DensityFunction.compute(FunctionContext)`. Yarn likely
-		// renames to `sample(NoisePos)`. Try both.
+		// renames to `sample(DensityFunction.FunctionContext)`. Try both.
 		Object context = buildSinglePointContext(x, y, z);
 		if (context == null) return null;
 		Method compute = findCompute(vanillaDf.getClass(), context.getClass());
@@ -602,12 +602,12 @@ public final class DensityParity {
 	private static Object resolveDfRegistry(MinecraftServer server) {
 		try {
 			Object manager = server.getRegistryManager();
-			Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.BuiltInRegistries");
+			Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.Registries");
 			Object dfKey = registryKeysClass.getField("DENSITY_FUNCTION").get(null);
 			for (String n : new String[]{"getOrThrow", "get", "getRegistry"}) {
 				try {
 					Method m = manager.getClass().getMethod(n,
-							Class.forName("net.minecraft.core.registries.ResourceKey"));
+							Class.forName("net.minecraft.resources.ResourceKey"));
 					Object r = m.invoke(manager, dfKey);
 					if (r != null) return r;
 				} catch (ReflectiveOperationException ignored) {

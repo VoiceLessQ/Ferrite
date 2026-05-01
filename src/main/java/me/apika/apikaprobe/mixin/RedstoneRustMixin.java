@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import me.apika.apikaprobe.redstone.RedstoneHandoff;
 import me.apika.apikaprobe.redstone.RedstoneRustDispatcher;
 
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
@@ -52,10 +52,10 @@ import net.minecraft.world.level.redstone.Orientation;
 public abstract class RedstoneRustMixin {
 
 	@Redirect(
-		method = "update(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.BlockState;Lnet.minecraft.world.level.redstone.Orientation;Z)V",
+		method = "update(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.state.BlockState;Lnet.minecraft.world.level.redstone.Orientation;Z)V",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.redstone.RedstoneWireEvaluator;update(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.BlockState;Lnet.minecraft.world.level.redstone.Orientation;Z)V"
+			target = "Lnet.minecraft.world.level.redstone.RedstoneWireEvaluator;update(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.state.BlockState;Lnet.minecraft.world.level.redstone.Orientation;Z)V"
 		)
 	)
 	private void apikaprobe$redirectControllerUpdate(

@@ -9,7 +9,7 @@ import java.nio.DoubleBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicLong;
 
-import net.minecraft.util.CodecHolder;
+import net.minecraft.util.KeyDispatchDataCodec;
 import net.minecraft.world.level.levelgen.DensityFunction;
 
 /**
@@ -33,7 +33,7 @@ import net.minecraft.world.level.levelgen.DensityFunction;
  *   <li>Per-block sample: array index, no JNI, no lerp</li>
  * </ul>
  */
-public final class RustFinalDensityBufferWrapper implements DensityFunction.Base {
+public final class RustFinalDensityBufferWrapper implements DensityFunction.SimpleFunction {
 	public static volatile boolean ENABLED = false;
 
 	// Diagnostic counters live on the COLD path only (per-chunk JNI fill,
@@ -87,7 +87,7 @@ public final class RustFinalDensityBufferWrapper implements DensityFunction.Base
 	 * </ul>
 	 */
 	@Override
-	public double sample(NoisePos pos) {
+	public double sample(DensityFunction.FunctionContext pos) {
 		double[] buf = this.buffer;
 		if (buf == null) return slowSample(pos);
 		int relX = pos.blockX() - this.chunkMinBlockX;
@@ -105,7 +105,7 @@ public final class RustFinalDensityBufferWrapper implements DensityFunction.Base
 	}
 
 	/** Cold path split out to keep {@link #sample} inlinable. */
-	private double slowSample(NoisePos pos) {
+	private double slowSample(DensityFunction.FunctionContext pos) {
 		double[] buf = ensureBuffer();
 		if (buf == null) {
 			fallbacks.incrementAndGet();
@@ -154,7 +154,7 @@ public final class RustFinalDensityBufferWrapper implements DensityFunction.Base
 	}
 
 	@Override
-	public DensityFunction apply(DensityFunctionVisitor visitor) {
+	public DensityFunction apply(DensityFunction.Visitor visitor) {
 		return visitor.apply(this);
 	}
 
@@ -165,7 +165,7 @@ public final class RustFinalDensityBufferWrapper implements DensityFunction.Base
 	public double maxValue() { return original.maxValue(); }
 
 	@Override
-	public CodecHolder<? extends DensityFunction> getCodecHolder() {
+	public KeyDispatchDataCodec<? extends DensityFunction> getCodecHolder() {
 		throw new UnsupportedOperationException(
 				"RustFinalDensityBufferWrapper is runtime-only");
 	}

@@ -7,19 +7,19 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.WorldGenerationContext;
 import net.minecraft.world.level.levelgen.NoiseChunk;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.SurfaceRules;
 import net.minecraft.world.level.biome.BiomeManager;
-import net.minecraft.core.registries.Registry;
+import net.minecraft.core.Registry;
 import net.minecraft.world.level.biome.Biome;
 
 import me.apika.apikaprobe.surface.SurfaceDispatcher;
 import me.apika.apikaprobe.surface.SurfaceValidator;
 
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.SurfaceRules;
 
 /**
@@ -59,7 +59,7 @@ public abstract class SurfaceValidatorMixin {
 	private void ferrite$dispatchBegin(
 			RandomState noiseConfig, BiomeManager biomeAccess, Registry<Biome> biomeRegistry,
 			boolean useLegacyRandom, WorldGenerationContext heightContext,
-			Chunk protoChunk, NoiseChunk chunkNoiseSampler,
+			ChunkAccess protoChunk, NoiseChunk chunkNoiseSampler,
 			SurfaceRules.MaterialRule ruleSource,
 			CallbackInfo ci) {
 		SurfaceDispatcher.beginChunk(protoChunk);
@@ -68,14 +68,14 @@ public abstract class SurfaceValidatorMixin {
 	/**
 	 * Flush the per-thread batched dispatcher at the end of buildSurface.
 	 * One JNI call evaluates every captured (x, y, z); results write back
-	 * via Chunk.setBlockState. No-op if dispatch wasn't active for this
+	 * via ChunkAccess.setBlockState. No-op if dispatch wasn't active for this
 	 * chunk (toggle off, no tree installed, or beginChunk failed).
 	 */
 	@Inject(method = "buildSurface", at = @At("RETURN"))
 	private void ferrite$dispatchEnd(
 			RandomState noiseConfig, BiomeManager biomeAccess, Registry<Biome> biomeRegistry,
 			boolean useLegacyRandom, WorldGenerationContext heightContext,
-			Chunk protoChunk, NoiseChunk chunkNoiseSampler,
+			ChunkAccess protoChunk, NoiseChunk chunkNoiseSampler,
 			SurfaceRules.MaterialRule ruleSource,
 			CallbackInfo ci) {
 		SurfaceDispatcher.flushChunk();
@@ -85,7 +85,7 @@ public abstract class SurfaceValidatorMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.levelgen.SurfaceRules$BlockStateRule;tryApply(III)Lnet.minecraft.world.level.block.BlockState;"
+			target = "Lnet.minecraft.world.level.levelgen.SurfaceRules$BlockStateRule;tryApply(III)Lnet.minecraft.world.level.block.state.BlockState;"
 		)
 	)
 	private BlockState ferrite$validateTryApply(@Coerce Object rule, int x, int y, int z) {

@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import me.apika.apikaprobe.hopper.SlotCooldownAccess;
 
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
@@ -74,7 +74,7 @@ public abstract class HopperPerSlotCooldownMixin implements SlotCooldownAccess {
 	}
 
 	@Inject(
-		method = "serverTick(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.BlockState;Lnet.minecraft.world.level.block.entity.HopperBlockEntity;)V",
+		method = "serverTick(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.state.BlockState;Lnet.minecraft.world.level.block.entity.HopperBlockEntity;)V",
 		at = @At("HEAD")
 	)
 	private static void ferrite$decrementOnTick(Level world, BlockPos pos, BlockState state, HopperBlockEntity blockEntity, CallbackInfo ci) {

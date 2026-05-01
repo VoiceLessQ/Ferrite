@@ -9,7 +9,7 @@ import java.nio.DoubleBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicLong;
 
-import net.minecraft.util.CodecHolder;
+import net.minecraft.util.KeyDispatchDataCodec;
 import net.minecraft.world.level.levelgen.DensityFunction;
 
 /**
@@ -37,7 +37,7 @@ import net.minecraft.world.level.levelgen.DensityFunction;
  * combinations fall through to original.sample (e.g., a future custom
  * datapack dimension).
  */
-public final class RustBlendedNoiseWrapper implements DensityFunction.Base {
+public final class RustBlendedNoiseWrapper implements DensityFunction.SimpleFunction {
 	public static volatile boolean ENABLED = false;
 
 	// Diagnostic counters live on the COLD path only (per-chunk JNI fill,
@@ -90,7 +90,7 @@ public final class RustBlendedNoiseWrapper implements DensityFunction.Base {
 	}
 
 	@Override
-	public double sample(NoisePos pos) {
+	public double sample(DensityFunction.FunctionContext pos) {
 		int blockX = pos.blockX();
 		int blockY = pos.blockY();
 		int blockZ = pos.blockZ();
@@ -187,7 +187,7 @@ public final class RustBlendedNoiseWrapper implements DensityFunction.Base {
 	}
 
 	@Override
-	public DensityFunction apply(DensityFunctionVisitor visitor) {
+	public DensityFunction apply(DensityFunction.Visitor visitor) {
 		return visitor.apply(this);
 	}
 
@@ -202,7 +202,7 @@ public final class RustBlendedNoiseWrapper implements DensityFunction.Base {
 	}
 
 	@Override
-	public CodecHolder<? extends DensityFunction> getCodecHolder() {
+	public KeyDispatchDataCodec<? extends DensityFunction> getCodecHolder() {
 		throw new UnsupportedOperationException(
 				"RustBlendedNoiseWrapper is runtime-only and cannot be serialized");
 	}

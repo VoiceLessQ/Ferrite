@@ -5,7 +5,7 @@
  * Yarn-remapped for Fabric 1.21.11. Key yarn renames:
  *   net.minecraft.core.BlockPos                  -> net.minecraft.core.BlockPos
  *   net.minecraft.server.level.ServerLevel       -> net.minecraft.server.level.ServerLevel
- *   net.minecraft.world.level.chunk.ChunkAccess  -> net.minecraft.world.level.chunk.Chunk
+ *   net.minecraft.world.level.chunk.ChunkAccess  -> net.minecraft.world.level.chunk.ChunkAccess
  *   net.minecraft.world.level.chunk.LevelChunkSection -> net.minecraft.world.level.chunk.LevelChunkSection
  *   net.minecraft.world.level.chunk.status.ChunkStatus -> net.minecraft.world.level.chunk.ChunkStatus
  *   level.getChunkSource().blockChanged(pos)     -> world.getChunkManager().markForUpdate(pos)
@@ -20,10 +20,10 @@
 package me.apika.apikaprobe.redstone;
 
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.ChunkStatus;
 
@@ -61,7 +61,7 @@ final class LevelHelper {
 		int z = pos.getZ();
 		int index = world.getSectionIndex(y);
 
-		Chunk chunk = world.getChunk(x >> 4, z >> 4, ChunkStatus.FULL, true);
+		ChunkAccess chunk = world.getChunk(x >> 4, z >> 4, ChunkStatus.FULL, true);
 		LevelChunkSection section = chunk.getSectionArray()[index];
 
 		if (section == null) {

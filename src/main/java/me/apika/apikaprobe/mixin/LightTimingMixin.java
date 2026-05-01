@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.minecraft.server.level.ThreadedLevelLightEngine;
-import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.chunk.ChunkAccess;
 
 import me.apika.apikaprobe.monitor.LightTimingMonitor;
 
@@ -40,17 +40,17 @@ public abstract class LightTimingMixin {
 			ThreadLocal.withInitial(() -> new long[1]);
 
 	@Inject(method = "initializeLight", at = @At("HEAD"))
-	private void ferrite$initHead(Chunk chunk, boolean lit,
-			CallbackInfoReturnable<CompletableFuture<Chunk>> cir) {
+	private void ferrite$initHead(ChunkAccess chunk, boolean lit,
+			CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
 		ferrite$initStart.get()[0] = System.nanoTime();
 	}
 
 	@Inject(method = "initializeLight", at = @At("RETURN"))
-	private void ferrite$initReturn(Chunk chunk, boolean lit,
-			CallbackInfoReturnable<CompletableFuture<Chunk>> cir) {
+	private void ferrite$initReturn(ChunkAccess chunk, boolean lit,
+			CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
 		long startNs = ferrite$initStart.get()[0];
 		ferrite$initStart.get()[0] = 0L;
-		CompletableFuture<Chunk> f = cir.getReturnValue();
+		CompletableFuture<ChunkAccess> f = cir.getReturnValue();
 		if (f != null && startNs != 0L) {
 			f.whenComplete((c, t) ->
 					LightTimingMonitor.recordInit(System.nanoTime() - startNs));
@@ -58,17 +58,17 @@ public abstract class LightTimingMixin {
 	}
 
 	@Inject(method = "light", at = @At("HEAD"))
-	private void ferrite$lightHead(Chunk chunk, boolean lit,
-			CallbackInfoReturnable<CompletableFuture<Chunk>> cir) {
+	private void ferrite$lightHead(ChunkAccess chunk, boolean lit,
+			CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
 		ferrite$lightStart.get()[0] = System.nanoTime();
 	}
 
 	@Inject(method = "light", at = @At("RETURN"))
-	private void ferrite$lightReturn(Chunk chunk, boolean lit,
-			CallbackInfoReturnable<CompletableFuture<Chunk>> cir) {
+	private void ferrite$lightReturn(ChunkAccess chunk, boolean lit,
+			CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
 		long startNs = ferrite$lightStart.get()[0];
 		ferrite$lightStart.get()[0] = 0L;
-		CompletableFuture<Chunk> f = cir.getReturnValue();
+		CompletableFuture<ChunkAccess> f = cir.getReturnValue();
 		if (f != null && startNs != 0L) {
 			f.whenComplete((c, t) ->
 					LightTimingMonitor.recordLight(System.nanoTime() - startNs));

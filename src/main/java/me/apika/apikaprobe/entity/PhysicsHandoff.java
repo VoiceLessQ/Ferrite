@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.ChainBlock;
 import net.minecraft.world.level.block.FenceBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
@@ -16,7 +16,7 @@ import net.minecraft.world.level.block.IronBarsBlock;
 import net.minecraft.world.level.block.ScaffoldingBlock;
 import net.minecraft.world.level.block.WallBlock;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.util.BooleanOp;
+import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
@@ -133,7 +133,7 @@ public final class PhysicsHandoff {
 	private static final Map<BlockState, Integer> STATE_TO_PALETTE = new HashMap<>(128);
 	private static final List<float[]> PALETTE_AABBS = new ArrayList<>(128);
 	private static final int[] PALETTE_COUNTS_TMP = new int[MAX_PALETTE_ENTRIES];
-	private static final BlockPos.Mutable SCRATCH_POS = new BlockPos.Mutable();
+	private static final BlockPos.MutableBlockPos SCRATCH_POS = new BlockPos.MutableBlockPos();
 
 	private PhysicsHandoff() {}
 

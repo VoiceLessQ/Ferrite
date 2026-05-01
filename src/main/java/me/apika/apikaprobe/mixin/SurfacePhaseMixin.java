@@ -43,7 +43,7 @@ public abstract class SurfacePhaseMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.levelgen.SurfaceRules$BlockStateRule;tryApply(III)Lnet.minecraft.world.level.block.BlockState;"
+			target = "Lnet.minecraft.world.level.levelgen.SurfaceRules$BlockStateRule;tryApply(III)Lnet.minecraft.world.level.block.state.BlockState;"
 		)
 	)
 	private void ferrite$onTryApplyBegin(CallbackInfo ci) {
@@ -54,7 +54,7 @@ public abstract class SurfacePhaseMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.levelgen.SurfaceRules$BlockStateRule;tryApply(III)Lnet.minecraft.world.level.block.BlockState;",
+			target = "Lnet.minecraft.world.level.levelgen.SurfaceRules$BlockStateRule;tryApply(III)Lnet.minecraft.world.level.block.state.BlockState;",
 			shift = At.Shift.AFTER
 		)
 	)
@@ -68,7 +68,7 @@ public abstract class SurfacePhaseMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.levelgen.BlockColumn;getState(I)Lnet.minecraft.world.level.block.BlockState;"
+			target = "Lnet.minecraft.world.level.levelgen.BlockColumn;getState(I)Lnet.minecraft.world.level.block.state.BlockState;"
 		)
 	)
 	private void ferrite$onBlockReadBegin(CallbackInfo ci) {
@@ -79,7 +79,7 @@ public abstract class SurfacePhaseMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.levelgen.BlockColumn;getState(I)Lnet.minecraft.world.level.block.BlockState;",
+			target = "Lnet.minecraft.world.level.levelgen.BlockColumn;getState(I)Lnet.minecraft.world.level.block.state.BlockState;",
 			shift = At.Shift.AFTER
 		)
 	)
@@ -91,7 +91,7 @@ public abstract class SurfacePhaseMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.levelgen.BlockColumn;setState(ILnet.minecraft.world.level.block.BlockState;)V"
+			target = "Lnet.minecraft.world.level.levelgen.BlockColumn;setState(ILnet.minecraft.world.level.block.state.BlockState;)V"
 		)
 	)
 	private void ferrite$onBlockWriteBegin(CallbackInfo ci) {
@@ -102,7 +102,7 @@ public abstract class SurfacePhaseMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.levelgen.BlockColumn;setState(ILnet.minecraft.world.level.block.BlockState;)V",
+			target = "Lnet.minecraft.world.level.levelgen.BlockColumn;setState(ILnet.minecraft.world.level.block.state.BlockState;)V",
 			shift = At.Shift.AFTER
 		)
 	)
@@ -189,7 +189,7 @@ public abstract class SurfacePhaseMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.chunk.Chunk;sampleHeightmap(Lnet.minecraft.world.level.levelgen.Heightmap$Type;II)I"
+			target = "Lnet.minecraft.world.level.chunk.ChunkAccess;sampleHeightmap(Lnet.minecraft.world.level.levelgen.Heightmap.Types;II)I"
 		)
 	)
 	private void ferrite$onHeightmapBegin(CallbackInfo ci) {
@@ -200,7 +200,7 @@ public abstract class SurfacePhaseMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.chunk.Chunk;sampleHeightmap(Lnet.minecraft.world.level.levelgen.Heightmap$Type;II)I",
+			target = "Lnet.minecraft.world.level.chunk.ChunkAccess;sampleHeightmap(Lnet.minecraft.world.level.levelgen.Heightmap.Types;II)I",
 			shift = At.Shift.AFTER
 		)
 	)

@@ -11,7 +11,7 @@ import me.apika.apikaprobe.hopper.PerSlotFireConfig;
 import me.apika.apikaprobe.hopper.SlotCooldownAccess;
 import me.apika.apikaprobe.monitor.HopperPerSlotMonitor;
 
-import net.minecraft.world.level.block.BlockState;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.HopperBlock;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.core.BlockPos;
@@ -21,7 +21,7 @@ import net.minecraft.world.level.Level;
 public abstract class HopperPerSlotFireMixin {
 
 	@Inject(
-		method = "insertAndExtract(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.BlockState;Lnet.minecraft.world.level.block.entity.HopperBlockEntity;Ljava/util/function/BooleanSupplier;)Z",
+		method = "insertAndExtract(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.state.BlockState;Lnet.minecraft.world.level.block.entity.HopperBlockEntity;Ljava/util/function/BooleanSupplier;)Z",
 		at = @At("HEAD"),
 		cancellable = true
 	)

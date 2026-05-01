@@ -12,10 +12,10 @@ import org.slf4j.LoggerFactory;
 
 import me.apika.apikaprobe.monitor.ChunkGenMonitor;
 
-import net.minecraft.world.level.WorldGenRegion;
-import net.minecraft.world.level.chunk.Chunk;
-import net.minecraft.world.level.levelgen.StructureManager;
-import net.minecraft.world.level.levelgen.Blender;
+import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.RandomState;
 
@@ -31,8 +31,8 @@ public abstract class ChunkPhaseMixin {
 			Blender blender,
 			RandomState noiseConfig,
 			StructureManager structureAccessor,
-			Chunk chunk,
-			CallbackInfoReturnable<CompletableFuture<Chunk>> cir) {
+			ChunkAccess chunk,
+			CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
 		ChunkGenMonitor.onNoiseStart();
 	}
 
@@ -41,8 +41,8 @@ public abstract class ChunkPhaseMixin {
 			Blender blender,
 			RandomState noiseConfig,
 			StructureManager structureAccessor,
-			Chunk chunk,
-			CallbackInfoReturnable<CompletableFuture<Chunk>> cir) {
+			ChunkAccess chunk,
+			CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
 		ChunkGenMonitor.onNoiseEnd();
 	}
 
@@ -51,7 +51,7 @@ public abstract class ChunkPhaseMixin {
 			WorldGenRegion region,
 			StructureManager structures,
 			RandomState noiseConfig,
-			Chunk chunk,
+			ChunkAccess chunk,
 			CallbackInfo ci) {
 		ChunkGenMonitor.onSurfaceStart();
 	}
@@ -61,43 +61,43 @@ public abstract class ChunkPhaseMixin {
 			WorldGenRegion region,
 			StructureManager structures,
 			RandomState noiseConfig,
-			Chunk chunk,
+			ChunkAccess chunk,
 			CallbackInfo ci) {
 		ChunkGenMonitor.onSurfaceEnd();
 	}
 
 	// --- private sync populateNoise (the real noise work) -------------------
 	// Fully qualified descriptor disambiguates from the public async overload.
-	// Note parameter order: (Blender, StructureManager, RandomState, Chunk, int, int)
+	// Note parameter order: (Blender, StructureManager, RandomState, ChunkAccess, int, int)
 	// — StructureManager comes before RandomState here, unlike the async version.
 
 	@Inject(
-		method = "populateNoise(Lnet.minecraft.world.level.levelgen.Blender;Lnet.minecraft.world.level.levelgen.StructureManager;Lnet.minecraft.world.level.levelgen.RandomState;Lnet.minecraft.world.level.chunk.Chunk;II)Lnet.minecraft.world.level.chunk.Chunk;",
+		method = "populateNoise(Lnet.minecraft.world.level.levelgen.blending.Blender;Lnet.minecraft.world.level.StructureManager;Lnet.minecraft.world.level.levelgen.RandomState;Lnet.minecraft.world.level.chunk.ChunkAccess;II)Lnet.minecraft.world.level.chunk.ChunkAccess;",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onSyncNoiseStart(
 			Blender blender,
 			StructureManager structureAccessor,
 			RandomState noiseConfig,
-			Chunk chunk,
+			ChunkAccess chunk,
 			int minimumCellY,
 			int cellHeight,
-			CallbackInfoReturnable<Chunk> cir) {
+			CallbackInfoReturnable<ChunkAccess> cir) {
 		ChunkGenMonitor.onSyncNoiseStart();
 	}
 
 	@Inject(
-		method = "populateNoise(Lnet.minecraft.world.level.levelgen.Blender;Lnet.minecraft.world.level.levelgen.StructureManager;Lnet.minecraft.world.level.levelgen.RandomState;Lnet.minecraft.world.level.chunk.Chunk;II)Lnet.minecraft.world.level.chunk.Chunk;",
+		method = "populateNoise(Lnet.minecraft.world.level.levelgen.blending.Blender;Lnet.minecraft.world.level.StructureManager;Lnet.minecraft.world.level.levelgen.RandomState;Lnet.minecraft.world.level.chunk.ChunkAccess;II)Lnet.minecraft.world.level.chunk.ChunkAccess;",
 		at = @At("RETURN")
 	)
 	private void apikaprobe$onSyncNoiseEnd(
 			Blender blender,
 			StructureManager structureAccessor,
 			RandomState noiseConfig,
-			Chunk chunk,
+			ChunkAccess chunk,
 			int minimumCellY,
 			int cellHeight,
-			CallbackInfoReturnable<Chunk> cir) {
+			CallbackInfoReturnable<ChunkAccess> cir) {
 		ChunkGenMonitor.onSyncNoiseEnd();
 	}
 }

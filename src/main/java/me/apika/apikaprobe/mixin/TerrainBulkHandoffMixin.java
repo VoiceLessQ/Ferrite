@@ -7,9 +7,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import me.apika.apikaprobe.worldgen.TerrainBulkHandoff;
 
-import net.minecraft.world.level.chunk.Chunk;
-import net.minecraft.world.level.levelgen.StructureManager;
-import net.minecraft.world.level.levelgen.Blender;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.RandomState;
 
@@ -20,23 +20,23 @@ import net.minecraft.world.level.levelgen.RandomState;
  * unmodified after the inject returns.
  *
  * Fully qualified descriptor disambiguates from the public async overload:
- *   populateNoise(Blender, StructureManager, RandomState, Chunk, int, int) -> Chunk
+ *   populateNoise(Blender, StructureManager, RandomState, ChunkAccess, int, int) -> ChunkAccess
  */
 @Mixin(NoiseBasedChunkGenerator.class)
 public abstract class TerrainBulkHandoffMixin {
 
 	@Inject(
-		method = "populateNoise(Lnet.minecraft.world.level.levelgen.Blender;Lnet.minecraft.world.level.levelgen.StructureManager;Lnet.minecraft.world.level.levelgen.RandomState;Lnet.minecraft.world.level.chunk.Chunk;II)Lnet.minecraft.world.level.chunk.Chunk;",
+		method = "populateNoise(Lnet.minecraft.world.level.levelgen.blending.Blender;Lnet.minecraft.world.level.StructureManager;Lnet.minecraft.world.level.levelgen.RandomState;Lnet.minecraft.world.level.chunk.ChunkAccess;II)Lnet.minecraft.world.level.chunk.ChunkAccess;",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$bulkTerrainAB(
 			Blender blender,
 			StructureManager structureAccessor,
 			RandomState noiseConfig,
-			Chunk chunk,
+			ChunkAccess chunk,
 			int minimumCellY,
 			int cellHeight,
-			CallbackInfoReturnable<Chunk> cir) {
+			CallbackInfoReturnable<ChunkAccess> cir) {
 		TerrainBulkHandoff.apply(chunk, noiseConfig);
 		// Do not touch cir — vanilla runs normally after this returns.
 	}

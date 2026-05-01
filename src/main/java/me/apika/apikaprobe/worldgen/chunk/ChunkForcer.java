@@ -6,10 +6,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registry;
+import net.minecraft.core.Registry;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.ChunkPos;
 
 /**
@@ -52,7 +52,7 @@ public final class ChunkForcer {
 	public static void register() {
 		ticketType = Registry.register(
 				BuiltInRegistries.TICKET_TYPE,
-				ResourceLocation.of(ExampleMod.MOD_ID, "chunkforce"),
+				Identifier.of(ExampleMod.MOD_ID, "chunkforce"),
 				new TicketType(80L, TicketType.FOR_LOADING));
 	}
 
