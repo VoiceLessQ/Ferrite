@@ -177,10 +177,10 @@ public final class RustAquiferSampler implements Aquifer {
 
     @Nullable
     @Override
-    public BlockState apply(DensityFunction.FunctionContext pos, double density) {
+    public BlockState computeSubstance(DensityFunction.FunctionContext pos, double density) {
         if (this.handle == 0L) {
-            BlockState fallbackResult = this.vanillaFallback.apply(pos, density);
-            this.lastNeedsFluidTick = this.vanillaFallback.needsFluidTick();
+            BlockState fallbackResult = this.vanillaFallback.computeSubstance(pos, density);
+            this.lastNeedsFluidTick = this.vanillaFallback.shouldScheduleFluidUpdate();
             return fallbackResult;
         }
         long packed = RustBridge.applyAquifer(
@@ -199,8 +199,8 @@ public final class RustAquiferSampler implements Aquifer {
 
         if (RustAquiferDispatch.PARITY_MODE) {
             // Run vanilla in parallel and compare. ~2× cost — diag only.
-            BlockState vanillaResult = this.vanillaFallback.apply(pos, density);
-            boolean vanillaTick = this.vanillaFallback.needsFluidTick();
+            BlockState vanillaResult = this.vanillaFallback.computeSubstance(pos, density);
+            boolean vanillaTick = this.vanillaFallback.shouldScheduleFluidUpdate();
             RustAquiferDispatch.parityCompared.incrementAndGet();
             if (!blockStatesEqual(rustResult, vanillaResult)) {
                 long n = RustAquiferDispatch.parityBlockMismatch.incrementAndGet();
@@ -242,7 +242,7 @@ public final class RustAquiferSampler implements Aquifer {
     }
 
     @Override
-    public boolean needsFluidTick() {
+    public boolean shouldScheduleFluidUpdate() {
         return this.lastNeedsFluidTick;
     }
 

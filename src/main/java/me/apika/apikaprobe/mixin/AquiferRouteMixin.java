@@ -51,12 +51,12 @@ public abstract class AquiferRouteMixin {
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/minecraft/world/level/levelgen/Aquifer;"
-                            + "aquifer(Lnet/minecraft/world/level/levelgen/NoiseChunk;"
+                            + "create(Lnet/minecraft/world/level/levelgen/NoiseChunk;"
                             + "Lnet/minecraft/world/level/ChunkPos;"
                             + "Lnet/minecraft/world/level/levelgen/NoiseRouter;"
-                            + "Lnet/minecraft/util/PositionalRandomFactory;"
+                            + "Lnet/minecraft/world/level/levelgen/PositionalRandomFactory;"
                             + "II"
-                            + "Lnet/minecraft/world/level/levelgen/Aquifer$FluidLevelSampler;)"
+                            + "Lnet/minecraft/world/level/levelgen/Aquifer$FluidPicker;)"
                             + "Lnet/minecraft/world/level/levelgen/Aquifer;"))
     private Aquifer ferrite$wrapAquifer(
             NoiseChunk chunkNoiseSampler,
@@ -65,12 +65,12 @@ public abstract class AquiferRouteMixin {
             PositionalRandomFactory randomSplitter,
             int minimumY,
             int height,
-            Aquifer.FluidLevelSampler fluidLevelSampler) {
+            Aquifer.FluidPicker fluidLevelSampler) {
         // Always build the vanilla sampler — used as fallback when
         // Rust init fails AND keeps vanilla's lazy state consistent
         // with the wrapper's. Cost: one extra Impl alloc per chunk
         // (~16 KB), worth it for the simpler fallback path.
-        Aquifer vanilla = Aquifer.aquifer(
+        Aquifer vanilla = Aquifer.create(
                 chunkNoiseSampler, chunkPos, noiseRouter, randomSplitter,
                 minimumY, height, fluidLevelSampler);
 
@@ -119,7 +119,7 @@ public abstract class AquiferRouteMixin {
             // overworld this is settings.seaLevel() = 63. Pull it
             // by sampling at a high y where we know we'll get the
             // sea-level water entry.
-            int seaLevel = fluidLevelSampler.getFluidLevel(0, 256, 0).y();
+            int seaLevel = fluidLevelSampler.computeFluid(0, 256, 0).fluidLevel();
 
             return new RustAquiferSampler(
                     seaLevel,
