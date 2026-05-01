@@ -1,45 +1,29 @@
 package me.apika.apikaprobe.mixin;
 
-import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 import net.minecraft.server.level.ChunkTaskDispatcher;
-import net.minecraft.util.thread.ProcessorMailbox;
-
-import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
 
 /**
- * Wraps the {@link Runnable} payload of every
+ * BROKEN ON 26.1.2 — needs redesign.
+ *
+ * <p>The original mixin wrapped {@code Runnable} payloads of every
  * {@code TaskQueue.PrioritizedTask} constructed inside
- * {@link ChunkTaskDispatcher}'s four
- * {@code dispatcher.send(new PrioritizedTask(N, ...))} sites
- * (priority 0=updateLevel, 1=remove, 2=add, 3=pollTask) so
- * {@link FerriteDispatcherProbe} can record submission-to-execution
- * queue-wait latency.
+ * {@link ChunkTaskDispatcher}'s four send sites
+ * (priority 0=updateLevel / 1=remove / 2=add / 3=pollTask) so the
+ * per-task queue-wait latency could be sampled.
  *
- * <p>Scope key is {@code this.executor.getName()} ("worldgen" /
- * "light") — vanilla names both schedulers' dispatchers "dispatcher",
- * which collides for diagnostics; the worker-pool name distinguishes
- * them.
+ * <p>In mojmap 26.1.2 the {@code ProcessorMailbox} class no longer
+ * exists; the executor field's type changed (likely {@code TracingExecutor}
+ * or a similar replacement).  The {@code TaskQueue.PrioritizedTask}
+ * inner class may also have been restructured.
  *
- * <p>No-op when {@link FerriteDispatcherProbe#ENABLED} is false.
+ * <p>This was a diagnostic probe (default-off via FerriteDispatcherProbe.ENABLED)
+ * so the runtime impact of stubbing it is zero.  Stubbed as an empty
+ * mixin so the build moves forward; reintroduce the wrapping once the
+ * 26.1.2 dispatcher internals are mapped.  Per JOURNEY.md, physics-style
+ * dispatchers were a CLOSED THREAD, so the priority on this fix is low.
  */
 @Mixin(ChunkTaskDispatcher.class)
 public abstract class FerriteDispatcherProbeMixin {
-
-	@Shadow @Final
-	private ProcessorMailbox<Runnable> executor;
-
-	@ModifyArg(
-			method = {"updateLevel", "remove", "add", "pollTask"},
-			at = @At(
-					value = "INVOKE",
-					target = "Lnet/minecraft/util/thread/TaskQueue$PrioritizedTask;<init>(ILjava/lang/Runnable;)V"),
-			index = 1)
-	private Runnable ferrite$wrapDispatcherTask(Runnable inner) {
-		return FerriteDispatcherProbe.wrap(inner, this.executor.getName());
-	}
 }

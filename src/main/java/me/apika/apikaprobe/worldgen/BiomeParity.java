@@ -176,7 +176,7 @@ public final class BiomeParity {
 		net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(x, y, z);
 		net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> entry = world.getBiome(pos);
 		return entry.unwrapKey()
-				.map(k -> k.getValue().toString())
+				.map(k -> k.identifier().toString())
 				.orElse("unknown");
 	}
 
