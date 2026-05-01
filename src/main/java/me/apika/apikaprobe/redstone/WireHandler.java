@@ -35,7 +35,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.redstone.NeighborUpdater;
-import net.minecraft.world.level.redstone.CollectingNeighborUpdates;
+import net.minecraft.world.level.redstone.CollectingNeighborUpdater;
 import net.minecraft.world.level.redstone.Orientation;
 
 import me.apika.apikaprobe.redstone.WireConstants.Directions;
@@ -108,11 +108,11 @@ public class WireHandler {
 		this.search = new SimpleQueue();
 		this.updates = new PriorityQueue();
 
-		// CollectingNeighborUpdates is the yarn equivalent of AC's
-		// InstantNeighborUpdater: synchronous delivery, no deferred
-		// chain queue. The algorithm relies on shape/block updates
-		// firing inline during powerNetwork().
-		this.neighborUpdater = new CollectingNeighborUpdates(world);
+		// CollectingNeighborUpdater collects updates and dispatches them
+		// in waves; mojmap construction takes (level, maxChainedDepth).
+		// 1_000_000 matches the effectively-unbounded default vanilla
+		// uses when no game-rule limit is configured.
+		this.neighborUpdater = new CollectingNeighborUpdater(world, 1_000_000);
 
 		this.nodeCache = new Node[16];
 		this.fillNodeCache(0, 16);
@@ -231,7 +231,7 @@ public class WireHandler {
 
 		if (neighbor == null || neighbor.invalid) {
 			Direction dir = Directions.ALL[iDir];
-			BlockPos pos = node.pos.offset(dir);
+			BlockPos pos = node.pos.relative(dir);
 
 			Node oldNeighbor = neighbor;
 			neighbor = getOrAddNode(pos);
@@ -412,7 +412,7 @@ public class WireHandler {
 		wire.discovered = true;
 		wire.searched = false;
 
-		if (!wire.removed && !wire.shouldBreak && !wire.state.canPlaceAt(world, wire.pos)) {
+		if (!wire.removed && !wire.shouldBreak && !wire.state.canSurvive(world, wire.pos)) {
 			wire.shouldBreak = true;
 		}
 
@@ -496,7 +496,7 @@ public class WireHandler {
 				power = Math.max(power, getDirectSignalTo(wire, neighbor));
 			}
 			if (neighbor.isSignalSource()) {
-				power = Math.max(power, neighbor.state.getWeakRedstonePower(world, neighbor.pos, Directions.ALL[iDir]));
+				power = Math.max(power, neighbor.state.getSignal(world, neighbor.pos, Directions.ALL[iDir]));
 			}
 
 			if (power >= POWER_MAX) {
@@ -519,7 +519,7 @@ public class WireHandler {
 			Node neighbor = getNeighbor(node, iDir);
 
 			if (neighbor.isSignalSource()) {
-				power = Math.max(power, neighbor.state.getStrongRedstonePower(world, neighbor.pos, Directions.ALL[iDir]));
+				power = Math.max(power, neighbor.state.getDirectSignal(world, neighbor.pos, Directions.ALL[iDir]));
 
 				if (power >= POWER_MAX) {
 					return POWER_MAX;
@@ -874,7 +874,7 @@ public class WireHandler {
 	}
 
 	private void updateShape(Node node, Direction dir, BlockPos neighborPos, BlockState neighborState) {
-		neighborUpdater.replaceWithStateForNeighborUpdate(dir, neighborState, node.pos, neighborPos, Block.UPDATE_CLIENTS, 512);
+		neighborUpdater.shapeUpdate(dir, neighborState, node.pos, neighborPos, Block.UPDATE_CLIENTS, 512);
 	}
 
 	/** Queue block updates to nodes around the given wire. */
@@ -909,6 +909,6 @@ public class WireHandler {
 		// Redstone wire is the only block that uses neighborChanged's
 		// orientation arg, and we never deliver block updates to wires
 		// through this path, so null is safe.
-		neighborUpdater.updateNeighbor(node.pos, neighborBlock, null);
+		neighborUpdater.neighborChanged(node.pos, neighborBlock, null);
 	}
 }

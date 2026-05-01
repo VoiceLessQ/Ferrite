@@ -176,17 +176,17 @@ public final class RedstoneRustDispatcher {
 			BlockPos pos = s.frontier.poll();
 			BlockPos above = pos.above();
 			BlockState aboveState = world.getBlockState(above);
-			boolean aboveSolid = aboveState.isSolidBlock(world, above);
+			boolean aboveSolid = aboveState.isRedstoneConductor(world, above);
 
 			for (Direction dir : Direction.Plane.HORIZONTAL) {
-				BlockPos neighbor = pos.offset(dir);
+				BlockPos neighbor = pos.relative(dir);
 				BlockState neighborState = world.getBlockState(neighbor);
 
 				int c = tryAdd(world, neighbor, s, count);
 				if (c < 0) return -1;
 				count = c;
 
-				boolean neighborSolid = neighborState.isSolidBlock(world, neighbor);
+				boolean neighborSolid = neighborState.isRedstoneConductor(world, neighbor);
 				if (neighborSolid && !aboveSolid) {
 					c = tryAdd(world, neighbor.above(), s, count);
 					if (c < 0) return -1;
@@ -234,7 +234,7 @@ public final class RedstoneRustDispatcher {
 		for (int idx = 0; idx < nodeCount; idx++) {
 			BlockPos pos = s.posByIndex[idx];
 			BlockState state = world.getBlockState(pos);
-			int current = state.get(RedStoneWireBlock.POWER);
+			int current = state.getValue(RedStoneWireBlock.POWER);
 			int source = inv.apikaprobe$getStrongPowerAt(world, pos);
 
 			Arrays.fill(s.neighborScratch, RedstoneHandoff.NO_NEIGHBOR);
@@ -256,16 +256,16 @@ public final class RedstoneRustDispatcher {
 	private static void resolveNeighbors(
 			ServerLevel world, BlockPos pos, ScratchBuffers s, int[] out) {
 		BlockPos above = pos.above();
-		boolean aboveSolid = world.getBlockState(above).isSolidBlock(world, above);
+		boolean aboveSolid = world.getBlockState(above).isRedstoneConductor(world, above);
 		int slot = 0;
 
 		for (Direction dir : Direction.Plane.HORIZONTAL) {
-			BlockPos neighbor = pos.offset(dir);
+			BlockPos neighbor = pos.relative(dir);
 			BlockState neighborState = world.getBlockState(neighbor);
 
 			slot = recordIfKnown(s, neighbor, out, slot);
 
-			boolean neighborSolid = neighborState.isSolidBlock(world, neighbor);
+			boolean neighborSolid = neighborState.isRedstoneConductor(world, neighbor);
 			if (neighborSolid && !aboveSolid) {
 				slot = recordIfKnown(s, neighbor.above(), out, slot);
 			} else if (!neighborSolid) {
@@ -305,9 +305,9 @@ public final class RedstoneRustDispatcher {
 				int newPower = RedstoneHandoff.readResultNewPower(i);
 				BlockState state = world.getBlockState(scratchPos);
 				if (!state.is(Blocks.REDSTONE_WIRE)) continue;
-				world.setBlockState(
+				world.setBlock(
 						scratchPos,
-						state.with(RedStoneWireBlock.POWER, newPower),
+						state.setValue(RedStoneWireBlock.POWER, newPower),
 						Block.UPDATE_CLIENTS);
 			}
 			for (int i = 0; i < deltaCount; i++) {
@@ -315,7 +315,9 @@ public final class RedstoneRustDispatcher {
 						RedstoneHandoff.readResultX(i),
 						RedstoneHandoff.readResultY(i),
 						RedstoneHandoff.readResultZ(i));
-				world.updateNeighbors(scratchPos, Blocks.REDSTONE_WIRE);
+				// Pass null Orientation: matches Yarn's old updateNeighbors(pos, block)
+				// which had no orientation parameter.  null means "no specific facing".
+				world.updateNeighborsAt(scratchPos, Blocks.REDSTONE_WIRE, null);
 			}
 		} finally {
 			ACTIVE.get()[0] = false;

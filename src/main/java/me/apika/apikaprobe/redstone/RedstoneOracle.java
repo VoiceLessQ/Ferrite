@@ -142,11 +142,11 @@ public final class RedstoneOracle {
 		Snapshot snap = SNAPSHOT.get();
 		snap.pos = pos.immutable();
 		snap.preWritePower = state.is(Blocks.REDSTONE_WIRE)
-				? state.get(RedStoneWireBlock.POWER)
+				? state.getValue(RedStoneWireBlock.POWER)
 				: -1;
 		snap.blockAdded = blockAdded;
 		snap.orientation = orientation;
-		snap.worldKey = world.getRegistryKey().getValue().toString();
+		snap.worldKey = world.dimension().identifier().toString();
 	}
 
 	public static void onWireUpdateEnd(Level world, BlockPos pos) {
@@ -197,7 +197,7 @@ public final class RedstoneOracle {
 			BlockState state = world.getBlockState(pos);
 			if (!state.is(Blocks.REDSTONE_WIRE)) continue;
 
-			int actual = state.get(RedStoneWireBlock.POWER);
+			int actual = state.getValue(RedStoneWireBlock.POWER);
 			int expected = computePowerAt(inv, world, pos);
 			NODE_CHECKS.incrementAndGet();
 			if (actual != expected) {
@@ -232,15 +232,15 @@ public final class RedstoneOracle {
 			Level world, BlockPos pos, HashSet<BlockPos> visited, ArrayDeque<BlockPos> frontier) {
 		BlockPos above = pos.above();
 		BlockState aboveState = world.getBlockState(above);
-		boolean aboveSolid = aboveState.isSolidBlock(world, above);
+		boolean aboveSolid = aboveState.isRedstoneConductor(world, above);
 
 		for (Direction dir : Direction.Plane.HORIZONTAL) {
-			BlockPos neighbor = pos.offset(dir);
+			BlockPos neighbor = pos.relative(dir);
 			BlockState neighborState = world.getBlockState(neighbor);
 
 			tryEnqueue(world, neighbor, visited, frontier);
 
-			boolean neighborSolid = neighborState.isSolidBlock(world, neighbor);
+			boolean neighborSolid = neighborState.isRedstoneConductor(world, neighbor);
 			if (neighborSolid && !aboveSolid) {
 				tryEnqueue(world, neighbor.above(), visited, frontier);
 			} else if (!neighborSolid) {
