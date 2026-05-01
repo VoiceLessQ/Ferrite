@@ -51,7 +51,7 @@ public abstract class HopperHintValidatorMixin {
 
 		int firstNonEmpty = -1;
 		for (int i = 0; i < hint; i++) {
-			if (!inventory.getStack(i).isEmpty()) { firstNonEmpty = i; break; }
+			if (!inventory.getItem(i).isEmpty()) { firstNonEmpty = i; break; }
 		}
 		HopperHintMonitor.onValidation(firstNonEmpty >= 0, pos, hint, firstNonEmpty);
 	}

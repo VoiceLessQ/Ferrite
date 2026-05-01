@@ -47,7 +47,7 @@ public class FerriteRedstoneController extends VanillaRedstoneWireEvaluator {
 	@Override
 	public void update(Level world, BlockPos pos, BlockState state, @Nullable Orientation orientation, boolean blockAdded) {
 		// Client-side, non-server, or A/B flag off — defer to vanilla.
-		if (world.isClient() || !(world instanceof ServerLevel serverWorld) || !FerriteWireConfig.ENABLED) {
+		if (world.isClientSide() || !(world instanceof ServerLevel serverWorld) || !FerriteWireConfig.ENABLED) {
 			super.update(world, pos, state, orientation, blockAdded);
 			return;
 		}
@@ -60,7 +60,7 @@ public class FerriteRedstoneController extends VanillaRedstoneWireEvaluator {
 		//   world state isn't a wire → wire was removed (state param is the dying state)
 		if (blockAdded) {
 			handler.onWireAdded(pos, state);
-		} else if (serverWorld.getBlockState(pos).isOf(Blocks.REDSTONE_WIRE)) {
+		} else if (serverWorld.getBlockState(pos).is(Blocks.REDSTONE_WIRE)) {
 			handler.onWireUpdated(pos, state, orientation);
 		} else {
 			handler.onWireRemoved(pos, state);

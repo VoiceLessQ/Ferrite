@@ -74,7 +74,7 @@ public final class CrammingDispatcher {
 	 */
 	public static boolean onTickCramming(LivingEntity caller) {
 		if (!ENABLED || !RustBridge.NATIVE_AVAILABLE) return false;
-		if (!(caller.getEntityWorld() instanceof ServerLevel world)) return false;
+		if (!(caller.level() instanceof ServerLevel world)) return false;
 
 		long tick = world.getTime();
 		if (tick == lastProcessedTick) {
@@ -94,7 +94,7 @@ public final class CrammingDispatcher {
 	private static void runBatch(ServerLevel world) {
 		// 1. Collect all eligible mobs in this world.
 		MOB_SCRATCH.clear();
-		for (Entity e : world.iterateEntities()) {
+		for (Entity e : world.getAllEntities()) {
 			if (e instanceof Mob && e.isAlive() && !e.isRemoved()) {
 				MOB_SCRATCH.add((LivingEntity) e);
 			}

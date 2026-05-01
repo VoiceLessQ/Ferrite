@@ -15,7 +15,7 @@ public abstract class RecordingNameMixin {
 	@Inject(method = "getDisplayName", at = @At("RETURN"), cancellable = true)
 	private void apikaprobe$hideLocalPlayerName(CallbackInfoReturnable<Component> cir) {
 		Player self = (Player) (Object) this;
-		if (!self.getEntityWorld().isClient()) return;
+		if (!self.level().isClientSide()) return;
 		if (Minecraft.getInstance().player != self) return;
 		cir.setReturnValue(Component.empty());
 	}

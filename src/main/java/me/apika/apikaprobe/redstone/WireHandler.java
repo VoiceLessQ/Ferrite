@@ -153,7 +153,7 @@ public class WireHandler {
 	 * anything else.
 	 */
 	private Node getNextNode(BlockPos pos, BlockState state) {
-		return state.isOf(Blocks.REDSTONE_WIRE)
+		return state.is(Blocks.REDSTONE_WIRE)
 				? new WireNode(world, pos, state)
 				: getNextNode().set(pos, state, true);
 	}
@@ -198,7 +198,7 @@ public class WireHandler {
 		BlockState state = world.getBlockState(pos);
 
 		boolean wasWire = node.isWire();
-		boolean isWire = state.isOf(Blocks.REDSTONE_WIRE);
+		boolean isWire = state.is(Blocks.REDSTONE_WIRE);
 
 		if (wasWire != isWire) {
 			return getNextNode(pos, state);
@@ -790,7 +790,7 @@ public class WireHandler {
 				// findPowerFlow/transmitPower work if the snapshot is
 				// stale. Mirrors vanilla ExperimentalRedstoneWireEvaluator
 				// line 46-56's iterator.remove() pattern.
-				if (!wire.removed && !world.getBlockState(wire.pos).isOf(Blocks.REDSTONE_WIRE)) {
+				if (!wire.removed && !world.getBlockState(wire.pos).is(Blocks.REDSTONE_WIRE)) {
 					continue;
 				}
 
@@ -874,7 +874,7 @@ public class WireHandler {
 	}
 
 	private void updateShape(Node node, Direction dir, BlockPos neighborPos, BlockState neighborState) {
-		neighborUpdater.replaceWithStateForNeighborUpdate(dir, neighborState, node.pos, neighborPos, Block.NOTIFY_LISTENERS, 512);
+		neighborUpdater.replaceWithStateForNeighborUpdate(dir, neighborState, node.pos, neighborPos, Block.UPDATE_CLIENTS, 512);
 	}
 
 	/** Queue block updates to nodes around the given wire. */

@@ -68,11 +68,11 @@ public final class PreChunkDispatcher {
 				new TicketType(80L, TicketType.FOR_LOADING));
 		ServerTickEvents.END_SERVER_TICK.register(PreChunkDispatcher::onTick);
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
-				LAST_POS.remove(handler.getPlayer().getUuid()));
+				LAST_POS.remove(handler.getPlayer().getUUID()));
 	}
 
 	static int currentViewDistance(MinecraftServer server) {
-		return server.getPlayerManager().getViewDistance();
+		return server.getPlayerList().getViewDistance();
 	}
 
 	private static void onTick(MinecraftServer server) {
@@ -83,7 +83,7 @@ public final class PreChunkDispatcher {
 		double targetBlocks = (viewDistance + VIEW_DISTANCE_MARGIN) * 16.0;
 		PreChunkMonitor.recordViewDistance(viewDistance);
 
-		for (ServerLevel world : server.getWorlds()) {
+		for (ServerLevel world : server.getAllLevels()) {
 			for (ServerPlayer player : world.getPlayers()) {
 				if (budget <= 0) return;
 				ChunkPos target = predict(player, targetBlocks);
@@ -113,7 +113,7 @@ public final class PreChunkDispatcher {
 	}
 
 	private static ChunkPos predict(ServerPlayer player, double targetBlocks) {
-		UUID id = player.getUuid();
+		UUID id = player.getUUID();
 		double cx = player.getX();
 		double cz = player.getZ();
 		double[] last = LAST_POS.put(id, new double[]{cx, cz});
@@ -133,7 +133,7 @@ public final class PreChunkDispatcher {
 
 	private static void submit(ServerLevel world, ChunkPos pos, long submitTick) {
 		PreChunkMonitor.onSubmit();
-		world.getChunkManager()
+		world.getChunkSource()
 				.addChunkLoadingTicket(ticketType, pos, RADIUS)
 				.thenAccept(ignored -> {
 					long leadTicks = world.getServer().getTicks() - submitTick;

@@ -136,12 +136,12 @@ public final class RedstoneOracle {
 	public static void onWireUpdateBegin(
 			Level world, BlockPos pos, BlockState state,
 			Orientation orientation, boolean blockAdded) {
-		if (!ENABLED || world.isClient()) return;
+		if (!ENABLED || world.isClientSide()) return;
 		int[] depth = DEPTH.get();
 		if (depth[0]++ != 0) return;
 		Snapshot snap = SNAPSHOT.get();
-		snap.pos = pos.toImmutable();
-		snap.preWritePower = state.isOf(Blocks.REDSTONE_WIRE)
+		snap.pos = pos.immutable();
+		snap.preWritePower = state.is(Blocks.REDSTONE_WIRE)
 				? state.get(RedStoneWireBlock.POWER)
 				: -1;
 		snap.blockAdded = blockAdded;
@@ -150,7 +150,7 @@ public final class RedstoneOracle {
 	}
 
 	public static void onWireUpdateEnd(Level world, BlockPos pos) {
-		if (!ENABLED || world.isClient()) return;
+		if (!ENABLED || world.isClientSide()) return;
 		int[] depth = DEPTH.get();
 		if (--depth[0] != 0) {
 			if (depth[0] < 0) depth[0] = 0;
@@ -195,7 +195,7 @@ public final class RedstoneOracle {
 			visitedCount++;
 
 			BlockState state = world.getBlockState(pos);
-			if (!state.isOf(Blocks.REDSTONE_WIRE)) continue;
+			if (!state.is(Blocks.REDSTONE_WIRE)) continue;
 
 			int actual = state.get(RedStoneWireBlock.POWER);
 			int expected = computePowerAt(inv, world, pos);
@@ -230,7 +230,7 @@ public final class RedstoneOracle {
 	 */
 	private static void enqueueConnectedWireNeighbors(
 			Level world, BlockPos pos, HashSet<BlockPos> visited, ArrayDeque<BlockPos> frontier) {
-		BlockPos above = pos.up();
+		BlockPos above = pos.above();
 		BlockState aboveState = world.getBlockState(above);
 		boolean aboveSolid = aboveState.isSolidBlock(world, above);
 
@@ -242,9 +242,9 @@ public final class RedstoneOracle {
 
 			boolean neighborSolid = neighborState.isSolidBlock(world, neighbor);
 			if (neighborSolid && !aboveSolid) {
-				tryEnqueue(world, neighbor.up(), visited, frontier);
+				tryEnqueue(world, neighbor.above(), visited, frontier);
 			} else if (!neighborSolid) {
-				tryEnqueue(world, neighbor.down(), visited, frontier);
+				tryEnqueue(world, neighbor.below(), visited, frontier);
 			}
 		}
 	}
@@ -252,8 +252,8 @@ public final class RedstoneOracle {
 	private static void tryEnqueue(
 			Level world, BlockPos pos, HashSet<BlockPos> visited, ArrayDeque<BlockPos> frontier) {
 		if (visited.contains(pos)) return;
-		if (!world.getBlockState(pos).isOf(Blocks.REDSTONE_WIRE)) return;
-		BlockPos im = pos.toImmutable();
+		if (!world.getBlockState(pos).is(Blocks.REDSTONE_WIRE)) return;
+		BlockPos im = pos.immutable();
 		visited.add(im);
 		frontier.add(im);
 	}

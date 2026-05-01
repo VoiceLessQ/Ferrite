@@ -31,7 +31,7 @@ public abstract class HopperPerSlotFireMixin {
 	) {
 		if (!PerSlotFireConfig.ENABLE) return;
 
-		if (world.isClient()) {
+		if (world.isClientSide()) {
 			cir.setReturnValue(false);
 			return;
 		}
@@ -100,7 +100,7 @@ public abstract class HopperPerSlotFireMixin {
 		int total = 0;
 		int n = be.size();
 		for (int i = 0; i < n; i++) {
-			total += be.getStack(i).getCount();
+			total += be.getItem(i).getCount();
 		}
 		return total;
 	}
@@ -108,7 +108,7 @@ public abstract class HopperPerSlotFireMixin {
 	private static boolean ferrite$isFull(HopperBlockEntity be) {
 		int n = be.size();
 		for (int i = 0; i < n; i++) {
-			net.minecraft.world.item.ItemStack s = be.getStack(i);
+			net.minecraft.world.item.ItemStack s = be.getItem(i);
 			if (s.isEmpty() || s.getCount() != s.getMaxCount()) return false;
 		}
 		return true;

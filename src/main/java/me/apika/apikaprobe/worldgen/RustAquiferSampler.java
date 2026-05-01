@@ -191,9 +191,9 @@ public final class RustAquiferSampler implements Aquifer {
         boolean rustTick = (packed & 0x100) != 0;
         BlockState rustResult = switch (kind) {
             case 0 -> null; // RESULT_NONE — no aquifer override.
-            case 1 -> Blocks.AIR.getDefaultState();
-            case 2 -> Blocks.WATER.getDefaultState();
-            case 3 -> Blocks.LAVA.getDefaultState();
+            case 1 -> Blocks.AIR.defaultBlockState();
+            case 2 -> Blocks.WATER.defaultBlockState();
+            case 3 -> Blocks.LAVA.defaultBlockState();
             default -> null;
         };
 

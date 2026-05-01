@@ -8,12 +8,12 @@
  *   net.minecraft.world.level.chunk.ChunkAccess  -> net.minecraft.world.level.chunk.ChunkAccess
  *   net.minecraft.world.level.chunk.LevelChunkSection -> net.minecraft.world.level.chunk.LevelChunkSection
  *   net.minecraft.world.level.chunk.status.ChunkStatus -> net.minecraft.world.level.chunk.ChunkStatus
- *   level.getChunkSource().blockChanged(pos)     -> world.getChunkManager().markForUpdate(pos)
+ *   level.getChunkSource().blockChanged(pos)     -> world.getChunkSource().markForUpdate(pos)
  *   chunk.markUnsaved()                          -> chunk.markNeedsSaving()
  *   chunk.getSections()                          -> chunk.getSectionArray()
  *   prevState.updateIndirectNeighbourShapes      -> prevState.prepare
  *   state.updateNeighbourShapes                  -> state.updateNeighbors
- *   Block.UPDATE_CLIENTS                         -> Block.NOTIFY_LISTENERS
+ *   Block.UPDATE_CLIENTS                         -> Block.UPDATE_CLIENTS
  *   level.getMinY()                              -> world.getBottomY()
  *   level.getMaxY()                              -> world.getTopYInclusive()
  */
@@ -75,14 +75,14 @@ final class LevelHelper {
 		}
 
 		// Notify clients of the block-state change.
-		world.getChunkManager().markForUpdate(pos);
+		world.getChunkSource().markForUpdate(pos);
 		// Mark the chunk for saving.
 		chunk.markNeedsSaving();
 
 		if (updateNeighborShapes) {
-			prevState.prepare(world, pos, Block.NOTIFY_LISTENERS);
-			state.updateNeighbors(world, pos, Block.NOTIFY_LISTENERS);
-			state.prepare(world, pos, Block.NOTIFY_LISTENERS);
+			prevState.prepare(world, pos, Block.UPDATE_CLIENTS);
+			state.updateNeighbors(world, pos, Block.UPDATE_CLIENTS);
+			state.prepare(world, pos, Block.UPDATE_CLIENTS);
 		}
 
 		return true;

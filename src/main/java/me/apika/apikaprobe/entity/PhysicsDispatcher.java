@@ -104,7 +104,7 @@ public final class PhysicsDispatcher {
 
 		// Partition all Mob in this world into 16x16 chunk-column buckets.
 		int mobCount = 0;
-		for (Entity e : world.iterateEntities()) {
+		for (Entity e : world.getAllEntities()) {
 			if (!(e instanceof Mob)) continue;
 			long key = chunkKey(e);
 			List<Entity> bucket = BUCKETS.get(key);

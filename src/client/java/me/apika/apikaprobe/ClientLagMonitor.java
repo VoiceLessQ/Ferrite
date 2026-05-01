@@ -21,7 +21,7 @@ import net.minecraft.client.world.ClientLevel;
  *   avg <  30  →  LAG
  *
  * Entity count via ClientLevel.getRegularEntityCount() (method_18120).
- * ChunkAccess count via Level.getChunkManager().getLoadedChunkCount()
+ * ChunkAccess count via Level.getChunkSource().getLoadedChunkCount()
  * (inherited from ChunkManager, method_14151).
  * FPS via Minecraft.getCurrentFps() (method_47599) — same number
  * the F3 overlay displays.
@@ -61,7 +61,7 @@ public final class ClientLagMonitor {
 		if (fps > fpsMax) fpsMax = fps;
 
 		lastEntities = world.getRegularEntityCount();
-		lastChunks = world.getChunkManager().getLoadedChunkCount();
+		lastChunks = world.getChunkSource().getLoadedChunkCount();
 
 		long now = System.nanoTime();
 		if (now - lastReportNs >= REPORT_INTERVAL_NS && sampleCount > 0) {

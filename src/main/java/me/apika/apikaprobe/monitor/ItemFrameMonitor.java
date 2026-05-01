@@ -38,8 +38,8 @@ public final class ItemFrameMonitor {
 			lastReportNs = now;
 
 			int total = 0;
-			for (ServerLevel world : server.getWorlds()) {
-				for (Entity e : world.iterateEntities()) {
+			for (ServerLevel world : server.getAllLevels()) {
+				for (Entity e : world.getAllEntities()) {
 					if (e instanceof ItemFrame) {
 						total++;
 					}

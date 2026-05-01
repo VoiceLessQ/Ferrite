@@ -390,7 +390,7 @@ public final class WorldgenStateBootstrap {
 	 */
 	private static int registerBiomes(ServerLevel world) {
 		try {
-			Object chunkManager = world.getChunkManager();
+			Object chunkManager = world.getChunkSource();
 			Method getChunkGenerator = findMethod(chunkManager.getClass(), "getChunkGenerator");
 			if (getChunkGenerator == null) {
 				ExampleMod.LOGGER.warn("[worldgen-init] no getChunkGenerator() on {}", chunkManager.getClass().getName());
@@ -550,7 +550,7 @@ public final class WorldgenStateBootstrap {
 	 */
 	private static int registerDensityFunctions(net.minecraft.server.MinecraftServer server) {
 		try {
-			Object manager = server.getRegistryManager();
+			Object manager = server.registryAccess();
 			// Find the DENSITY_FUNCTION registry key.
 			Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.Registries");
 			Object dfRegistryKey;
@@ -773,7 +773,7 @@ public final class WorldgenStateBootstrap {
 	 */
 	@SuppressWarnings("rawtypes")
 	private static Registry resolveNoiseRegistry(net.minecraft.server.MinecraftServer server) {
-		Object manager = server.getRegistryManager();
+		Object manager = server.registryAccess();
 		Object key = Registries.NOISE_PARAMETERS;
 		String[] candidates = {"getOrThrow", "get", "getRegistry"};
 		for (String methodName : candidates) {

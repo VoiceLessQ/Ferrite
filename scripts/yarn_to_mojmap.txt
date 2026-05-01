@@ -185,6 +185,7 @@ Text|Component
 Inventory|Container
 Chunk|ChunkAccess
 CodecHolder|KeyDispatchDataCodec
+NOTIFY_LISTENERS|UPDATE_CLIENTS
 # Inner-class bare references that the [PACKAGES] qualified rules don't catch.
 # `Visitor visitor` won't resolve as a top-level class - rewrite to qualified form.
 DensityFunctionVisitor|DensityFunction.Visitor
@@ -212,3 +213,29 @@ net.minecraft.core.registries.ResourceKey|net.minecraft.resources.ResourceKey
 # WorldGenRegion (Yarn ChunkRegion): ends up at ...world.level.WorldGenRegion,
 # but mojmap puts it at ...server.level.WorldGenRegion.
 net.minecraft.world.level.WorldGenRegion|net.minecraft.server.level.WorldGenRegion
+
+# === Phase B method renames (receiver-unambiguous) ===
+# Pattern `.OLD(` matches method-call sites only.  Each entry is safe because:
+#   - the Yarn method name doesn't collide with any common Java/library method;
+#   - the mojmap method name is correct on the same receiver;
+#   - or, in Ferrite's source, the only callers are MC types.
+# Method names that DO collide (.size, .up, .down, .get, .is, .with, .getBlockPos)
+# are NOT here - they need per-file edits.
+# IMPORTANT: dots are escaped (\.) so sed treats them as literal `.`, not
+# regex any-char.  Without escaping, `.up()` would match `Setup()` as
+# `Set` + `.up()` (with `.` matching `t`), corrupting unrelated identifiers.
+\.isClient()|.isClientSide()
+\.toImmutable()|.immutable()
+\.getDefaultState()|.defaultBlockState()
+\.getChunkManager()|.getChunkSource()
+\.getWorlds()|.getAllLevels()
+\.getPlayerManager()|.getPlayerList()
+\.getRegistryManager()|.registryAccess()
+\.iterateEntities()|.getAllEntities()
+\.isOf(|.is(
+\.getStack(|.getItem(
+\.getEntityWorld()|.level()
+\.up()|.above()
+\.down()|.below()
+\.getUuid()|.getUUID()
+\.hasVehicle()|.isPassenger()

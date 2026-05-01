@@ -601,7 +601,7 @@ public final class DensityParity {
 
 	private static Object resolveDfRegistry(MinecraftServer server) {
 		try {
-			Object manager = server.getRegistryManager();
+			Object manager = server.registryAccess();
 			Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.Registries");
 			Object dfKey = registryKeysClass.getField("DENSITY_FUNCTION").get(null);
 			for (String n : new String[]{"getOrThrow", "get", "getRegistry"}) {

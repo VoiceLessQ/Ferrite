@@ -28,7 +28,7 @@ import net.minecraft.world.level.redstone.Orientation;
  *
  * Client-side filter: the method accepts `Level` (not `ServerLevel`), so
  * it could theoretically run on the integrated client. We gate on
- * `!world.isClient()` to keep metrics server-side only.
+ * `!world.isClientSide()` to keep metrics server-side only.
  */
 @Mixin(RedStoneWireBlock.class)
 public abstract class RedstoneWireMixin {
@@ -40,7 +40,7 @@ public abstract class RedstoneWireMixin {
 	private void apikaprobe$onWireUpdateBegin(
 			Level world, BlockPos pos, BlockState state, Orientation orientation, boolean blockAdded,
 			CallbackInfo ci) {
-		if (world.isClient()) return;
+		if (world.isClientSide()) return;
 		RedstonePhaseMonitor.onWireBegin();
 	}
 
@@ -51,7 +51,7 @@ public abstract class RedstoneWireMixin {
 	private void apikaprobe$onWireUpdateEnd(
 			Level world, BlockPos pos, BlockState state, Orientation orientation, boolean blockAdded,
 			CallbackInfo ci) {
-		if (world.isClient()) return;
+		if (world.isClientSide()) return;
 		RedstonePhaseMonitor.onWireEnd();
 	}
 }

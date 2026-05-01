@@ -21,7 +21,7 @@ public abstract class WorldTickMixin {
 
 	@Inject(method = "tickBlockEntities", at = @At("HEAD"))
 	private void ferrite$onBlockEntitiesBegin(CallbackInfo ci) {
-		if (((Level) (Object) this).isClient()) {
+		if (((Level) (Object) this).isClientSide()) {
 			return;
 		}
 		WorldTickMonitor.onBlockEntitiesBegin();
@@ -29,7 +29,7 @@ public abstract class WorldTickMixin {
 
 	@Inject(method = "tickBlockEntities", at = @At("RETURN"))
 	private void ferrite$onBlockEntitiesEnd(CallbackInfo ci) {
-		if (((Level) (Object) this).isClient()) {
+		if (((Level) (Object) this).isClientSide()) {
 			return;
 		}
 		WorldTickMonitor.onBlockEntitiesEnd();

@@ -78,7 +78,7 @@ public class Node {
 	 * this to throw).
 	 */
 	Node set(BlockPos pos, BlockState state, boolean clearNeighbors) {
-		if (state.isOf(Blocks.REDSTONE_WIRE)) {
+		if (state.is(Blocks.REDSTONE_WIRE)) {
 			throw new IllegalStateException("Cannot update a regular Node to a WireNode!");
 		}
 
@@ -86,7 +86,7 @@ public class Node {
 			Arrays.fill(neighbors, null);
 		}
 
-		this.pos = pos.toImmutable();
+		this.pos = pos.immutable();
 		this.state = state;
 		this.invalid = false;
 		this.flags = 0;

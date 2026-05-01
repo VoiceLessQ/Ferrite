@@ -34,7 +34,7 @@ public abstract class LootableContainerExtractHintMixin implements Container, Ex
 		int n = this.size();
 		int next = n;
 		for (int i = from; i < n; i++) {
-			if (!this.getStack(i).isEmpty()) { next = i; break; }
+			if (!this.getItem(i).isEmpty()) { next = i; break; }
 		}
 		this.ferrite$extractHint = next;
 	}
@@ -48,14 +48,14 @@ public abstract class LootableContainerExtractHintMixin implements Container, Ex
 
 	@Inject(method = "removeStack(II)Lnet.minecraft.world.item.ItemStack;", at = @At("RETURN"))
 	private void ferrite$onRemoveStackAmount(int slot, int amount, CallbackInfoReturnable<ItemStack> cir) {
-		if (slot == this.ferrite$extractHint && this.getStack(slot).isEmpty()) {
+		if (slot == this.ferrite$extractHint && this.getItem(slot).isEmpty()) {
 			this.ferrite$advanceHintFrom(slot + 1);
 		}
 	}
 
 	@Inject(method = "removeStack(I)Lnet.minecraft.world.item.ItemStack;", at = @At("RETURN"))
 	private void ferrite$onRemoveStackAll(int slot, CallbackInfoReturnable<ItemStack> cir) {
-		if (slot == this.ferrite$extractHint && this.getStack(slot).isEmpty()) {
+		if (slot == this.ferrite$extractHint && this.getItem(slot).isEmpty()) {
 			this.ferrite$advanceHintFrom(slot + 1);
 		}
 	}

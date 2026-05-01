@@ -70,7 +70,7 @@ public final class CrammingHandoff {
 			byte flags = 0;
 			if (e.isPushable())    flags |= FLAG_PUSHABLE;
 			if (e.hasPassengers()) flags |= FLAG_VEHICLE;
-			if (e.hasVehicle())    flags |= FLAG_PASSENGER;
+			if (e.isPassenger())    flags |= FLAG_PASSENGER;
 			if (e.noClip)          flags |= FLAG_NO_PHYSICS;
 
 			float halfWidth = (float) ((aabb.maxX - aabb.minX) * 0.5);
@@ -80,7 +80,7 @@ public final class CrammingHandoff {
 			// "not riding anything," so two -1s never compare equal in Rust
 			// (sentinel-equal pairs are explicitly skipped on Rust side).
 			int rootVehicleId = -1;
-			if (e.hasVehicle()) {
+			if (e.isPassenger()) {
 				net.minecraft.world.entity.Entity root = e.getRootVehicle();
 				if (root != null) rootVehicleId = root.getId();
 			}

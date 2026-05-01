@@ -33,8 +33,8 @@ public final class ChunkForceTrigger {
 	private static void onTick(net.minecraft.server.MinecraftServer server) {
 		if (!ChunkForcer.ENABLED) return;
 		int budget = SCHEDULE_BUDGET_PER_TICK;
-		for (ServerLevel world : server.getWorlds()) {
-			int viewDistance = server.getPlayerManager().getViewDistance();
+		for (ServerLevel world : server.getAllLevels()) {
+			int viewDistance = server.getPlayerList().getViewDistance();
 			int radius = viewDistance + LOOK_AHEAD;
 			for (ServerPlayer player : world.getPlayers()) {
 				int pcx = player.getBlockPos().getX() >> 4;

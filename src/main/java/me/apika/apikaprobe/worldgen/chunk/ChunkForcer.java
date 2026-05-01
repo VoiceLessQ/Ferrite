@@ -68,7 +68,7 @@ public final class ChunkForcer {
 		scheduled.incrementAndGet();
 		ChunkPos pos = new ChunkPos(cx, cz);
 		try {
-			world.getChunkManager()
+			world.getChunkSource()
 					.addChunkLoadingTicket(ticketType, pos, 0)
 					.whenComplete((res, err) -> {
 						inflight.remove(key);

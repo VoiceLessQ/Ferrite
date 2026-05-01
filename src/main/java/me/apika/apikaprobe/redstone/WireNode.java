@@ -8,10 +8,10 @@
  *   net.minecraft.util.Mth               -> net.minecraft.util.Mth
  *   net.minecraft.world.level.block.*    -> net.minecraft.world.level.block.*
  *   RedStoneWireBlock                    -> RedStoneWireBlock
- *   state.is(Blocks.X)                   -> state.isOf(Blocks.X)
+ *   state.is(Blocks.X)                   -> state.is(Blocks.X)
  *   state.getValue / setValue            -> state.get / with
  *   Redstone.SIGNAL_MIN / MAX            -> WireConstants.SIGNAL_MIN / MAX (inlined 0 / 15)
- *   Block.UPDATE_CLIENTS                 -> Block.NOTIFY_LISTENERS
+ *   Block.UPDATE_CLIENTS                 -> Block.UPDATE_CLIENTS
  *   Block.dropResources                  -> Block.dropStacks
  *   level.setBlock                       -> world.setBlockState
  */
@@ -85,7 +85,7 @@ public class WireNode extends Node {
 	WireNode(ServerLevel world, BlockPos pos, BlockState state) {
 		super(world);
 
-		this.pos = pos.toImmutable();
+		this.pos = pos.immutable();
 		this.state = state;
 
 		this.connections = new WireConnectionManager(this);
@@ -152,13 +152,13 @@ public class WireNode extends Node {
 
 		state = world.getBlockState(pos);
 
-		if (!state.isOf(Blocks.REDSTONE_WIRE)) {
+		if (!state.is(Blocks.REDSTONE_WIRE)) {
 			return false; // should never get here
 		}
 
 		if (shouldBreak) {
 			Block.dropStacks(state, world, pos);
-			world.setBlockState(pos, Blocks.AIR.getDefaultState(), Block.NOTIFY_LISTENERS);
+			world.setBlockState(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
 			return true;
 		}
 

@@ -164,9 +164,9 @@ public final class RedstoneRustDispatcher {
 	 * node count, or -1 on overflow.
 	 */
 	private static int discover(ServerLevel world, BlockPos startPos, ScratchBuffers s) {
-		if (!world.getBlockState(startPos).isOf(Blocks.REDSTONE_WIRE)) return 0;
+		if (!world.getBlockState(startPos).is(Blocks.REDSTONE_WIRE)) return 0;
 
-		BlockPos startImm = startPos.toImmutable();
+		BlockPos startImm = startPos.immutable();
 		s.indexByPos.put(startImm, 0);
 		s.posByIndex[0] = startImm;
 		s.frontier.add(startImm);
@@ -174,7 +174,7 @@ public final class RedstoneRustDispatcher {
 		int count = 1;
 		while (!s.frontier.isEmpty()) {
 			BlockPos pos = s.frontier.poll();
-			BlockPos above = pos.up();
+			BlockPos above = pos.above();
 			BlockState aboveState = world.getBlockState(above);
 			boolean aboveSolid = aboveState.isSolidBlock(world, above);
 
@@ -188,11 +188,11 @@ public final class RedstoneRustDispatcher {
 
 				boolean neighborSolid = neighborState.isSolidBlock(world, neighbor);
 				if (neighborSolid && !aboveSolid) {
-					c = tryAdd(world, neighbor.up(), s, count);
+					c = tryAdd(world, neighbor.above(), s, count);
 					if (c < 0) return -1;
 					count = c;
 				} else if (!neighborSolid) {
-					c = tryAdd(world, neighbor.down(), s, count);
+					c = tryAdd(world, neighbor.below(), s, count);
 					if (c < 0) return -1;
 					count = c;
 				}
@@ -207,7 +207,7 @@ public final class RedstoneRustDispatcher {
 	 */
 	private static int tryAdd(ServerLevel world, BlockPos pos, ScratchBuffers s, int count) {
 		if (s.indexByPos.containsKey(pos)) return count;
-		if (!world.getBlockState(pos).isOf(Blocks.REDSTONE_WIRE)) return count;
+		if (!world.getBlockState(pos).is(Blocks.REDSTONE_WIRE)) return count;
 		if (count >= RedstoneHandoff.MAX_NODES) {
 			maybeLogOverflow();
 			return -1;
@@ -255,7 +255,7 @@ public final class RedstoneRustDispatcher {
 	 */
 	private static void resolveNeighbors(
 			ServerLevel world, BlockPos pos, ScratchBuffers s, int[] out) {
-		BlockPos above = pos.up();
+		BlockPos above = pos.above();
 		boolean aboveSolid = world.getBlockState(above).isSolidBlock(world, above);
 		int slot = 0;
 
@@ -267,9 +267,9 @@ public final class RedstoneRustDispatcher {
 
 			boolean neighborSolid = neighborState.isSolidBlock(world, neighbor);
 			if (neighborSolid && !aboveSolid) {
-				slot = recordIfKnown(s, neighbor.up(), out, slot);
+				slot = recordIfKnown(s, neighbor.above(), out, slot);
 			} else if (!neighborSolid) {
-				slot = recordIfKnown(s, neighbor.down(), out, slot);
+				slot = recordIfKnown(s, neighbor.below(), out, slot);
 			}
 		}
 	}
@@ -304,11 +304,11 @@ public final class RedstoneRustDispatcher {
 						RedstoneHandoff.readResultZ(i));
 				int newPower = RedstoneHandoff.readResultNewPower(i);
 				BlockState state = world.getBlockState(scratchPos);
-				if (!state.isOf(Blocks.REDSTONE_WIRE)) continue;
+				if (!state.is(Blocks.REDSTONE_WIRE)) continue;
 				world.setBlockState(
 						scratchPos,
 						state.with(RedStoneWireBlock.POWER, newPower),
-						Block.NOTIFY_LISTENERS);
+						Block.UPDATE_CLIENTS);
 			}
 			for (int i = 0; i < deltaCount; i++) {
 				scratchPos.set(

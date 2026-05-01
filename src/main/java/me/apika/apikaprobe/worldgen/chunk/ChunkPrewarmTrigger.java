@@ -37,8 +37,8 @@ public final class ChunkPrewarmTrigger {
 		if (!ChunkPrewarmer.ENABLED) return;
 		ChunkPrewarmer.start(); // idempotent
 		int budget = SCHEDULE_BUDGET_PER_TICK;
-		for (ServerLevel world : server.getWorlds()) {
-			int viewDistance = world.getServer().getPlayerManager().getViewDistance();
+		for (ServerLevel world : server.getAllLevels()) {
+			int viewDistance = world.getServer().getPlayerList().getViewDistance();
 			int radius = viewDistance + LOOK_AHEAD;
 			for (ServerPlayer player : world.getPlayers()) {
 				int pcx = player.getBlockPos().getX() >> 4;

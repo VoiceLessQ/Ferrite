@@ -61,7 +61,7 @@ public abstract class RedstoneRustMixin {
 	private void apikaprobe$redirectControllerUpdate(
 			RedstoneWireEvaluator controller,
 			Level world, BlockPos pos, BlockState state, Orientation orientation, boolean blockAdded) {
-		if (!RedstoneHandoff.USE_RUST || world.isClient() || RedstoneRustDispatcher.isActive()) {
+		if (!RedstoneHandoff.USE_RUST || world.isClientSide() || RedstoneRustDispatcher.isActive()) {
 			controller.update(world, pos, state, orientation, blockAdded);
 			return;
 		}

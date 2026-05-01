@@ -29,7 +29,7 @@ public abstract class ExperimentalRedstoneControllerMixin {
 	private void apikaprobe$onExperimentalControllerUpdate(
 			Level world, BlockPos pos, BlockState state, Orientation orientation, boolean blockAdded,
 			CallbackInfo ci) {
-		if (world.isClient()) return;
+		if (world.isClientSide()) return;
 		RedstonePhaseMonitor.onExperimentalController();
 	}
 }
