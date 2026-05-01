@@ -92,10 +92,10 @@ public class Node {
 		this.flags = 0;
 
 		// isSolidBlock in yarn == isRedstoneConductor in Mojmap.
-		if (this.state.isSolidBlock(this.world, this.pos)) {
+		if (this.state.isRedstoneConductor(this.world, this.pos)) {
 			this.flags |= CONDUCTOR;
 		}
-		if (this.state.emitsRedstonePower()) {
+		if (this.state.isSignalSource()) {
 			this.flags |= SOURCE;
 		}
 

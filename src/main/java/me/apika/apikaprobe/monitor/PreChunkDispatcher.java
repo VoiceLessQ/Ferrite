@@ -136,7 +136,7 @@ public final class PreChunkDispatcher {
 		world.getChunkSource()
 				.addTicketAndLoadWithRadius(ticketType, pos, RADIUS)
 				.thenAccept(ignored -> {
-					long leadTicks = world.getServer().getTicks() - submitTick;
+					long leadTicks = world.getServer().getTickCount() - submitTick;
 					PreChunkMonitor.onLoaded(leadTicks);
 				});
 	}
