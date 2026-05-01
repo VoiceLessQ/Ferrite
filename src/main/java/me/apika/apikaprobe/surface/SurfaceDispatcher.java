@@ -240,22 +240,22 @@ public final class SurfaceDispatcher {
 		// Lazy heightmap init: replicates ProtoChunk.setBlockState's
 		// missing-types check. By SURFACE phase the NOISE-phase writes
 		// have populated both, so this is normally a no-op (2 cheap
-		// hasHeightmap calls). Required for safety when the first surface
-		// write would have triggered creation in vanilla.
+		// hasPrimedHeightmap calls). Required for safety when the first
+		// surface write would have triggered creation in vanilla.
 		java.util.EnumSet<net.minecraft.world.level.levelgen.Heightmap.Types> missingTypes = null;
-		if (!c.hasHeightmap(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG)) {
+		if (!c.hasPrimedHeightmap(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG)) {
 			missingTypes = java.util.EnumSet.of(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG);
 		}
-		if (!c.hasHeightmap(net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG)) {
+		if (!c.hasPrimedHeightmap(net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG)) {
 			if (missingTypes == null) missingTypes = java.util.EnumSet.noneOf(net.minecraft.world.level.levelgen.Heightmap.Types.class);
 			missingTypes.add(net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG);
 		}
-		if (missingTypes != null) net.minecraft.world.level.levelgen.Heightmap.populateHeightmaps(c, missingTypes);
+		if (missingTypes != null) net.minecraft.world.level.levelgen.Heightmap.primeHeightmaps(c, missingTypes);
 
-		net.minecraft.world.level.levelgen.Heightmap hmWS = c.getHeightmap(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG);
-		net.minecraft.world.level.levelgen.Heightmap hmOF = c.getHeightmap(net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG);
+		net.minecraft.world.level.levelgen.Heightmap hmWS = c.getOrCreateHeightmapUnprimed(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG);
+		net.minecraft.world.level.levelgen.Heightmap hmOF = c.getOrCreateHeightmapUnprimed(net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG);
 
-		net.minecraft.world.level.chunk.LevelChunkSection[] sections = c.getSectionArray();
+		net.minecraft.world.level.chunk.LevelChunkSection[] sections = c.getSections();
 
 		// Per-column reduction: highest Y written and the state at that Y.
 		// Index = (localX << 4) | localZ; 256 columns max.
@@ -269,7 +269,7 @@ public final class SurfaceDispatcher {
 			if (!(result instanceof BlockState bs)) continue;
 
 			int wx = st.xs[i], wy = st.ys[i], wz = st.zs[i];
-			if (c.isOutOfHeightLimit(wy)) continue; // matches vanilla's early return
+			if (c.isOutsideBuildHeight(wy)) continue; // matches vanilla's early return
 
 			net.minecraft.world.level.chunk.LevelChunkSection section = sections[c.getSectionIndex(wy)];
 			int localX = wx & 15;
@@ -295,8 +295,8 @@ public final class SurfaceDispatcher {
 			int localX = (colIdx >> 4) & 15;
 			int localZ = colIdx & 15;
 			BlockState topState = colState[colIdx];
-			hmWS.trackUpdate(localX, highestY, localZ, topState);
-			hmOF.trackUpdate(localX, highestY, localZ, topState);
+			hmWS.update(localX, highestY, localZ, topState);
+			hmOF.update(localX, highestY, localZ, topState);
 		}
 
 		if (validating) {

@@ -70,12 +70,19 @@ public final class SurfaceHeightmapValidator {
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 
 	/** Defensively clone the heightmap's packed long-storage array.
-	 *  {@link Heightmap#asLongArray()} returns the live storage and a
+	 *  {@link Heightmap#getRawData()} returns the live storage and a
 	 *  snapshot must survive across mutations. */
 	public static long[] snapshot(ChunkAccess chunk, Heightmap.Types type) {
-		Heightmap hm = chunk.getHeightmap(type);
+		Heightmap hm = primedOrNull(chunk, type);
 		if (hm == null) return null;
-		return hm.asLongArray().clone();
+		return hm.getRawData().clone();
+	}
+
+	/** Mojmap dropped Yarn's `getHeightmap(Types)` (which returned null when
+	 *  unprimed).  Preserve that semantic via the explicit primed check so we
+	 *  don't trigger heightmap construction from a diagnostic path. */
+	private static Heightmap primedOrNull(ChunkAccess chunk, Heightmap.Types type) {
+		return chunk.hasPrimedHeightmap(type) ? chunk.getOrCreateHeightmapUnprimed(type) : null;
 	}
 
 	/**
@@ -94,8 +101,8 @@ public final class SurfaceHeightmapValidator {
 	public static void validate(ChunkAccess chunk, int[] xs, int[] ys, int[] zs,
 			BlockState[] writtenStates, int n,
 			long[] preWSWG, long[] preOFWG) {
-		Heightmap hmWS = chunk.getHeightmap(Heightmap.Types.WORLD_SURFACE_WG);
-		Heightmap hmOF = chunk.getHeightmap(Heightmap.Types.OCEAN_FLOOR_WG);
+		Heightmap hmWS = primedOrNull(chunk, Heightmap.Types.WORLD_SURFACE_WG);
+		Heightmap hmOF = primedOrNull(chunk, Heightmap.Types.OCEAN_FLOOR_WG);
 		if (hmWS == null && hmOF == null) return;
 
 		long mmWSWG = diffOne(chunk, hmWS, Heightmap.Types.WORLD_SURFACE_WG,
@@ -129,19 +136,19 @@ public final class SurfaceHeightmapValidator {
 
 		// Capture Path B (production — already in chunk after batched flush).
 		int[] pathBCells = readCells(hm);
-		long[] postB = hm.asLongArray().clone();
+		long[] postB = hm.getRawData().clone();
 
-		// Restore pre-snapshot, apply Path A reference (per-write trackUpdate).
-		hm.setTo(chunk, type, preSnapshot);
+		// Restore pre-snapshot, apply Path A reference (per-write update).
+		hm.setRawData(chunk, type, preSnapshot);
 		for (int i = 0; i < n; i++) {
 			BlockState bs = writtenStates[i];
 			if (bs == null) continue;
-			hm.trackUpdate(xs[i] & 15, ys[i], zs[i] & 15, bs);
+			hm.update(xs[i] & 15, ys[i], zs[i] & 15, bs);
 		}
 		int[] pathACells = readCells(hm);
 
 		// Restore Path B (production) so the chunk stays correct.
-		hm.setTo(chunk, type, postB);
+		hm.setRawData(chunk, type, postB);
 
 		// Cell-level diff.
 		long diff = 0;
@@ -155,7 +162,7 @@ public final class SurfaceHeightmapValidator {
 		int[] cells = new int[256];
 		for (int z = 0; z < 16; z++) {
 			for (int x = 0; x < 16; x++) {
-				cells[(x << 4) | z] = hm.get(x, z);
+				cells[(x << 4) | z] = hm.getFirstAvailable(x, z);
 			}
 		}
 		return cells;
