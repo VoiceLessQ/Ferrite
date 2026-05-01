@@ -105,7 +105,7 @@ public final class RustAquiferSampler implements Aquifer {
      * @param chunkMinBlockX chunk's min block X (inclusive)
      * @param chunkMinBlockZ chunk's min block Z (inclusive)
      * @param chunkMaxBlockX chunk's max block X (inclusive — vanilla
-     *                       calls this {@code chunkPos.getEndX()})
+     *                       calls this {@code chunkPos.getMaxBlockX()})
      * @param chunkMaxBlockZ chunk's max block Z
      * @param surfaceGrid    {@link IntBuffer} of i32 surface heights
      *                       in row-major order, size {@code GRID_SIDE_X

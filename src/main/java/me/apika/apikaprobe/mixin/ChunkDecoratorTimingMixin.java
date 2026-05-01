@@ -37,8 +37,8 @@ public abstract class ChunkDecoratorTimingMixin {
 			StructureManager structureAccessor, CallbackInfo ci) {
 		// Center of chunk in block coords. ChunkPos.x/z are chunk coords;
 		// (cx << 4) + 8 is the center block.
-		int cx = (chunk.getPos().x << 4) + 8;
-		int cz = (chunk.getPos().z << 4) + 8;
+		int cx = (chunk.getPos().x() << 4) + 8;
+		int cz = (chunk.getPos().z() << 4) + 8;
 		ChunkDecoratorTiming.end(cx, cz);
 	}
 }

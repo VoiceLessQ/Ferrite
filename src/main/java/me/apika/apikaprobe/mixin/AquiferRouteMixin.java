@@ -79,10 +79,10 @@ public abstract class AquiferRouteMixin {
         }
 
         try {
-            int chunkMinBlockX = chunkPos.getStartX();
-            int chunkMinBlockZ = chunkPos.getStartZ();
-            int chunkMaxBlockX = chunkPos.getEndX();
-            int chunkMaxBlockZ = chunkPos.getEndZ();
+            int chunkMinBlockX = chunkPos.getMinBlockX();
+            int chunkMinBlockZ = chunkPos.getMinBlockZ();
+            int chunkMaxBlockX = chunkPos.getMaxBlockX();
+            int chunkMaxBlockZ = chunkPos.getMaxBlockZ();
 
             // Pre-compute surface-height grid via vanilla's per-column
             // method — exposed via the @Shadow above. The estimator
@@ -135,7 +135,7 @@ public abstract class AquiferRouteMixin {
             // so we never break chunkgen.
             ExampleMod.LOGGER.warn(
                     "[aquifer-rust] wrapper construction failed for chunk ({},{}): {}",
-                    chunkPos.x, chunkPos.z, t.toString());
+                    chunkPos.x(), chunkPos.z(), t.toString());
             return vanilla;
         }
     }

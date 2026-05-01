@@ -90,8 +90,8 @@ public final class TerrainBulkHandoff {
 		ByteBuffer cornerBuf = ByteBuffer.allocateDirect(CORNER_BYTES).order(ByteOrder.nativeOrder());
 		ByteBuffer outBuf = ByteBuffer.allocateDirect(BLOCK_ID_BYTES).order(ByteOrder.nativeOrder());
 
-		final int startX = chunk.getPos().getStartX();
-		final int startZ = chunk.getPos().getStartZ();
+		final int startX = chunk.getPos().getMinBlockX();
+		final int startZ = chunk.getPos().getMinBlockZ();
 
 		// Batched fillArray via DensityFunction.fillArray(double[], ContextProvider).
 		// Concrete density function implementations can override fillArray to
@@ -135,8 +135,8 @@ public final class TerrainBulkHandoff {
 				CELL_HEIGHT,
 				MIN_Y,
 				SEA_LEVEL,
-				chunk.getPos().x,
-				chunk.getPos().z);
+				chunk.getPos().x(),
+				chunk.getPos().z());
 		long rustNs = System.nanoTime() - tRustStart;
 
 		// Intentionally: do NOT walk outBuf and apply to chunk. This is A/B mode.

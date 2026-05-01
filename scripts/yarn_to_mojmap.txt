@@ -248,6 +248,11 @@ net.minecraft.world.level.WorldGenRegion|net.minecraft.server.level.WorldGenRegi
 \.markNeedsSaving()|.markUnsaved()
 \.markForUpdate(|.blockChanged(
 \.updateNeighbors(|.updateNeighbourShapes(
+# ChunkPos getter renames (Yarn -> Mojmap).
+\.getStartX()|.getMinBlockX()
+\.getStartZ()|.getMinBlockZ()
+\.getEndX()|.getMaxBlockX()
+\.getEndZ()|.getMaxBlockZ()
 # ChunkStatus moved to chunk.status sub-package in mojmap.
 net.minecraft.world.level.chunk.ChunkStatus|net.minecraft.world.level.chunk.status.ChunkStatus
 # PositionalRandomFactory lives in levelgen, not util.
