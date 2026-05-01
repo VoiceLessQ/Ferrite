@@ -304,7 +304,7 @@ public final class SurfaceRuleCompiler {
 		Object id = readField(node, "randomName");
 		if (id == null) return "";
 		// Identifier.toString() returns "namespace:path" — same format the
-		// validator passes to Identifier.of() at runtime.
+		// validator passes to Identifier.fromNamespaceAndPath() at runtime.
 		return id.toString();
 	}
 

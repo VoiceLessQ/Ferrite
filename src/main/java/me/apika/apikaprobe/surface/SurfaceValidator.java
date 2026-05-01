@@ -1241,7 +1241,7 @@ public final class SurfaceValidator {
 		java.lang.reflect.Method registryKeyOf;
 		java.lang.reflect.Method identifierOf;
 		try {
-			// Identifier.of(String) — parses "minecraft:foo" or "namespace:path"
+			// Identifier.fromNamespaceAndPath(String) — parses "minecraft:foo" or "namespace:path"
 			identifierOf = identifierClass.getMethod("of", String.class);
 			// ResourceKey.of(ResourceKey<? extends Registry<E>>, Identifier) → ResourceKey<E>
 			registryKeyOf = registryKeyClass.getMethod("of", registryKeyClass, identifierClass);

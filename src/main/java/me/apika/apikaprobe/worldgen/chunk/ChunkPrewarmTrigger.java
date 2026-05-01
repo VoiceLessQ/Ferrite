@@ -40,9 +40,9 @@ public final class ChunkPrewarmTrigger {
 		for (ServerLevel world : server.getAllLevels()) {
 			int viewDistance = world.getServer().getPlayerList().getViewDistance();
 			int radius = viewDistance + LOOK_AHEAD;
-			for (ServerPlayer player : world.getPlayers()) {
-				int pcx = player.getBlockPos().getX() >> 4;
-				int pcz = player.getBlockPos().getZ() >> 4;
+			for (ServerPlayer player : world.players()) {
+				int pcx = player.blockPosition().getX() >> 4;
+				int pcz = player.blockPosition().getZ() >> 4;
 				budget = scheduleRings(world, pcx, pcz, radius, budget);
 				if (budget <= 0) return;
 			}
@@ -77,7 +77,7 @@ public final class ChunkPrewarmTrigger {
 	 *  vanilla owns the biome data and our predicted cache would just
 	 *  shadow memory we don't need. Evict in case it was cached earlier. */
 	private static boolean trySchedule(ServerLevel world, int cx, int cz) {
-		if (world.isChunkLoaded(cx, cz)) {
+		if (world.hasChunk(cx, cz)) {
 			ChunkPrewarmer.evict(cx, cz);
 			return false;
 		}

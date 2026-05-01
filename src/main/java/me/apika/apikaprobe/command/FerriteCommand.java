@@ -829,9 +829,9 @@ public final class FerriteCommand {
 		var pos = source.getPosition();
 		// Use INTEGER block coords (matching how DensityFunction.Noise
 		// samples). Helps catch off-by-fraction noise mismatches.
-		double x = (int) pos.x;
+		double x = (int) pos.x();
 		double y = (int) pos.y;
-		double z = (int) pos.z;
+		double z = (int) pos.z();
 
 		byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
 		ByteBuffer nameBuf = ByteBuffer.allocateDirect(nameBytes.length).order(ByteOrder.nativeOrder());
@@ -1062,9 +1062,9 @@ public final class FerriteCommand {
 		String name = StringArgumentType.getString(ctx, "name").trim();
 		if (!name.contains(":")) name = "minecraft:" + name;
 		var pos = ctx.getSource().getPosition();
-		int x = (int) pos.x;
+		int x = (int) pos.x();
 		int y = (int) pos.y;
-		int z = (int) pos.z;
+		int z = (int) pos.z();
 		byte[] nameBytes = name.getBytes(java.nio.charset.StandardCharsets.UTF_8);
 		java.nio.ByteBuffer nameBuf = java.nio.ByteBuffer.allocateDirect(nameBytes.length)
 				.order(java.nio.ByteOrder.nativeOrder());
@@ -1091,7 +1091,7 @@ public final class FerriteCommand {
 
 	private static int biomeAtPlayer(CommandContext<CommandSourceStack> ctx) {
 		var pos = ctx.getSource().getPosition();
-		return reportBiomeAt(ctx, (int) pos.x, (int) pos.y, (int) pos.z);
+		return reportBiomeAt(ctx, (int) pos.x(), (int) pos.y, (int) pos.z());
 	}
 
 	private static int biomeAtCoords(CommandContext<CommandSourceStack> ctx) {
@@ -1134,7 +1134,7 @@ public final class FerriteCommand {
 
 	private static int biomeRustAtPlayer(CommandContext<CommandSourceStack> ctx) {
 		var pos = ctx.getSource().getPosition();
-		return reportBiomeRust(ctx, (int) pos.x, (int) pos.y, (int) pos.z);
+		return reportBiomeRust(ctx, (int) pos.x(), (int) pos.y, (int) pos.z());
 	}
 
 	private static int biomeRustAtCoords(CommandContext<CommandSourceStack> ctx) {
@@ -1195,9 +1195,9 @@ public final class FerriteCommand {
 	 */
 	private static int biomePredict(CommandContext<CommandSourceStack> ctx, int radiusBlocks) {
 		var pos = ctx.getSource().getPosition();
-		int cx = (int) pos.x;
+		int cx = (int) pos.x();
 		int cy = (int) pos.y;
-		int cz = (int) pos.z;
+		int cz = (int) pos.z();
 		int step = 4; // quart-pos cells
 		int side = (radiusBlocks * 2) / step;
 		java.util.List<String> names = WorldgenStateBootstrap.registeredBiomeNames();

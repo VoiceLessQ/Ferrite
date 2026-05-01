@@ -52,8 +52,8 @@ public final class ChunkForcer {
 	public static void register() {
 		ticketType = Registry.register(
 				BuiltInRegistries.TICKET_TYPE,
-				Identifier.of(ExampleMod.MOD_ID, "chunkforce"),
-				new TicketType(80L, TicketType.FOR_LOADING));
+				Identifier.fromNamespaceAndPath(ExampleMod.MOD_ID, "chunkforce"),
+				new TicketType(80L, TicketType.FLAG_LOADING));
 	}
 
 	/** Submit a force-gen request. Caller must already be on server thread.
@@ -69,7 +69,7 @@ public final class ChunkForcer {
 		ChunkPos pos = new ChunkPos(cx, cz);
 		try {
 			world.getChunkSource()
-					.addChunkLoadingTicket(ticketType, pos, 0)
+					.addTicketAndLoadWithRadius(ticketType, pos, 0)
 					.whenComplete((res, err) -> {
 						inflight.remove(key);
 						if (err != null) errored.incrementAndGet();

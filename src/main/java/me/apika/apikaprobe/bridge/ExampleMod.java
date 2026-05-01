@@ -105,7 +105,7 @@ public class ExampleMod implements ModInitializer {
 		// will never serve again.
 		ServerChunkEvents.CHUNK_LOAD.register((world, chunk) -> {
 			net.minecraft.world.level.ChunkPos pos = chunk.getPos();
-			ChunkPrewarmer.evict(pos.x, pos.z);
+			ChunkPrewarmer.evict(pos.x(), pos.z());
 		});
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
