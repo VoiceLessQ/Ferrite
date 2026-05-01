@@ -250,6 +250,8 @@ net.minecraft.world.level.WorldGenRegion|net.minecraft.server.level.WorldGenRegi
 \.updateNeighbors(|.updateNeighbourShapes(
 # ChunkStatus moved to chunk.status sub-package in mojmap.
 net.minecraft.world.level.chunk.ChunkStatus|net.minecraft.world.level.chunk.status.ChunkStatus
+# PositionalRandomFactory lives in levelgen, not util.
+net.minecraft.util.PositionalRandomFactory|net.minecraft.world.level.levelgen.PositionalRandomFactory
 # .getWorld() is safe in this codebase: all 8 callers are CommandSourceStack
 # (formerly ServerCommandSource); none are Entity/Minecraft.
 \.getWorld()|.getLevel()

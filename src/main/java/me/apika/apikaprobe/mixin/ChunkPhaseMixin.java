@@ -72,7 +72,7 @@ public abstract class ChunkPhaseMixin {
 	// — StructureManager comes before RandomState here, unlike the async version.
 
 	@Inject(
-		method = "populateNoise(Lnet.minecraft.world.level.levelgen.blending.Blender;Lnet.minecraft.world.level.StructureManager;Lnet.minecraft.world.level.levelgen.RandomState;Lnet.minecraft.world.level.chunk.ChunkAccess;II)Lnet.minecraft.world.level.chunk.ChunkAccess;",
+		method = "populateNoise(Lnet/minecraft/world/level/levelgen/blending/Blender;Lnet/minecraft/world/level/StructureManager;Lnet/minecraft/world/level/levelgen/RandomState;Lnet/minecraft/world/level/chunk/ChunkAccess;II)Lnet/minecraft/world/level/chunk/ChunkAccess;",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onSyncNoiseStart(
@@ -87,7 +87,7 @@ public abstract class ChunkPhaseMixin {
 	}
 
 	@Inject(
-		method = "populateNoise(Lnet.minecraft.world.level.levelgen.blending.Blender;Lnet.minecraft.world.level.StructureManager;Lnet.minecraft.world.level.levelgen.RandomState;Lnet.minecraft.world.level.chunk.ChunkAccess;II)Lnet.minecraft.world.level.chunk.ChunkAccess;",
+		method = "populateNoise(Lnet/minecraft/world/level/levelgen/blending/Blender;Lnet/minecraft/world/level/StructureManager;Lnet/minecraft/world/level/levelgen/RandomState;Lnet/minecraft/world/level/chunk/ChunkAccess;II)Lnet/minecraft/world/level/chunk/ChunkAccess;",
 		at = @At("RETURN")
 	)
 	private void apikaprobe$onSyncNoiseEnd(

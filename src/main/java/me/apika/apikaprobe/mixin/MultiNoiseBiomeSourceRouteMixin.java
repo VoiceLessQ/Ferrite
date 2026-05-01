@@ -30,7 +30,7 @@ import me.apika.apikaprobe.worldgen.RustBiomeRouter;
 public abstract class MultiNoiseBiomeSourceRouteMixin {
 
 	@Inject(
-		method = "getBiome(IIILnet.minecraft.world.level.biome.Climate$MultiNoiseSampler;)Lnet.minecraft.core.Holder;",
+		method = "getBiome(IIILnet/minecraft/world/level/biome/Climate$MultiNoiseSampler;)Lnet/minecraft/core/Holder;",
 		at = @At("HEAD"),
 		cancellable = true,
 		require = 0  // optional — yarn descriptor may shift across versions

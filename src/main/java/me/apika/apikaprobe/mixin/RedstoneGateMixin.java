@@ -31,7 +31,7 @@ import net.minecraft.util.RandomSource;
 public abstract class RedstoneGateMixin {
 
 	@Inject(
-		method = "scheduledTick(Lnet.minecraft.world.level.block.state.BlockState;Lnet.minecraft.server.level.ServerLevel;Lnet.minecraft.core.BlockPos;Lnet.minecraft.util.RandomSource;)V",
+		method = "scheduledTick(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/core/BlockPos;Lnet/minecraft/util/RandomSource;)V",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onGateScheduledTickBegin(
@@ -42,7 +42,7 @@ public abstract class RedstoneGateMixin {
 	}
 
 	@Inject(
-		method = "scheduledTick(Lnet.minecraft.world.level.block.state.BlockState;Lnet.minecraft.server.level.ServerLevel;Lnet.minecraft.core.BlockPos;Lnet.minecraft.util.RandomSource;)V",
+		method = "scheduledTick(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/core/BlockPos;Lnet/minecraft/util/RandomSource;)V",
 		at = @At("RETURN")
 	)
 	private void apikaprobe$onGateScheduledTickEnd(

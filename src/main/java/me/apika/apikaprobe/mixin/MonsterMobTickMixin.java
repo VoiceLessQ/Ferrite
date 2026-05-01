@@ -22,7 +22,7 @@ import net.minecraft.world.entity.Mob;
 public abstract class MonsterMobTickMixin {
 
 	@Inject(
-		method = "mobTick(Lnet.minecraft.server.level.ServerLevel;)V",
+		method = "mobTick(Lnet/minecraft/server/level/ServerLevel;)V",
 		at = @At("HEAD")
 	)
 	private void ferrite$onMobTickBegin(ServerLevel world, CallbackInfo ci) {
@@ -30,7 +30,7 @@ public abstract class MonsterMobTickMixin {
 	}
 
 	@Inject(
-		method = "mobTick(Lnet.minecraft.server.level.ServerLevel;)V",
+		method = "mobTick(Lnet/minecraft/server/level/ServerLevel;)V",
 		at = @At("RETURN")
 	)
 	private void ferrite$onMobTickEnd(ServerLevel world, CallbackInfo ci) {

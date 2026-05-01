@@ -23,7 +23,7 @@ import net.minecraft.world.phys.Vec3;
 @Mixin(Entity.class)
 public abstract class EntityMoveMixin {
 
-	@Inject(method = "move(Lnet.minecraft.world.entity.MoverType;Lnet.minecraft.world.phys.Vec3;)V", at = @At("HEAD"))
+	@Inject(method = "move(Lnet/minecraft/world/entity/MoverType;Lnet/minecraft/world/phys/Vec3;)V", at = @At("HEAD"))
 	private void ferrite$onMoveBegin(MoverType type, Vec3 movement, CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return;
@@ -31,7 +31,7 @@ public abstract class EntityMoveMixin {
 		MovementInternalsMonitor.onMoveBegin();
 	}
 
-	@Inject(method = "move(Lnet.minecraft.world.entity.MoverType;Lnet.minecraft.world.phys.Vec3;)V", at = @At("RETURN"))
+	@Inject(method = "move(Lnet/minecraft/world/entity/MoverType;Lnet/minecraft/world/phys/Vec3;)V", at = @At("RETURN"))
 	private void ferrite$onMoveEnd(MoverType type, Vec3 movement, CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return;

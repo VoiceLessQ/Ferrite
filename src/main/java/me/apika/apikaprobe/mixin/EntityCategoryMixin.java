@@ -21,7 +21,7 @@ import net.minecraft.server.level.ServerLevel;
 public abstract class EntityCategoryMixin {
 
 	@Inject(
-		method = "tickEntity(Lnet.minecraft.world.entity.Entity;)V",
+		method = "tickEntity(Lnet/minecraft/world/entity/Entity;)V",
 		at = @At("HEAD")
 	)
 	private void ferrite$onEntityTickBegin(Entity entity, CallbackInfo ci) {
@@ -29,7 +29,7 @@ public abstract class EntityCategoryMixin {
 	}
 
 	@Inject(
-		method = "tickEntity(Lnet.minecraft.world.entity.Entity;)V",
+		method = "tickEntity(Lnet/minecraft/world/entity/Entity;)V",
 		at = @At("RETURN")
 	)
 	private void ferrite$onEntityTickEnd(Entity entity, CallbackInfo ci) {

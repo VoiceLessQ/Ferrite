@@ -16,7 +16,7 @@ import net.minecraft.world.level.Level;
 public abstract class HopperSlotProbeMixin {
 
 	@Inject(
-		method = "insert(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.entity.HopperBlockEntity;)Z",
+		method = "insert(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/HopperBlockEntity;)Z",
 		at = @At("HEAD")
 	)
 	private static void ferrite$insertBegin(Level world, BlockPos pos, HopperBlockEntity blockEntity, CallbackInfoReturnable<Boolean> cir) {
@@ -24,10 +24,10 @@ public abstract class HopperSlotProbeMixin {
 	}
 
 	@Inject(
-		method = "insert(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.entity.HopperBlockEntity;)Z",
+		method = "insert(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/HopperBlockEntity;)Z",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.block.entity.HopperBlockEntity;transfer(Lnet.minecraft.world.Container;Lnet.minecraft.world.Container;Lnet.minecraft.world.item.ItemStack;Lnet.minecraft.core.Direction;)Lnet.minecraft.world.item.ItemStack;"
+			target = "Lnet/minecraft/world/level/block/entity/HopperBlockEntity;transfer(Lnet/minecraft/world/Container;Lnet/minecraft/world/Container;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/core/Direction;)Lnet/minecraft/world/item/ItemStack;"
 		)
 	)
 	private static void ferrite$insertAttempt(Level world, BlockPos pos, HopperBlockEntity blockEntity, CallbackInfoReturnable<Boolean> cir) {
@@ -35,7 +35,7 @@ public abstract class HopperSlotProbeMixin {
 	}
 
 	@Inject(
-		method = "insert(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.entity.HopperBlockEntity;)Z",
+		method = "insert(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/HopperBlockEntity;)Z",
 		at = @At("RETURN")
 	)
 	private static void ferrite$insertEnd(Level world, BlockPos pos, HopperBlockEntity blockEntity, CallbackInfoReturnable<Boolean> cir) {
@@ -43,7 +43,7 @@ public abstract class HopperSlotProbeMixin {
 	}
 
 	@Inject(
-		method = "extract(Lnet.minecraft.world.level.Level;Lnet.minecraft.world.level.block.entity.Hopper;)Z",
+		method = "extract(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/block/entity/Hopper;)Z",
 		at = @At("HEAD")
 	)
 	private static void ferrite$extractBegin(Level world, Hopper hopper, CallbackInfoReturnable<Boolean> cir) {
@@ -51,10 +51,10 @@ public abstract class HopperSlotProbeMixin {
 	}
 
 	@Inject(
-		method = "extract(Lnet.minecraft.world.level.Level;Lnet.minecraft.world.level.block.entity.Hopper;)Z",
+		method = "extract(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/block/entity/Hopper;)Z",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.block.entity.HopperBlockEntity;extract(Lnet.minecraft.world.level.block.entity.Hopper;Lnet.minecraft.world.Container;ILnet.minecraft.core.Direction;)Z"
+			target = "Lnet/minecraft/world/level/block/entity/HopperBlockEntity;extract(Lnet/minecraft/world/level/block/entity/Hopper;Lnet/minecraft/world/Container;ILnet/minecraft/core/Direction;)Z"
 		)
 	)
 	private static void ferrite$extractAttempt(Level world, Hopper hopper, CallbackInfoReturnable<Boolean> cir) {
@@ -62,7 +62,7 @@ public abstract class HopperSlotProbeMixin {
 	}
 
 	@Inject(
-		method = "extract(Lnet.minecraft.world.level.Level;Lnet.minecraft.world.level.block.entity.Hopper;)Z",
+		method = "extract(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/block/entity/Hopper;)Z",
 		at = @At("RETURN")
 	)
 	private static void ferrite$extractEnd(Level world, Hopper hopper, CallbackInfoReturnable<Boolean> cir) {

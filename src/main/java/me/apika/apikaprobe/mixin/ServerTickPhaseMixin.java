@@ -88,7 +88,7 @@ public abstract class ServerTickPhaseMixin {
 	// --- per-tick counts ---------------------------------------------------
 
 	@Inject(
-		method = "tickBlock(Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.Block;)V",
+		method = "tickBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/Block;)V",
 		at = @At("HEAD")
 	)
 	private void ferrite$countBlockTick(CallbackInfo ci) {
@@ -96,7 +96,7 @@ public abstract class ServerTickPhaseMixin {
 	}
 
 	@Inject(
-		method = "tickFluid(Lnet.minecraft.core.BlockPos;Lnet/minecraft/fluid/Fluid;)V",
+		method = "tickFluid(Lnet/minecraft/core/BlockPos;Lnet/minecraft/fluid/Fluid;)V",
 		at = @At("HEAD")
 	)
 	private void ferrite$countFluidTick(CallbackInfo ci) {

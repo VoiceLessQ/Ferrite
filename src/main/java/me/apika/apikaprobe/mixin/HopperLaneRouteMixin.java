@@ -18,7 +18,7 @@ import net.minecraft.core.Direction;
 public abstract class HopperLaneRouteMixin {
 
 	@Inject(
-		method = "transfer(Lnet.minecraft.world.Container;Lnet.minecraft.world.Container;Lnet.minecraft.world.item.ItemStack;Lnet.minecraft.core.Direction;)Lnet.minecraft.world.item.ItemStack;",
+		method = "transfer(Lnet/minecraft/world/Container;Lnet/minecraft/world/Container;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/core/Direction;)Lnet/minecraft/world/item/ItemStack;",
 		at = @At("HEAD"),
 		cancellable = true
 	)

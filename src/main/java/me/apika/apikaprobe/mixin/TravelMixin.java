@@ -20,7 +20,7 @@ import net.minecraft.world.phys.Vec3;
 @Mixin(LivingEntity.class)
 public abstract class TravelMixin {
 
-	@Inject(method = "travel(Lnet.minecraft.world.phys.Vec3;)V", at = @At("HEAD"))
+	@Inject(method = "travel(Lnet/minecraft/world/phys/Vec3;)V", at = @At("HEAD"))
 	private void ferrite$onTravelBegin(Vec3 movementInput, CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return;
@@ -28,7 +28,7 @@ public abstract class TravelMixin {
 		MovementInternalsMonitor.onTravelBegin();
 	}
 
-	@Inject(method = "travel(Lnet.minecraft.world.phys.Vec3;)V", at = @At("RETURN"))
+	@Inject(method = "travel(Lnet/minecraft/world/phys/Vec3;)V", at = @At("RETURN"))
 	private void ferrite$onTravelEnd(Vec3 movementInput, CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return;

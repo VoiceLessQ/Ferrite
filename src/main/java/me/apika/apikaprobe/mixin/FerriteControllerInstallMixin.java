@@ -36,10 +36,10 @@ import net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator;
 public abstract class FerriteControllerInstallMixin {
 
 	@Redirect(
-		method = "<init>(Lnet.minecraft.world.level.block.AbstractBlock$Settings;)V",
+		method = "<init>(Lnet/minecraft/world/level/block/AbstractBlock$Settings;)V",
 		at = @At(
 			value = "NEW",
-			target = "(Lnet.minecraft.world.level.block.RedStoneWireBlock;)Lnet.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator;"
+			target = "(Lnet/minecraft/world/level/block/RedStoneWireBlock;)Lnet/minecraft/world/level/redstone/DefaultRedstoneWireEvaluator;"
 		)
 	)
 	private DefaultRedstoneWireEvaluator apikaprobe$installFerriteController(RedStoneWireBlock wire) {

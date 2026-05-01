@@ -25,7 +25,7 @@ import net.minecraft.world.level.redstone.Orientation;
 public abstract class DefaultRedstoneControllerMixin {
 
 	@Inject(
-		method = "update(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.state.BlockState;Lnet.minecraft.world.level.redstone.Orientation;Z)V",
+		method = "update(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/redstone/Orientation;Z)V",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onDefaultControllerUpdate(

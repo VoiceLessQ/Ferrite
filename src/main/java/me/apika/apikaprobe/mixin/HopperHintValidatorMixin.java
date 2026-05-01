@@ -19,7 +19,7 @@ import net.minecraft.world.level.Level;
 public abstract class HopperHintValidatorMixin {
 
 	@Inject(
-		method = "extract(Lnet.minecraft.world.level.Level;Lnet.minecraft.world.level.block.entity.Hopper;)Z",
+		method = "extract(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/block/entity/Hopper;)Z",
 		at = @At("HEAD")
 	)
 	private static void ferrite$validateHint(Level world, Hopper hopper, CallbackInfoReturnable<Boolean> cir) {

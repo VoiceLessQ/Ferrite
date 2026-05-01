@@ -17,10 +17,10 @@ import net.minecraft.core.Direction;
 public abstract class HopperPerSlotChainFeedMixin {
 
 	@Inject(
-		method = "transfer(Lnet.minecraft.world.Container;Lnet.minecraft.world.Container;Lnet.minecraft.world.item.ItemStack;ILnet.minecraft.core.Direction;)Lnet.minecraft.world.item.ItemStack;",
+		method = "transfer(Lnet/minecraft/world/Container;Lnet/minecraft/world/Container;Lnet/minecraft/world/item/ItemStack;ILnet/minecraft/core/Direction;)Lnet/minecraft/world/item/ItemStack;",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.block.entity.HopperBlockEntity;setTransferCooldown(I)V",
+			target = "Lnet/minecraft/world/level/block/entity/HopperBlockEntity;setTransferCooldown(I)V",
 			shift = At.Shift.AFTER
 		)
 	)

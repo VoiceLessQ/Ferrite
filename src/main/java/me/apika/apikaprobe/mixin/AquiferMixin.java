@@ -23,7 +23,7 @@ import net.minecraft.world.level.levelgen.DensityFunction;
 public abstract class AquiferMixin {
 
 	@Inject(
-		method = "apply(Lnet.minecraft.world.level.levelgen.DensityFunction.FunctionContext;D)Lnet.minecraft.world.level.block.state.BlockState;",
+		method = "apply(Lnet/minecraft/world/level/levelgen/DensityFunction/FunctionContext;D)Lnet/minecraft/world/level/block/state/BlockState;",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onApplyBegin(
@@ -35,7 +35,7 @@ public abstract class AquiferMixin {
 	}
 
 	@Inject(
-		method = "apply(Lnet.minecraft.world.level.levelgen.DensityFunction.FunctionContext;D)Lnet.minecraft.world.level.block.state.BlockState;",
+		method = "apply(Lnet/minecraft/world/level/levelgen/DensityFunction/FunctionContext;D)Lnet/minecraft/world/level/block/state/BlockState;",
 		at = @At("RETURN")
 	)
 	private void apikaprobe$onApplyEnd(

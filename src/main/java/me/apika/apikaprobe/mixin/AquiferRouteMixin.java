@@ -6,7 +6,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.util.PositionalRandomFactory;
+import net.minecraft.world.level.levelgen.PositionalRandomFactory;
 import net.minecraft.world.level.levelgen.Aquifer;
 import net.minecraft.world.level.levelgen.NoiseChunk;
 import net.minecraft.world.level.levelgen.NoiseRouter;
@@ -50,14 +50,14 @@ public abstract class AquiferRouteMixin {
             method = "<init>",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet.minecraft.world.level.levelgen.Aquifer;"
-                            + "aquifer(Lnet.minecraft.world.level.levelgen.NoiseChunk;"
-                            + "Lnet.minecraft.world.level.ChunkPos;"
-                            + "Lnet.minecraft.world.level.levelgen.NoiseRouter;"
-                            + "Lnet.minecraft.util.PositionalRandomFactory;"
+                    target = "Lnet/minecraft/world/level/levelgen/Aquifer;"
+                            + "aquifer(Lnet/minecraft/world/level/levelgen/NoiseChunk;"
+                            + "Lnet/minecraft/world/level/ChunkPos;"
+                            + "Lnet/minecraft/world/level/levelgen/NoiseRouter;"
+                            + "Lnet/minecraft/util/PositionalRandomFactory;"
                             + "II"
-                            + "Lnet.minecraft.world.level.levelgen.Aquifer$FluidLevelSampler;)"
-                            + "Lnet.minecraft.world.level.levelgen.Aquifer;"))
+                            + "Lnet/minecraft/world/level/levelgen/Aquifer$FluidLevelSampler;)"
+                            + "Lnet/minecraft/world/level/levelgen/Aquifer;"))
     private Aquifer ferrite$wrapAquifer(
             NoiseChunk chunkNoiseSampler,
             ChunkPos chunkPos,

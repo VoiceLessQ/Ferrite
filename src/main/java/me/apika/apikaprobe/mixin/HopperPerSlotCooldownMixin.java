@@ -74,7 +74,7 @@ public abstract class HopperPerSlotCooldownMixin implements SlotCooldownAccess {
 	}
 
 	@Inject(
-		method = "serverTick(Lnet.minecraft.world.level.Level;Lnet.minecraft.core.BlockPos;Lnet.minecraft.world.level.block.state.BlockState;Lnet.minecraft.world.level.block.entity.HopperBlockEntity;)V",
+		method = "serverTick(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/entity/HopperBlockEntity;)V",
 		at = @At("HEAD")
 	)
 	private static void ferrite$decrementOnTick(Level world, BlockPos pos, BlockState state, HopperBlockEntity blockEntity, CallbackInfo ci) {
@@ -93,7 +93,7 @@ public abstract class HopperPerSlotCooldownMixin implements SlotCooldownAccess {
 		cir.setReturnValue(this.ferrite$allSlotsOnCooldown());
 	}
 
-	@Inject(method = "readData(Lnet.minecraft.world.level.storage.ValueInput;)V", at = @At("RETURN"))
+	@Inject(method = "readData(Lnet/minecraft/world/level/storage/ValueInput;)V", at = @At("RETURN"))
 	private void ferrite$readSlotCooldowns(ValueInput view, CallbackInfo ci) {
 		Optional<int[]> saved = view.getOptionalIntArray("FerriteSlotCooldowns");
 		if (saved.isPresent() && saved.get().length == this.ferrite$slotCooldowns.length) {
@@ -107,7 +107,7 @@ public abstract class HopperPerSlotCooldownMixin implements SlotCooldownAccess {
 		}
 	}
 
-	@Inject(method = "writeData(Lnet.minecraft.world.level.storage.ValueOutput;)V", at = @At("RETURN"))
+	@Inject(method = "writeData(Lnet/minecraft/world/level/storage/ValueOutput;)V", at = @At("RETURN"))
 	private void ferrite$writeSlotCooldowns(ValueOutput view, CallbackInfo ci) {
 		if (!me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE) return;
 		view.putIntArray("FerriteSlotCooldowns", this.ferrite$slotCooldowns.clone());

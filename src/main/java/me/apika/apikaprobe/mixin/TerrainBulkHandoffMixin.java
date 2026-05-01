@@ -26,7 +26,7 @@ import net.minecraft.world.level.levelgen.RandomState;
 public abstract class TerrainBulkHandoffMixin {
 
 	@Inject(
-		method = "populateNoise(Lnet.minecraft.world.level.levelgen.blending.Blender;Lnet.minecraft.world.level.StructureManager;Lnet.minecraft.world.level.levelgen.RandomState;Lnet.minecraft.world.level.chunk.ChunkAccess;II)Lnet.minecraft.world.level.chunk.ChunkAccess;",
+		method = "populateNoise(Lnet/minecraft/world/level/levelgen/blending/Blender;Lnet/minecraft/world/level/StructureManager;Lnet/minecraft/world/level/levelgen/RandomState;Lnet/minecraft/world/level/chunk/ChunkAccess;II)Lnet/minecraft/world/level/chunk/ChunkAccess;",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$bulkTerrainAB(

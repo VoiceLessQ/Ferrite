@@ -85,7 +85,7 @@ public abstract class SurfaceValidatorMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.levelgen.SurfaceRules$BlockStateRule;tryApply(III)Lnet.minecraft.world.level.block.state.BlockState;"
+			target = "Lnet/minecraft/world/level/levelgen/SurfaceRules$BlockStateRule;tryApply(III)Lnet/minecraft/world/level/block/state/BlockState;"
 		)
 	)
 	private BlockState ferrite$validateTryApply(@Coerce Object rule, int x, int y, int z) {
@@ -149,7 +149,7 @@ public abstract class SurfaceValidatorMixin {
 		method = "buildSurface",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet.minecraft.world.level.levelgen.SurfaceRules$MaterialRuleContext;initVerticalContext(IIIIII)V"
+			target = "Lnet/minecraft/world/level/levelgen/SurfaceRules$MaterialRuleContext;initVerticalContext(IIIIII)V"
 		)
 	)
 	private void ferrite$captureContext(@Coerce Object ctx,
