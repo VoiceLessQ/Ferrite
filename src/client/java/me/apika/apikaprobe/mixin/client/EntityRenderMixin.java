@@ -7,11 +7,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import me.apika.apikaprobe.EntityRenderMonitor;
 
-import net.minecraft.client.render.command.OrderedRenderCommandQueue;
-import net.minecraft.client.render.entity.EntityRenderDispatcher;
-import net.minecraft.client.render.entity.state.EntityRenderState;
-import net.minecraft.client.render.state.CameraRenderState;
-import net.minecraft.client.util.math.PoseStack;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import com.mojang.blaze3d.vertex.PoseStack;
 
 /**
  * Per-entity render timing via HEAD/RETURN on EntityRenderDispatcher.render.
@@ -25,7 +25,7 @@ import net.minecraft.client.util.math.PoseStack;
 public abstract class EntityRenderMixin {
 
 	@Inject(
-		method = "render(Lnet/minecraft/client/render/entity/state/EntityRenderState;Lnet/minecraft/client/render/state/CameraRenderState;DDDLnet/minecraft/client/util/math/PoseStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;)V",
+		method = "submit(Lnet/minecraft/client/renderer/entity/state/EntityRenderState;Lnet/minecraft/client/renderer/state/level/CameraRenderState;DDDLnet/minecraft/client/util/math/PoseStack;Lnet/minecraft/client/render/command/SubmitNodeCollector;)V",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onRenderBegin(
@@ -35,13 +35,13 @@ public abstract class EntityRenderMixin {
 			double offsetY,
 			double offsetZ,
 			PoseStack matrices,
-			OrderedRenderCommandQueue queue,
+			SubmitNodeCollector queue,
 			CallbackInfo ci) {
 		EntityRenderMonitor.onRenderBegin();
 	}
 
 	@Inject(
-		method = "render(Lnet/minecraft/client/render/entity/state/EntityRenderState;Lnet/minecraft/client/render/state/CameraRenderState;DDDLnet/minecraft/client/util/math/PoseStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;)V",
+		method = "submit(Lnet/minecraft/client/renderer/entity/state/EntityRenderState;Lnet/minecraft/client/renderer/state/level/CameraRenderState;DDDLnet/minecraft/client/util/math/PoseStack;Lnet/minecraft/client/render/command/SubmitNodeCollector;)V",
 		at = @At("RETURN")
 	)
 	private void apikaprobe$onRenderEnd(
@@ -51,7 +51,7 @@ public abstract class EntityRenderMixin {
 			double offsetY,
 			double offsetZ,
 			PoseStack matrices,
-			OrderedRenderCommandQueue queue,
+			SubmitNodeCollector queue,
 			CallbackInfo ci) {
 		EntityRenderMonitor.onRenderEnd();
 	}

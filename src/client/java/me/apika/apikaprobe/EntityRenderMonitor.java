@@ -8,7 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.world.ClientLevel;
+import net.minecraft.client.multiplayer.ClientLevel;
 
 /**
  * Sampled timer for EntityRenderDispatcher.render(...).
@@ -88,9 +88,9 @@ public final class EntityRenderMonitor {
 			return;
 		}
 
-		ClientLevel world = client.world;
-		int entities = world == null ? 0 : world.getRegularEntityCount();
-		int fps = client.getCurrentFps();
+		ClientLevel world = client.level;
+		int entities = world == null ? 0 : world.getEntityCount();
+		int fps = client.getFps();
 
 		double avgNs = total / (double) sampled;
 		double maxMs = max / 1_000_000.0;

@@ -6,7 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.world.ClientLevel;
+import net.minecraft.client.multiplayer.ClientLevel;
 
 /**
  * Client-side lag diagnostic. Runs on the client thread (single-threaded
@@ -20,10 +20,10 @@ import net.minecraft.client.world.ClientLevel;
  *   avg >= 30  →  WARN
  *   avg <  30  →  LAG
  *
- * Entity count via ClientLevel.getRegularEntityCount() (method_18120).
- * ChunkAccess count via Level.getChunkSource().getLoadedChunkCount()
+ * Entity count via ClientLevel.getEntityCount() (method_18120).
+ * ChunkAccess count via Level.getChunkSource().getLoadedChunksCount()
  * (inherited from ChunkManager, method_14151).
- * FPS via Minecraft.getCurrentFps() (method_47599) — same number
+ * FPS via Minecraft.getFps() (method_47599) — same number
  * the F3 overlay displays.
  */
 public final class ClientLagMonitor {
@@ -46,7 +46,7 @@ public final class ClientLagMonitor {
 	}
 
 	private static void onTick(Minecraft client) {
-		ClientLevel world = client.world;
+		ClientLevel world = client.level;
 		if (world == null) {
 			// Not in a world (main menu etc). Reset window so we don't log stale data
 			// once we enter a world.
@@ -54,14 +54,14 @@ public final class ClientLagMonitor {
 			return;
 		}
 
-		int fps = client.getCurrentFps();
+		int fps = client.getFps();
 		sampleCount++;
 		fpsSum += fps;
 		if (fps < fpsMin) fpsMin = fps;
 		if (fps > fpsMax) fpsMax = fps;
 
-		lastEntities = world.getRegularEntityCount();
-		lastChunks = world.getChunkSource().getLoadedChunkCount();
+		lastEntities = world.getEntityCount();
+		lastChunks = world.getChunkSource().getLoadedChunksCount();
 
 		long now = System.nanoTime();
 		if (now - lastReportNs >= REPORT_INTERVAL_NS && sampleCount > 0) {
