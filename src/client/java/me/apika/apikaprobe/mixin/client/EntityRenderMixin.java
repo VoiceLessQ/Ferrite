@@ -25,7 +25,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 public abstract class EntityRenderMixin {
 
 	@Inject(
-		method = "submit(Lnet/minecraft/client/renderer/entity/state/EntityRenderState;Lnet/minecraft/client/renderer/state/level/CameraRenderState;DDDLnet/minecraft/client/util/math/PoseStack;Lnet/minecraft/client/render/command/SubmitNodeCollector;)V",
+		method = "submit(Lnet/minecraft/client/renderer/entity/state/EntityRenderState;Lnet/minecraft/client/renderer/state/level/CameraRenderState;DDDLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;)V",
 		at = @At("HEAD")
 	)
 	private void apikaprobe$onRenderBegin(
@@ -41,7 +41,7 @@ public abstract class EntityRenderMixin {
 	}
 
 	@Inject(
-		method = "submit(Lnet/minecraft/client/renderer/entity/state/EntityRenderState;Lnet/minecraft/client/renderer/state/level/CameraRenderState;DDDLnet/minecraft/client/util/math/PoseStack;Lnet/minecraft/client/render/command/SubmitNodeCollector;)V",
+		method = "submit(Lnet/minecraft/client/renderer/entity/state/EntityRenderState;Lnet/minecraft/client/renderer/state/level/CameraRenderState;DDDLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;)V",
 		at = @At("RETURN")
 	)
 	private void apikaprobe$onRenderEnd(

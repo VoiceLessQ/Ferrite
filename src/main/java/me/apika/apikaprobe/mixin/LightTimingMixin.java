@@ -57,13 +57,13 @@ public abstract class LightTimingMixin {
 		}
 	}
 
-	@Inject(method = "light", at = @At("HEAD"))
+	@Inject(method = "lightChunk", at = @At("HEAD"))
 	private void ferrite$lightHead(ChunkAccess chunk, boolean lit,
 			CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
 		ferrite$lightStart.get()[0] = System.nanoTime();
 	}
 
-	@Inject(method = "light", at = @At("RETURN"))
+	@Inject(method = "lightChunk", at = @At("RETURN"))
 	private void ferrite$lightReturn(ChunkAccess chunk, boolean lit,
 			CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
 		long startNs = ferrite$lightStart.get()[0];

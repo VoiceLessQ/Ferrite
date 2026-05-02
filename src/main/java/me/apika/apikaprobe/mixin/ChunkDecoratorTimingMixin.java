@@ -26,13 +26,13 @@ import me.apika.apikaprobe.worldgen.chunk.ChunkDecoratorTiming;
  */
 @Mixin(ChunkGenerator.class)
 public abstract class ChunkDecoratorTimingMixin {
-	@Inject(method = "generateFeatures", at = @At("HEAD"))
+	@Inject(method = "applyBiomeDecoration", at = @At("HEAD"))
 	private void ferrite$startTiming(WorldGenLevel world, ChunkAccess chunk,
 			StructureManager structureAccessor, CallbackInfo ci) {
 		ChunkDecoratorTiming.start();
 	}
 
-	@Inject(method = "generateFeatures", at = @At("RETURN"))
+	@Inject(method = "applyBiomeDecoration", at = @At("RETURN"))
 	private void ferrite$endTiming(WorldGenLevel world, ChunkAccess chunk,
 			StructureManager structureAccessor, CallbackInfo ci) {
 		// Center of chunk in block coords. ChunkPos.x/z are chunk coords;

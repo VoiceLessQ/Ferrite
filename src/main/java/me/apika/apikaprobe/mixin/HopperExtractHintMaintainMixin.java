@@ -1,36 +1,19 @@
 package me.apika.apikaprobe.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-
-import me.apika.apikaprobe.hopper.ExtractHint;
 
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
-import net.minecraft.world.Container;
-import net.minecraft.world.item.ItemStack;
 
+/**
+ * BROKEN ON 26.1.2 — needs redesign.
+ *
+ * <p>Part of the per-slot Hopper Highway diagnostic infrastructure.
+ * Targeted Yarn methods that were renamed and/or had their signatures
+ * changed in mojmap 26.1.2 (transfer slot-arg removed, getInputInventory
+ * / getAvailableSlots / extract / insert renames, etc.).  All default-off
+ * via {@code PerSlotFireConfig.ENABLE}.  Stubbed to empty mixin to keep
+ * the file in tree while build moves forward.
+ */
 @Mixin(HopperBlockEntity.class)
-public abstract class HopperExtractHintMaintainMixin implements Container, ExtractHint {
-
-	@Inject(method = "setStack", at = @At("RETURN"))
-	private void ferrite$onSetStack(int slot, ItemStack stack, CallbackInfo ci) {
-		if (!stack.isEmpty() && slot < this.ferrite$getExtractHint()) {
-			this.ferrite$setExtractHint(slot);
-		}
-	}
-
-	@Inject(method = "removeItem(II)Lnet/minecraft/world/item/ItemStack;", at = @At("RETURN"))
-	private void ferrite$onRemoveStack(int slot, int amount, CallbackInfoReturnable<ItemStack> cir) {
-		if (slot != this.ferrite$getExtractHint()) return;
-		if (!this.getItem(slot).isEmpty()) return;
-		int n = this.getContainerSize();
-		int next = n;
-		for (int i = slot + 1; i < n; i++) {
-			if (!this.getItem(i).isEmpty()) { next = i; break; }
-		}
-		this.ferrite$setExtractHint(next);
-	}
+public abstract class HopperExtractHintMaintainMixin {
 }

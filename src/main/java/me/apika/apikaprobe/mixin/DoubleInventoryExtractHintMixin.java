@@ -1,36 +1,14 @@
 package me.apika.apikaprobe.mixin;
 
-import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
-
-import me.apika.apikaprobe.hopper.ExtractHint;
 
 import net.minecraft.world.CompoundContainer;
-import net.minecraft.world.Container;
 
+/**
+ * BROKEN ON 26.1.2 — needs redesign.
+ * Part of the per-slot Hopper Highway diagnostic infrastructure
+ * (default-off via PerSlotFireConfig.ENABLE).  Stubbed pending redesign.
+ */
 @Mixin(CompoundContainer.class)
-public abstract class DoubleInventoryExtractHintMixin implements Container, ExtractHint {
-
-	@Shadow @Final private Container first;
-	@Shadow @Final private Container second;
-
-	@Override
-	public int ferrite$getExtractHint() {
-		int firstSize = this.first.getContainerSize();
-		if (this.first instanceof ExtractHint h1) {
-			int h = h1.ferrite$getExtractHint();
-			if (h < firstSize) return h;
-		} else {
-			return 0;
-		}
-		if (this.second instanceof ExtractHint h2) {
-			return firstSize + h2.ferrite$getExtractHint();
-		}
-		return firstSize;
-	}
-
-	@Override
-	public void ferrite$setExtractHint(int hint) {
-	}
+public abstract class DoubleInventoryExtractHintMixin {
 }

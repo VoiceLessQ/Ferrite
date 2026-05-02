@@ -19,17 +19,17 @@ import net.minecraft.world.level.Level;
 @Mixin(HopperBlockEntity.class)
 public abstract class HopperScanMixin {
 
-	@Inject(method = "serverTick", at = @At("HEAD"))
+	@Inject(method = "pushItemsTick", at = @At("HEAD"))
 	private static void ferrite$hopperTick(Level world, BlockPos pos, BlockState state, HopperBlockEntity blockEntity, CallbackInfo ci) {
 		HopperMonitor.onHopperTick();
 	}
 
-	@Inject(method = "getInputItemEntities", at = @At("HEAD"))
+	@Inject(method = "getItemsAtAndAbove", at = @At("HEAD"))
 	private static void ferrite$scanBegin(Level world, net.minecraft.world.level.block.entity.Hopper hopper, CallbackInfoReturnable<List<ItemEntity>> cir) {
 		HopperMonitor.onScanBegin();
 	}
 
-	@Inject(method = "getInputItemEntities", at = @At("RETURN"))
+	@Inject(method = "getItemsAtAndAbove", at = @At("RETURN"))
 	private static void ferrite$scanEnd(Level world, net.minecraft.world.level.block.entity.Hopper hopper, CallbackInfoReturnable<List<ItemEntity>> cir) {
 		HopperMonitor.onScanEnd(cir.getReturnValue().size());
 	}

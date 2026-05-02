@@ -1,71 +1,19 @@
 package me.apika.apikaprobe.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import me.apika.apikaprobe.monitor.HopperSlotMonitor;
-
-import net.minecraft.world.level.block.entity.Hopper;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.Level;
 
+/**
+ * BROKEN ON 26.1.2 — needs redesign.
+ *
+ * <p>Part of the per-slot Hopper Highway diagnostic infrastructure.
+ * Targeted Yarn methods that were renamed and/or had their signatures
+ * changed in mojmap 26.1.2 (transfer slot-arg removed, getInputInventory
+ * / getAvailableSlots / extract / insert renames, etc.).  All default-off
+ * via {@code PerSlotFireConfig.ENABLE}.  Stubbed to empty mixin to keep
+ * the file in tree while build moves forward.
+ */
 @Mixin(HopperBlockEntity.class)
 public abstract class HopperSlotProbeMixin {
-
-	@Inject(
-		method = "ejectItems(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/HopperBlockEntity;)Z",
-		at = @At("HEAD")
-	)
-	private static void ferrite$insertBegin(Level world, BlockPos pos, HopperBlockEntity blockEntity, CallbackInfoReturnable<Boolean> cir) {
-		HopperSlotMonitor.onInsertBegin();
-	}
-
-	@Inject(
-		method = "ejectItems(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/HopperBlockEntity;)Z",
-		at = @At(
-			value = "INVOKE",
-			target = "Lnet/minecraft/world/level/block/entity/HopperBlockEntity;transfer(Lnet/minecraft/world/Container;Lnet/minecraft/world/Container;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/core/Direction;)Lnet/minecraft/world/item/ItemStack;"
-		)
-	)
-	private static void ferrite$insertAttempt(Level world, BlockPos pos, HopperBlockEntity blockEntity, CallbackInfoReturnable<Boolean> cir) {
-		HopperSlotMonitor.onInsertAttempt();
-	}
-
-	@Inject(
-		method = "ejectItems(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/HopperBlockEntity;)Z",
-		at = @At("RETURN")
-	)
-	private static void ferrite$insertEnd(Level world, BlockPos pos, HopperBlockEntity blockEntity, CallbackInfoReturnable<Boolean> cir) {
-		HopperSlotMonitor.onInsertEnd(cir.getReturnValueZ());
-	}
-
-	@Inject(
-		method = "suckInItems(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/block/entity/Hopper;)Z",
-		at = @At("HEAD")
-	)
-	private static void ferrite$extractBegin(Level world, Hopper hopper, CallbackInfoReturnable<Boolean> cir) {
-		HopperSlotMonitor.onExtractBegin();
-	}
-
-	@Inject(
-		method = "suckInItems(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/block/entity/Hopper;)Z",
-		at = @At(
-			value = "INVOKE",
-			target = "Lnet/minecraft/world/level/block/entity/HopperBlockEntity;extract(Lnet/minecraft/world/level/block/entity/Hopper;Lnet/minecraft/world/Container;ILnet/minecraft/core/Direction;)Z"
-		)
-	)
-	private static void ferrite$extractAttempt(Level world, Hopper hopper, CallbackInfoReturnable<Boolean> cir) {
-		HopperSlotMonitor.onExtractAttempt();
-	}
-
-	@Inject(
-		method = "suckInItems(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/block/entity/Hopper;)Z",
-		at = @At("RETURN")
-	)
-	private static void ferrite$extractEnd(Level world, Hopper hopper, CallbackInfoReturnable<Boolean> cir) {
-		HopperSlotMonitor.onExtractEnd(cir.getReturnValueZ());
-	}
 }

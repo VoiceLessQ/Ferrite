@@ -18,9 +18,9 @@ import net.minecraft.world.level.Level;
 @Mixin(RedstoneWireEvaluator.class)
 public interface RedstoneControllerInvoker {
 
-	@Invoker("calculateWirePowerAt")
+	@Invoker("getIncomingWireSignal")
 	int apikaprobe$calculateWirePowerAt(Level world, BlockPos pos);
 
-	@Invoker("getStrongPowerAt")
+	@Invoker("getBlockSignal")
 	int apikaprobe$getStrongPowerAt(Level world, BlockPos pos);
 }

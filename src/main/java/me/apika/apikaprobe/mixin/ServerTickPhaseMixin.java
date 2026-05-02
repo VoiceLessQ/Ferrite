@@ -37,7 +37,7 @@ public abstract class ServerTickPhaseMixin {
 		method = "tick(Ljava/util/function/BooleanSupplier;)V",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/world/tick/WorldTickScheduler;tick(JILjava/util/function/BiConsumer;)V",
+			target = "Lnet/minecraft/world/ticks/LevelTicks;tick(JILjava/util/function/BiConsumer;)V",
 			ordinal = 0
 		)
 	)
@@ -49,7 +49,7 @@ public abstract class ServerTickPhaseMixin {
 		method = "tick(Ljava/util/function/BooleanSupplier;)V",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/world/tick/WorldTickScheduler;tick(JILjava/util/function/BiConsumer;)V",
+			target = "Lnet/minecraft/world/ticks/LevelTicks;tick(JILjava/util/function/BiConsumer;)V",
 			ordinal = 0,
 			shift = At.Shift.AFTER
 		)
@@ -64,7 +64,7 @@ public abstract class ServerTickPhaseMixin {
 		method = "tick(Ljava/util/function/BooleanSupplier;)V",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/world/tick/WorldTickScheduler;tick(JILjava/util/function/BiConsumer;)V",
+			target = "Lnet/minecraft/world/ticks/LevelTicks;tick(JILjava/util/function/BiConsumer;)V",
 			ordinal = 1
 		)
 	)
@@ -76,7 +76,7 @@ public abstract class ServerTickPhaseMixin {
 		method = "tick(Ljava/util/function/BooleanSupplier;)V",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/world/tick/WorldTickScheduler;tick(JILjava/util/function/BiConsumer;)V",
+			target = "Lnet/minecraft/world/ticks/LevelTicks;tick(JILjava/util/function/BiConsumer;)V",
 			ordinal = 1,
 			shift = At.Shift.AFTER
 		)
@@ -96,7 +96,7 @@ public abstract class ServerTickPhaseMixin {
 	}
 
 	@Inject(
-		method = "tickFluid(Lnet/minecraft/core/BlockPos;Lnet/minecraft/fluid/Fluid;)V",
+		method = "tickFluid(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/material/Fluid;)V",
 		at = @At("HEAD")
 	)
 	private void ferrite$countFluidTick(CallbackInfo ci) {

@@ -1,34 +1,23 @@
 package me.apika.apikaprobe.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import me.apika.apikaprobe.monitor.NoiseStageMonitor;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 
-import net.minecraft.world.level.levelgen.NoiseChunk;
-
-@Mixin(NoiseChunk.class)
+/**
+ * BROKEN ON 26.1.2 — needs redesign.
+ *
+ * <p>Targeted Yarn {@code populateNoise(Blender, StructureManager,
+ * RandomState, ChunkAccess, int, int)ChunkAccess} (sync 6-arg).  Mojmap
+ * 26.1.2 redesigned this to {@code fillFromNoise(Blender, RandomState,
+ * StructureManager, ChunkAccess)CompletableFuture<ChunkAccess>} — 4-arg
+ * async.  The chunk-gen pipeline became fully async-first.
+ *
+ * <p>Per CLAUDE.md, bulk-chunk-density and chunk-phase timing are both
+ * default-off / closed threads.  Stubbed to keep the file in tree while
+ * build moves forward; reintroduction needs a redesign against the new
+ * async chunk-gen shape.
+ */
+@Mixin(NoiseBasedChunkGenerator.class)
 public abstract class NoiseStageMixin {
-
-	@Inject(method = "sampleStartDensity", at = @At("HEAD"))
-	private void apikaprobe$onStartBegin(CallbackInfo ci) {
-		NoiseStageMonitor.onStartBegin();
-	}
-
-	@Inject(method = "sampleStartDensity", at = @At("RETURN"))
-	private void apikaprobe$onStartEnd(CallbackInfo ci) {
-		NoiseStageMonitor.onStartEnd();
-	}
-
-	@Inject(method = "sampleEndDensity", at = @At("HEAD"))
-	private void apikaprobe$onEndBegin(int cellX, CallbackInfo ci) {
-		NoiseStageMonitor.onEndBegin();
-	}
-
-	@Inject(method = "sampleEndDensity", at = @At("RETURN"))
-	private void apikaprobe$onEndEnd(int cellX, CallbackInfo ci) {
-		NoiseStageMonitor.onEndEnd();
-	}
 }
