@@ -140,3 +140,32 @@ via PR #4.
 
 Never push to `main` without confirmation. Never force-push to `main`
 under any circumstance unless explicitly asked.
+
+## runClient defaults
+
+Plain `./gradlew runClient` boots to the **title screen**. This is the
+right default: you do not always know which world you want, and a fresh
+boot is the safe starting point.
+
+The autovalidate flow is opt-in via a gradle property:
+
+```
+./gradlew runClient -Pferrite.autovalidate=2000
+```
+
+When that property is set, `build.gradle` injects two args into the run:
+
+- `-Dferrite.autovalidate=<n>` (vmArg) which `WorldgenStateBootstrap`
+  reads and runs the noise + biome + density parity validators at
+  sample count `<n>` after worldgen state finalize.
+- `--quickPlaySingleplayer "<world-name>"` (programArg) which is a
+  Mojang launch arg that skips the title screen, "Singleplayer" menu,
+  and world list, loading the named world directly.
+
+World defaults to `"New World"`. Override with
+`-Pferrite.world="My Test World"`. The folder must exist under
+`run/saves/`; if it doesn't, MC silently falls back to title screen.
+
+Use the autovalidate flow when you want a headless validator dump in
+under a minute. Use plain runClient when you want to actually click
+through MC, build something, or test a specific scenario.
