@@ -35,18 +35,18 @@ public abstract class ChunkNoiseSamplerMixin {
 
 	@Shadow
 	@Final
-	private int startCellX;
+	private int firstCellX;
 
 	@Shadow
 	@Final
-	private int startCellZ;
+	private int firstCellZ;
 
 	@Shadow
 	@Final
-	private int horizontalCellBlockCount;
+	private int cellWidth;
 
 	@Inject(
-			method = "getActualDensityFunctionImpl",
+			method = "wrapNew",
 			at = @At("HEAD"),
 			cancellable = true
 	)
@@ -73,8 +73,8 @@ public abstract class ChunkNoiseSamplerMixin {
 		Object inner = invokeNoArg(function, "wrapped");
 		if (!(inner instanceof DensityFunction innerDf)) return;
 
-		int chunkMinBlockX = this.startCellX * this.horizontalCellBlockCount;
-		int chunkMinBlockZ = this.startCellZ * this.horizontalCellBlockCount;
+		int chunkMinBlockX = this.firstCellX * this.cellWidth;
+		int chunkMinBlockZ = this.firstCellZ * this.cellWidth;
 		cir.setReturnValue(new RustFlatCache(innerDf, name, chunkMinBlockX, chunkMinBlockZ));
 	}
 

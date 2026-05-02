@@ -33,7 +33,7 @@ import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
 public abstract class CacheRouteCaptureMixin {
 
 	@Inject(
-			method = "getActualDensityFunctionImpl",
+			method = "wrapNew",
 			at = @At("RETURN")
 	)
 	private void ferrite$captureCacheRoute(DensityFunction function,

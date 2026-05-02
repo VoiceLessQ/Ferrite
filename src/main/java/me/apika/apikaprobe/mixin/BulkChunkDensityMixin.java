@@ -45,16 +45,16 @@ public abstract class BulkChunkDensityMixin {
 	private static final AtomicBoolean firstFireLogged = new AtomicBoolean();
 
 	@Shadow @Final
-	private int startCellX;
+	private int firstCellX;
 
 	@Shadow @Final
-	private int startCellZ;
+	private int firstCellZ;
 
 	@Shadow @Final
-	int horizontalCellBlockCount;
+	int cellWidth;
 
 	@Inject(
-			method = "getActualDensityFunctionImpl",
+			method = "wrapNew",
 			at = @At("HEAD"),
 			cancellable = true
 	)
@@ -114,8 +114,8 @@ public abstract class BulkChunkDensityMixin {
 			return;
 		}
 
-		int chunkMinBlockX = this.startCellX * this.horizontalCellBlockCount;
-		int chunkMinBlockZ = this.startCellZ * this.horizontalCellBlockCount;
+		int chunkMinBlockX = this.firstCellX * this.cellWidth;
+		int chunkMinBlockZ = this.firstCellZ * this.cellWidth;
 		cir.setReturnValue(new RustFinalDensityBufferWrapper(
 				function, chunkMinBlockX, chunkMinBlockZ));
 		BulkChunkDensityFill.substitutions.incrementAndGet();

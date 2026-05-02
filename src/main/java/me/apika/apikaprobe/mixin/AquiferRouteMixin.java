@@ -34,7 +34,7 @@ public abstract class AquiferRouteMixin {
      *  the surface-height grid that Rust queries during
      *  `get_fluid_level_for`. */
     @Shadow
-    abstract int estimateSurfaceHeight(int x, int z);
+    abstract int preliminarySurfaceLevel(int x, int z);
 
     /** Vanilla rectangle-max surface-height estimator. Vanilla's
      *  `Aquifer.Impl` constructor (line 140-141) feeds this
@@ -44,7 +44,7 @@ public abstract class AquiferRouteMixin {
      *  produces the dominant Pattern-1 mismatches documented in
      *  {@code docs/AQUIFER_PORT.md}. */
     @Shadow
-    abstract int estimateHighestSurfaceLevel(int minX, int minZ, int maxX, int maxZ);
+    abstract int maxPreliminarySurfaceLevel(int minX, int minZ, int maxX, int maxZ);
 
     @Redirect(
             method = "<init>",
@@ -89,7 +89,7 @@ public abstract class AquiferRouteMixin {
             // closure is called from the grid builder before we
             // construct the wrapper.
             RustAquiferSampler.GridResult grid = RustAquiferSampler.buildSurfaceGrid(
-                    chunkMinBlockX, chunkMinBlockZ, this::estimateSurfaceHeight);
+                    chunkMinBlockX, chunkMinBlockZ, this::preliminarySurfaceLevel);
 
             // High surface estimate — replicate vanilla's exact call
             // from `Aquifer.Impl` constructor (line 140-141).
@@ -110,7 +110,7 @@ public abstract class AquiferRouteMixin {
             int rectMinZ = aqStartZCell << 4;
             int rectMaxX = (aqEndXCell << 4) + 9;
             int rectMaxZ = (aqEndZCell << 4) + 9;
-            int highEstimate = this.estimateHighestSurfaceLevel(
+            int highEstimate = this.maxPreliminarySurfaceLevel(
                     rectMinX, rectMinZ, rectMaxX, rectMaxZ);
 
             // sea_level — vanilla derives this from settings; the
