@@ -61,20 +61,25 @@ thing?" The redstone Phase 2 arc would have stopped at a false negative
 without the activation counter. The five questions before any new port
 live in `JOURNEY.md`; read them before scoping.
 
-## Live state, last refreshed 2026-04-29
+## Live state, last refreshed 2026-05-02
 
-**Track B is shipped, not pending.** Anyone who reads "build
-WorldgenState skeleton" or "port PerlinNoiseSampler" as the next move
-is working from stale context. Both are done. The full noise + climate
-+ density stack is in:
+**The 26.1.x port is on its own branch.** Anyone reading "let's bump
+to 26.1.2" or "port the worldgen to mojmap" as a next move is reading
+stale context. The 26.1.x branch is at parity, ahead of main by ~36
+commits, and has bit-exact noise + biome + density carry-over (see
+`docs/JOURNEY.md` "26.1.x port: parity carry-over").
+
+**Track B is shipped, not pending.** The full noise + climate +
+density stack is in:
 
 - `rust/mod/src/worldgen_state.rs` (seed-derived state, `OnceLock`)
-- `rust/mod/src/perlin.rs` (`ImprovedNoise`, `PerlinNoise`, `NormalNoise` aka yarn `DoublePerlinNoiseSampler`, plus `BlendedNoise`)
+- `rust/mod/src/perlin.rs` (`ImprovedNoise`, `PerlinNoise`, `NormalNoise` aka yarn `DoublePerlinNoiseSampler`, plus `BlendedNoise` and `SimplexNoise` for end-island)
 - `rust/mod/src/climate.rs` (R-tree biome lookup, 1000/1000 sample tests)
-- `rust/mod/src/density.rs` (41/42 density functions bit-exact)
+- `rust/mod/src/density.rs` (50/50 bit-exact on 26.1.x as of 2026-05-02; 41/42 on 1.21.11 main)
 - `rust/mod/src/aquifer.rs` (99.895% parity, default-off, see below)
+- `rust/mod/src/xoroshiro.rs` (Xoroshiro128PlusPlus, XoroshiroPositionalRandomFactory, plus `LegacyRandomSource` for end-island seeding)
 - `rust/mod/src/worldgen_jni.rs` (seed handoff, registration entries)
-- `WorldgenStateBootstrap.java` (NoiseConfig population at world load)
+- `WorldgenStateBootstrap.java` (NoiseConfig population at world load; exposes `capturedWorldSeed()` for the validator)
 - `NoiseConfigCaptureMixin` (live-instance handle for parity validator)
 
 **Current shipping state:** v0.5.1-alpha. Cramming, AC redstone, and
@@ -140,6 +145,13 @@ via PR #4.
 
 Never push to `main` without confirmation. Never force-push to `main`
 under any circumstance unless explicitly asked.
+
+The `26.1.x` branch carries the port to MC 26.1.2 (mojmap, JDK 25,
+architectury-loom). It runs ahead of main; main stays on 1.21.11.
+Until that branch is merged or shipped, do not "modernize" main to
+mojmap or update its gradle.properties / fabric.mod.json to 26.1.x
+versions. Doc-style additions on main are fine; runtime fixes on
+26.1.x should land there.
 
 ## runClient defaults
 

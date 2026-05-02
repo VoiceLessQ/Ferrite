@@ -22,6 +22,15 @@ If a future agent says "build WorldgenState skeleton" or "port
 PerlinNoiseSampler" — the agent is working from stale context. Stop and
 re-read this doc.
 
+> **26.1.x branch update (2026-05-02):** the carry-over to MC 26.1.2
+> (mojmap, JDK 25) ports `FindTopSurface` and `EndIslandDensityFunction`
+> as Rust DF variants and lifts density parity to **50/50 bit-exact**
+> at samples=2000, ahead of the 41/42 baseline above. The
+> `EndIslandDensityFunction` port required `SimplexNoise` (2D) and
+> `LegacyRandomSource` as new building blocks. See `JOURNEY.md`
+> "26.1.x port: parity carry-over" for the full breakdown and the
+> `26.1.x` git branch for the code.
+
 ## The actual wall — Rust DF interpreter < vanilla's JIT
 
 Two bulk paths exist, both default-OFF behind JVM flags because they
