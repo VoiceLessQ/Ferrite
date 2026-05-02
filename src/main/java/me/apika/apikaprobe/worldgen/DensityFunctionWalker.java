@@ -222,7 +222,12 @@ public final class DensityFunctionWalker {
 			encodeLinearOperation(out, node);
 			return;
 		}
-		if (cls.contains("TwoArgument") || cls.contains("BinaryOperation")) {
+		if (cls.contains("TwoArgument") || cls.contains("BinaryOperation")
+				|| cls.equals("Ap2") || cls.endsWith("$Ap2")) {
+			// 26.1.2 unifies Add/Mul/Min/Max into private record Ap2 with a
+			// `type` enum (TwoArgumentSimpleFunction.Type).  Same shape as
+			// the older yarn TwoArgumentSimpleFunction subclasses, so the
+			// existing encodeBinary path works once we dispatch to it.
 			encodeBinary(out, node); return;
 		}
 		if (cls.contains("Mapped") || cls.contains("Unary") || cls.contains("UnaryOperation")) {
@@ -751,12 +756,25 @@ public final class DensityFunctionWalker {
 	// -------- Reflection helpers --------
 
 	private static Object invokeNoArg(Object o, String name) {
-		try {
-			Method m = o.getClass().getMethod(name);
-			return m.invoke(o);
-		} catch (ReflectiveOperationException | RuntimeException e) {
-			return null;
+		// Records can be declared private (e.g. DensityFunctions$YClampedGradient
+		// in 26.1.2 mojmap).  getMethod() resolves the auto-generated public
+		// accessor, but invoke() then fails IllegalAccessException because the
+		// declaring class is not exported.  setAccessible(true) bypasses that.
+		// Also try getDeclaredMethod as a fallback for private classes whose
+		// getMethod chain misses inheritance edge cases.
+		Class<?> cls = o.getClass();
+		while (cls != null && cls != Object.class) {
+			try {
+				Method m = cls.getDeclaredMethod(name);
+				m.setAccessible(true);
+				return m.invoke(o);
+			} catch (NoSuchMethodException ignored) {
+				cls = cls.getSuperclass();
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				return null;
+			}
 		}
+		return null;
 	}
 
 	private static Object invokeAny(Object o, String[] names) {
