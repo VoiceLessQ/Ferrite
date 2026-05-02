@@ -48,6 +48,11 @@ public final class WorldgenStateBootstrap {
 	 *  for every noise successfully pushed to Rust. Read by the parity
 	 *  validator so it doesn't have to re-enumerate the yarn registry. */
 	private static volatile List<String> registeredNames = Collections.emptyList();
+	/** World seed captured at bootstrap.  Used by parity validator to
+	 *  reseed {@code EndIslandDensityFunction} the same way vanilla's
+	 *  {@code RandomState.wrapNew} does. */
+	private static volatile long capturedWorldSeed = 0L;
+	public static long capturedWorldSeed() { return capturedWorldSeed; }
 
 	private WorldgenStateBootstrap() {}
 
@@ -82,6 +87,7 @@ public final class WorldgenStateBootstrap {
 			return;
 		}
 		long seed = world.getSeed();
+		capturedWorldSeed = seed;
 		if (!RustBridge.initWorldgenState(seed)) {
 			ExampleMod.LOGGER.warn(
 					"[worldgen-init] initWorldgenState returned false (seed={}) — Rust state already finalized?",

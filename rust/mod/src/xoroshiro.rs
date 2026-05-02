@@ -359,6 +359,79 @@ pub fn seed_from_hash_of(name: &str) -> (i64, i64) {
 }
 
 // ============================================================================
+// LegacyRandomSource (java.util.Random LCG)
+// ============================================================================
+
+/// Bit-exact port of vanilla `LegacyRandomSource` (java.util.Random LCG).
+/// Used by `EndIslandDensityFunction` and a handful of other vanilla
+/// systems that pre-date the Xoroshiro switch.  Single-threaded only:
+/// vanilla's CAS+ThreadingDetector dance is replaced by plain mutation.
+pub struct LegacyRandomSource {
+    seed: i64,
+}
+
+const LEGACY_MULTIPLIER: i64 = 0x5DEEC_E66D_i64;
+const LEGACY_INCREMENT: i64 = 0xB_i64;
+const LEGACY_MASK: i64 = (1_i64 << 48) - 1;
+
+impl LegacyRandomSource {
+    pub fn new(seed: i64) -> Self {
+        let mut r = Self { seed: 0 };
+        r.set_seed(seed);
+        r
+    }
+
+    pub fn set_seed(&mut self, seed: i64) {
+        self.seed = (seed ^ LEGACY_MULTIPLIER) & LEGACY_MASK;
+    }
+
+    /// Vanilla `next(bits)`.  Returns the high `bits` bits of the
+    /// post-step LCG seed.
+    pub fn next(&mut self, bits: i32) -> i32 {
+        let new_seed = self.seed.wrapping_mul(LEGACY_MULTIPLIER)
+            .wrapping_add(LEGACY_INCREMENT) & LEGACY_MASK;
+        self.seed = new_seed;
+        ((new_seed as u64) >> (48 - bits)) as i32
+    }
+
+    /// `BitRandomSource.nextInt(int)` — power-of-two fast path + the
+    /// rejection-sampling loop for general bounds.
+    pub fn next_int_bound(&mut self, bound: i32) -> i32 {
+        assert!(bound > 0, "bound must be positive");
+        if bound & (bound - 1) == 0 {
+            return ((bound as i64).wrapping_mul(self.next(31) as i64) >> 31) as i32;
+        }
+        loop {
+            let sample = self.next(31);
+            let modulo = sample % bound;
+            if sample - modulo + (bound - 1) >= 0 {
+                return modulo;
+            }
+        }
+    }
+
+    /// `BitRandomSource.nextInt()` — full 32-bit signed.
+    pub fn next_int(&mut self) -> i32 { self.next(32) }
+
+    /// `BitRandomSource.nextDouble()` — 53-bit mantissa from two next() calls.
+    pub fn next_double(&mut self) -> f64 {
+        let upper = self.next(26) as i64;
+        let lower = self.next(27) as i64;
+        // Vanilla's DOUBLE_MULTIPLIER is declared `float` but used as
+        // double — IEEE round-trip preserves the value 1/2^53.
+        let combined = (upper << 27) + lower;
+        combined as f64 * 1.110_223_e-16_f32 as f64
+    }
+
+    /// `RandomSource.consumeCount(rounds)` — calls next(32) `rounds`
+    /// times, no return.  Vanilla uses this to skip portions of the
+    /// stream (notably 17292 rounds for `EndIslandDensityFunction`).
+    pub fn consume_count(&mut self, rounds: i32) {
+        for _ in 0..rounds { self.next_int(); }
+    }
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 

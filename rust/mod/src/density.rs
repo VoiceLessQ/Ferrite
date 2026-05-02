@@ -175,6 +175,57 @@ pub enum DensityFunction {
     /// derived from `state.root_factory`, which isn't available at
     /// parse time. The cache is shared across enum clones.
     BlendedNoise(LazyBlendedNoise),
+
+    /// `DensityFunctions.FindTopSurface(density, upperBound, lowerBound, cellHeight)`.
+    /// Walks down from the cell-snapped top of `upper_bound` looking
+    /// for the first cell-row where `density` is positive; returns its
+    /// y, or `lower_bound` if none.  Used by `overworld/caves/noodle`.
+    FindTopSurface {
+        density: Box<DensityFunction>,
+        upper_bound: Box<DensityFunction>,
+        lower_bound: i32,
+        cell_height: i32,
+    },
+
+    /// `DensityFunctions.EndIslandDensityFunction` — single-noise
+    /// terrain DF used in the end dimension.  Wraps a [`LazyEndIsland`]
+    /// because the `SimplexNoise` table is built lazily from
+    /// `state.seed` (vanilla rebuilds it via the `wrapNew` visitor at
+    /// RandomState construction; we do the equivalent on first sample).
+    EndIsland(LazyEndIsland),
+}
+
+/// Lazy wrapper around [`crate::perlin::SimplexNoise`] keyed on
+/// `state.seed`.  Vanilla's `EndIslandDensityFunction(0L)` lives in the
+/// registry; `RandomState`'s `wrapNew` reconstructs it with the world
+/// seed at chunkgen time.  Mirroring that here means we read
+/// `state.seed` on first compute and cache the resulting SimplexNoise
+/// forever after.  Cloning shares the cache via `Arc`.
+#[derive(Debug)]
+pub struct LazyEndIsland {
+    cache: std::sync::Arc<std::sync::OnceLock<crate::perlin::SimplexNoise>>,
+}
+
+impl LazyEndIsland {
+    pub fn new() -> Self {
+        Self { cache: std::sync::Arc::new(std::sync::OnceLock::new()) }
+    }
+
+    fn get_or_init(&self, seed: i64) -> &crate::perlin::SimplexNoise {
+        self.cache.get_or_init(|| {
+            // Vanilla: new LegacyRandomSource(seed); consumeCount(17292);
+            // new SimplexNoise(islandRandom).
+            let mut r = crate::xoroshiro::LegacyRandomSource::new(seed);
+            r.consume_count(17292);
+            crate::perlin::SimplexNoise::new(&mut r)
+        })
+    }
+}
+
+impl Clone for LazyEndIsland {
+    fn clone(&self) -> Self {
+        Self { cache: self.cache.clone() }
+    }
 }
 
 /// Lazy wrapper around [`crate::perlin::BlendedNoise`].
@@ -567,6 +618,8 @@ pub mod opcode {
     pub const WEIRD_SCALED_SAMPLER: u8 = 0x15;
     pub const SPLINE: u8 = 0x16;
     pub const BLENDED_NOISE: u8 = 0x17;
+    pub const FIND_TOP_SURFACE: u8 = 0x18;
+    pub const END_ISLAND: u8 = 0x19;
 
     // Spline sub-opcodes.
     pub const SPLINE_CONSTANT: u8 = 0x00;
@@ -696,6 +749,14 @@ fn parse_node(bytes: &[u8], c: &mut usize) -> Result<DensityFunction, String> {
                 xz_scale, y_scale, xz_factor, y_factor, smear,
             )))
         }
+        opcode::FIND_TOP_SURFACE => {
+            let density = Box::new(parse_node(bytes, c)?);
+            let upper_bound = Box::new(parse_node(bytes, c)?);
+            let lower_bound = read_i32(bytes, c)?;
+            let cell_height = read_i32(bytes, c)?;
+            Ok(DensityFunction::FindTopSurface { density, upper_bound, lower_bound, cell_height })
+        }
+        opcode::END_ISLAND => Ok(DensityFunction::EndIsland(LazyEndIsland::new())),
         other => Err(format!("unknown DF opcode: 0x{:02x} at offset {}", other, *c - 1)),
     }
 }
@@ -918,6 +979,38 @@ impl DensityFunction {
 
             DensityFunction::BlendedNoise(lazy) => {
                 lazy.sample(state, ctx.block_x, ctx.block_y, ctx.block_z)
+            }
+
+            DensityFunction::FindTopSurface { density, upper_bound, lower_bound, cell_height } => {
+                // Vanilla:
+                //   topY = floor(upperBound.compute(ctx) / cellHeight) * cellHeight
+                //   if (topY <= lowerBound) return lowerBound
+                //   for (blockY = topY; blockY >= lowerBound; blockY -= cellHeight)
+                //       if (density.compute(SinglePointContext(x, blockY, z)) > 0)
+                //           return blockY
+                //   return lowerBound
+                let upper_v = upper_bound.compute(ctx, state);
+                let top_y = (upper_v / *cell_height as f64).floor() as i32 * *cell_height;
+                if top_y <= *lower_bound {
+                    return *lower_bound as f64;
+                }
+                let mut block_y = top_y;
+                while block_y >= *lower_bound {
+                    let inner_ctx = FunctionContext::new(ctx.block_x, block_y, ctx.block_z);
+                    if density.compute(&inner_ctx, state) > 0.0 {
+                        return block_y as f64;
+                    }
+                    block_y -= *cell_height;
+                }
+                *lower_bound as f64
+            }
+
+            DensityFunction::EndIsland(lazy) => {
+                let noise = lazy.get_or_init(state.seed);
+                // Vanilla compute: (getHeightValue(islandNoise, x/8, z/8) - 8.0) / 128.0.
+                // Java int div truncates toward zero (matches Rust's `i32 / i32`).
+                let height = end_island_height(noise, ctx.block_x / 8, ctx.block_z / 8);
+                (height as f64 - 8.0) / 128.0
             }
         }
     }
@@ -1184,6 +1277,16 @@ impl DensityFunction {
                     out[i] = lazy.sample(state, xs[i], ys[i], zs[i]);
                 }
             }
+            // FindTopSurface and EndIsland are unusual: they short-circuit
+            // by recursive compute on synthetic ctxs (FindTopSurface) or do
+            // a 25x25 fixed search (EndIsland).  Batch-walk them by per-cell
+            // dispatch.
+            DensityFunction::FindTopSurface { .. } | DensityFunction::EndIsland(_) => {
+                for i in 0..n {
+                    let ctx = FunctionContext::new(xs[i], ys[i], zs[i]);
+                    out[i] = self.compute(&ctx, state);
+                }
+            }
         }
     }
 
@@ -1249,7 +1352,13 @@ impl DensityFunction {
             | DensityFunction::Shift { .. }
             | DensityFunction::ShiftA { .. }
             | DensityFunction::ShiftB { .. }
-            | DensityFunction::BlendedNoise(_) => {}
+            | DensityFunction::BlendedNoise(_)
+            | DensityFunction::EndIsland(_) => {}
+            // FindTopSurface internally builds its own SinglePointContext —
+            // we cannot lerp through it.  Treat as leaf for DI-input
+            // enumeration; per-block compute will dispatch through the
+            // synthetic-ctx path naturally.
+            DensityFunction::FindTopSurface { .. } => {}
         }
     }
 
@@ -1432,6 +1541,11 @@ impl DensityFunction {
             // short-circuits never falsely trigger; the cost is just a
             // missed perf optimization on Min(blended, ...) paths.
             DensityFunction::BlendedNoise(_) => f64::NEG_INFINITY,
+
+            // FindTopSurface always returns at least `lower_bound`.
+            DensityFunction::FindTopSurface { lower_bound, .. } => *lower_bound as f64,
+            // Vanilla literal: -0.84375.
+            DensityFunction::EndIsland(_) => -0.84375,
         }
     }
 
@@ -1491,6 +1605,18 @@ impl DensityFunction {
 
             // See min_value() — INFINITY for the same reason.
             DensityFunction::BlendedNoise(_) => f64::INFINITY,
+
+            // Vanilla FindTopSurface returns either lower_bound or some
+            // y in [lower_bound, top_y] where top_y is bounded by
+            // upper_bound.maxValue() / cell_height * cell_height.
+            DensityFunction::FindTopSurface { upper_bound, lower_bound, cell_height, .. } => {
+                let top = (upper_bound.max_value() / *cell_height as f64).floor()
+                    * *cell_height as f64;
+                top.max(*lower_bound as f64)
+            }
+
+            // Vanilla literal: 0.5625.
+            DensityFunction::EndIsland(_) => 0.5625,
         }
     }
 
@@ -1562,6 +1688,43 @@ fn trilinear_lerp_corner(
     let cxy1 = cx01 + fy * (cx11 - cx01);
 
     cxy0 + fz * (cxy1 - cxy0)
+}
+
+/// Vanilla `EndIslandDensityFunction.getHeightValue(islandNoise, sectionX, sectionZ)`.
+/// 25x25 island grid scan around the (chunkX, chunkZ) of `(sectionX, sectionZ)`,
+/// clamped distance falloff with per-island sub-section noise selection.
+/// Uses `f32` for the cumulative `doffs` to match vanilla's `float` semantics
+/// exactly (intermediate rounding differs from f64).
+fn end_island_height(noise: &crate::perlin::SimplexNoise, section_x: i32, section_z: i32) -> f32 {
+    let chunk_x = section_x / 2;
+    let chunk_z = section_z / 2;
+    let sub_x = section_x % 2;
+    let sub_z = section_z % 2;
+    // Vanilla: float doffs = 100.0F - Mth.sqrt(sx*sx + sz*sz) * 8.0F;
+    // sx*sz are int promoted to float.
+    let mut doffs = 100.0_f32
+        - ((section_x * section_x + section_z * section_z) as f32).sqrt() * 8.0;
+    doffs = doffs.clamp(-100.0, 80.0);
+    for xo in -12_i32..=12 {
+        for zo in -12_i32..=12 {
+            let total_chunk_x = (chunk_x + xo) as i64;
+            let total_chunk_z = (chunk_z + zo) as i64;
+            if total_chunk_x * total_chunk_x + total_chunk_z * total_chunk_z > 4096
+                && noise.get_value_2d(total_chunk_x as f64, total_chunk_z as f64) < -0.9
+            {
+                // Vanilla uses Mth.abs(float).
+                let island_size = ((total_chunk_x as f32).abs() * 3439.0
+                    + (total_chunk_z as f32).abs() * 147.0) % 13.0
+                    + 9.0;
+                let xd = (sub_x - xo * 2) as f32;
+                let zd = (sub_z - zo * 2) as f32;
+                let mut new_doffs = 100.0_f32 - (xd * xd + zd * zd).sqrt() * island_size;
+                new_doffs = new_doffs.clamp(-100.0, 80.0);
+                if new_doffs > doffs { doffs = new_doffs; }
+            }
+        }
+    }
+    doffs
 }
 
 fn clamped_map(v: f64, from: f64, to: f64, from_value: f64, to_value: f64) -> f64 {

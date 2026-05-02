@@ -82,6 +82,8 @@ public final class DensityFunctionWalker {
 	private static final int OP_WEIRD_SCALED_SAMPLER = 0x15;
 	private static final int OP_SPLINE = 0x16;
 	private static final int OP_BLENDED_NOISE = 0x17;
+	private static final int OP_FIND_TOP_SURFACE = 0x18;
+	private static final int OP_END_ISLAND = 0x19;
 	private static final int OP_SPLINE_CONSTANT = 0x00;
 	private static final int OP_SPLINE_MULTIPOINT = 0x01;
 	private static final int MARKER_INTERPOLATED = 0;
@@ -166,6 +168,19 @@ public final class DensityFunctionWalker {
 
 		if (cls.contains("YClampedGradient") || cls.contains("ClampedYGradient") || cls.contains("YGradient")) {
 			encodeYClampedGradient(out, node); return;
+		}
+		// 26.1.2 added FindTopSurface (used by overworld/caves/noodle).
+		// Private record: density, upperBound, lowerBound, cellHeight.
+		if (cls.equals("FindTopSurface") || cls.endsWith("$FindTopSurface")) {
+			encodeFindTopSurface(out, node); return;
+		}
+		// 26.1.2 EndIslandDensityFunction is seed-derived and reseeded by
+		// RandomState.wrapNew at world load.  Walker encodes a no-arg
+		// opcode; Rust constructs the SimplexNoise lazily from state.seed.
+		if (cls.equals("EndIslandDensityFunction") || cls.endsWith("$EndIslandDensityFunction")
+				|| cls.contains("EndIsland")) {
+			out.write(OP_END_ISLAND);
+			return;
 		}
 		if (cls.contains("ShiftedNoise")) { encodeShiftedNoise(out, node); return; }
 		if (cls.equals("ShiftA") || cls.endsWith("$ShiftA")) { encodeShiftKind(out, node, OP_SHIFT_A); return; }
@@ -410,6 +425,16 @@ public final class DensityFunctionWalker {
 
 	private static final java.util.concurrent.ConcurrentHashMap<String, Boolean> seenYcg =
 			new java.util.concurrent.ConcurrentHashMap<>();
+	private static void encodeFindTopSurface(ByteArrayOutputStream out, Object node) {
+		out.write(OP_FIND_TOP_SURFACE);
+		writeNode(out, invokeAny(node, new String[]{"density"}));
+		writeNode(out, invokeAny(node, new String[]{"upperBound", "upper_bound"}));
+		Integer lower = readIntAny(node, new String[]{"lowerBound", "lower_bound"});
+		Integer cell = readIntAny(node, new String[]{"cellHeight", "cell_height"});
+		writeInt(out, lower == null ? 0 : lower);
+		writeInt(out, cell == null ? 1 : cell);
+	}
+
 	private static void encodeYClampedGradient(ByteArrayOutputStream out, Object node) {
 		out.write(OP_Y_CLAMPED_GRADIENT);
 		Integer fromY = readIntAny(node, new String[]{"fromY", "from_y"});
@@ -739,12 +764,24 @@ public final class DensityFunctionWalker {
 		Object data = invokeNoArg(holder, "noiseData");
 		if (data == null) return "";
 		try {
-			Method getKey = data.getClass().getMethod("getKey");
-			Object opt = getKey.invoke(data);
+			// 26.1.2: Holder.unwrapKey + ResourceKey.identifier.  Older
+			// yarn: getKey + getValue.  Try mojmap names first.
+			Method unwrapKey = null;
+			for (String n : new String[]{"unwrapKey", "getKey"}) {
+				try { unwrapKey = data.getClass().getMethod(n); break; }
+				catch (NoSuchMethodException ignored) {}
+			}
+			if (unwrapKey == null) return "";
+			Object opt = unwrapKey.invoke(data);
 			if (opt instanceof java.util.Optional<?> o && o.isPresent()) {
 				Object regKey = o.get();
-				Method getValue = regKey.getClass().getMethod("getValue");
-				Object id = getValue.invoke(regKey);
+				Method getId = null;
+				for (String n : new String[]{"identifier", "getValue", "location"}) {
+					try { getId = regKey.getClass().getMethod(n); break; }
+					catch (NoSuchMethodException ignored) {}
+				}
+				if (getId == null) return "";
+				Object id = getId.invoke(regKey);
 				if (id != null) return id.toString();
 			}
 		} catch (ReflectiveOperationException ignored) {

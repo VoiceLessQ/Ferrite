@@ -181,12 +181,20 @@ public final class DensityParity {
 	private static String synthNameToRouterField(String fullName) {
 		switch (fullName) {
 			case "ferrite:terrain/final_density": return "finalDensity";
+			case "ferrite:terrain/preliminary_surface_level": return "preliminarySurfaceLevel";
 			case "ferrite:climate/temperature": return "temperature";
 			case "ferrite:climate/vegetation": return "vegetation";
 			case "ferrite:climate/continents": return "continents";
 			case "ferrite:climate/erosion": return "erosion";
 			case "ferrite:climate/depth": return "depth";
 			case "ferrite:climate/ridges": return "ridges";
+			case "ferrite:aquifer/barrier": return "barrierNoise";
+			case "ferrite:aquifer/fluid_level_floodedness": return "fluidLevelFloodednessNoise";
+			case "ferrite:aquifer/fluid_level_spread": return "fluidLevelSpreadNoise";
+			case "ferrite:aquifer/lava": return "lavaNoise";
+			case "ferrite:vein/toggle": return "veinToggle";
+			case "ferrite:vein/ridged": return "veinRidged";
+			case "ferrite:vein/gap": return "veinGap";
 			default: return null;
 		}
 	}
@@ -311,6 +319,27 @@ public final class DensityParity {
 									if (reseeded != null) {
 										applyCalls.incrementAndGet();
 										return reseeded;
+									}
+								}
+								// Same shape for EndIslandDensityFunction: registry
+								// instance carries seed=0; vanilla's RandomState
+								// wrapNew rebuilds it with the world seed.  Mirror
+								// here so vanilla-side compute matches Rust's
+								// state.seed-keyed SimplexNoise.
+								if (childCls.equals("EndIslandDensityFunction")
+										|| childCls.contains("EndIslandDensityFunction")) {
+									try {
+										java.lang.reflect.Constructor<?> ctor =
+												child.getClass().getDeclaredConstructor(long.class);
+										ctor.setAccessible(true);
+										Object reseeded = ctor.newInstance(
+												WorldgenStateBootstrap.capturedWorldSeed());
+										if (reseeded != null) {
+											applyCalls.incrementAndGet();
+											return reseeded;
+										}
+									} catch (ReflectiveOperationException ignored) {
+										// fall through to passthrough
 									}
 								}
 							}

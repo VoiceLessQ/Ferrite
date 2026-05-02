@@ -107,6 +107,99 @@ pub fn floor_to_i32(v: f64) -> i32 {
 }
 
 // ============================================================================
+// SimplexNoise (used by EndIslandDensityFunction only)
+// ============================================================================
+
+/// Direct port of vanilla `SimplexNoise` from
+/// `world/level/levelgen/synth/SimplexNoise.java`.
+/// Initialized from a `LegacyRandomSource` (java.util.Random LCG).
+/// Supports both 2D and 3D variants; the only caller in this crate is
+/// `EndIslandDensityFunction` which uses the 2D version.
+#[derive(Clone, Debug)]
+pub struct SimplexNoise {
+    pub xo: f64,
+    pub yo: f64,
+    pub zo: f64,
+    /// Permutation of [0, 256), wrapped via `& 0xFF` on access.
+    /// Vanilla declares `int[512]` but only fills the first 256; the
+    /// extra 256 are zeros that get re-read after the `& 0xFF` mask.
+    /// We mirror that exactly with a 256-entry array + the same mask.
+    p: [i32; 256],
+}
+
+const SIMPLEX_F2: f64 = 0.5 * (1.732_050_807_568_877_2 - 1.0); // 0.5 * (sqrt(3) - 1)
+const SIMPLEX_G2: f64 = (3.0 - 1.732_050_807_568_877_2) / 6.0;
+
+impl SimplexNoise {
+    pub fn new(random: &mut crate::xoroshiro::LegacyRandomSource) -> Self {
+        let xo = random.next_double() * 256.0;
+        let yo = random.next_double() * 256.0;
+        let zo = random.next_double() * 256.0;
+        let mut p = [0_i32; 256];
+        for i in 0..256 { p[i] = i as i32; }
+        for ix in 0..256 {
+            let offset = random.next_int_bound((256 - ix) as i32) as usize;
+            p.swap(ix, offset + ix);
+        }
+        Self { xo, yo, zo, p }
+    }
+
+    #[inline]
+    fn p(&self, x: i32) -> i32 {
+        self.p[(x as usize) & 0xFF]
+    }
+
+    #[inline]
+    fn dot2(g: [i32; 3], x: f64, y: f64, z: f64) -> f64 {
+        (g[0] as f64) * x + (g[1] as f64) * y + (g[2] as f64) * z
+    }
+
+    #[inline]
+    fn corner3d(&self, index: i32, x: f64, y: f64, z: f64, base: f64) -> f64 {
+        let mut t = base - x * x - y * y - z * z;
+        if t < 0.0 { return 0.0; }
+        t *= t;
+        let g = SIMPLEX_GRADIENT[(index as usize) & 0xF];
+        t * t * Self::dot2(g, x, y, z)
+    }
+
+    /// Vanilla `getValue(double, double)` — 2D simplex noise.
+    pub fn get_value_2d(&self, xin: f64, yin: f64) -> f64 {
+        let s = (xin + yin) * SIMPLEX_F2;
+        let i = floor_to_i32(xin + s);
+        let j = floor_to_i32(yin + s);
+        let t = ((i + j) as f64) * SIMPLEX_G2;
+        let x0 = xin - (i as f64 - t);
+        let y0 = yin - (j as f64 - t);
+        let (i1, j1) = if x0 > y0 { (1, 0) } else { (0, 1) };
+        let x1 = x0 - i1 as f64 + SIMPLEX_G2;
+        let y1 = y0 - j1 as f64 + SIMPLEX_G2;
+        let x2 = x0 - 1.0 + 2.0 * SIMPLEX_G2;
+        let y2 = y0 - 1.0 + 2.0 * SIMPLEX_G2;
+        let ii = i & 0xFF;
+        let jj = j & 0xFF;
+        let gi0 = (self.p(ii + self.p(jj))).rem_euclid(12);
+        let gi1 = (self.p(ii + i1 + self.p(jj + j1))).rem_euclid(12);
+        let gi2 = (self.p(ii + 1 + self.p(jj + 1))).rem_euclid(12);
+        let n0 = self.corner3d(gi0, x0, y0, 0.0, 0.5);
+        let n1 = self.corner3d(gi1, x1, y1, 0.0, 0.5);
+        let n2 = self.corner3d(gi2, x2, y2, 0.0, 0.5);
+        70.0 * (n0 + n1 + n2)
+    }
+}
+
+/// Vanilla `SimplexNoise.GRADIENT` — same as the 16-row table used by
+/// `ImprovedNoise` but extended with `% 12` indexing in the simplex
+/// path.  Duplicated here as a self-contained `[[i32; 3]; 16]` for
+/// convenience; values match `world/level/levelgen/synth/SimplexNoise.java`.
+const SIMPLEX_GRADIENT: [[i32; 3]; 16] = [
+    [1, 1, 0],   [-1, 1, 0],  [1, -1, 0],  [-1, -1, 0],
+    [1, 0, 1],   [-1, 0, 1],  [1, 0, -1],  [-1, 0, -1],
+    [0, 1, 1],   [0, -1, 1],  [0, 1, -1],  [0, -1, -1],
+    [1, 1, 0],   [0, -1, 1],  [-1, 1, 0],  [0, -1, -1],
+];
+
+// ============================================================================
 // ImprovedNoise
 // ============================================================================
 
