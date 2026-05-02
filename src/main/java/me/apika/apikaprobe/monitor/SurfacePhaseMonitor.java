@@ -168,7 +168,7 @@ public final class SurfacePhaseMonitor {
 		for (int i = 0; i < PHASE_COUNT; i++) accounted += phaseTotals[i];
 		long otherTotal = Math.max(0L, buildTotal - accounted);
 
-		LOGGER.info(
+		MonitorLog.info(
 			"[surface-phase] build: avg={} max={}  tryApply: avg={} max={}  "
 			+ "blockRead: avg={} max={}  blockWrite: avg={} max={}  "
 			+ "ctxUpdate: avg={} max={}  biomeLookup: avg={} max={}  "

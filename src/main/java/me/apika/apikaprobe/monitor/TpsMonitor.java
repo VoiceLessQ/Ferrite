@@ -53,7 +53,7 @@ public final class TpsMonitor {
 			// if it overruns, TPS drops proportionally.
 			double tps = Math.min(20.0, 1000.0 / avgMs);
 
-			LOGGER.info("[mspt] avg={} ms  max={} ms  tps={}  samples={}",
+			MonitorLog.info("[mspt] avg={} ms  max={} ms  tps={}  samples={}",
 					String.format("%.2f", avgMs),
 					String.format("%.2f", maxMs),
 					String.format("%.2f", tps),

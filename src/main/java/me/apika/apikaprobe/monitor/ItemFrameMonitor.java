@@ -50,11 +50,11 @@ public final class ItemFrameMonitor {
 				int prev = lastLoggedCount;
 				lastLoggedCount = total;
 				if (prev < 0) {
-					LOGGER.info("[item-frame] count={}", total);
+					MonitorLog.info("[item-frame] count={}", total);
 				} else {
 					int delta = total - prev;
 					String sign = delta >= 0 ? "+" : "";
-					LOGGER.info("[item-frame] count={} (was {}, delta {}{})", total, prev, sign, delta);
+					MonitorLog.info("[item-frame] count={} (was {}, delta {}{})", total, prev, sign, delta);
 				}
 			}
 		});

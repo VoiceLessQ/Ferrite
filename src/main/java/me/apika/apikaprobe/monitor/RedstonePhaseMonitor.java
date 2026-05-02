@@ -224,7 +224,7 @@ public final class RedstonePhaseMonitor {
 		if (wCount == 0L && gCount == 0L) return;
 
 		String rustPct = wCount == 0L ? "0.0" : String.format("%.1f", (100.0 * wRust) / wCount);
-		LOGGER.info("[redstone] wire: avg={}ms max={}ms cascades={} (gate-driven={} direct={}, default={} exp={})  rust-bfs: activations={} ({}% of cascades)  gates: avg={}ms max={}ms ticks={}  n={} server-ticks",
+		MonitorLog.info("[redstone] wire: avg={}ms max={}ms cascades={} (gate-driven={} direct={}, default={} exp={})  rust-bfs: activations={} ({}% of cascades)  gates: avg={}ms max={}ms ticks={}  n={} server-ticks",
 				formatAvg(wCount, wTotal), formatMs(wMax), wCount, wGate, wDirect, cDefault, cExp,
 				wRust, rustPct,
 				formatAvg(gCount, gTotal), formatMs(gMax), gCount,
@@ -258,8 +258,8 @@ public final class RedstonePhaseMonitor {
 		}
 		sizes.append(']');
 		if (anyBucket) {
-			LOGGER.info(sizes.toString());
-			LOGGER.info(timing.toString());
+			MonitorLog.info(sizes.toString());
+			MonitorLog.info(timing.toString());
 		}
 	}
 

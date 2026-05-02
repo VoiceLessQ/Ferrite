@@ -113,7 +113,7 @@ public final class NoiseStageMonitor {
 		double syncPerChunkMs = syncCount == 0L ? 0.0 : (syncTotal / (double) syncCount) / 1_000_000.0;
 		double inferredBlockstateMs = Math.max(0.0, syncPerChunkMs - startPerChunkMs - endPerChunkMs);
 
-		LOGGER.info("[noisestages] start: avg={} ms max={} ms  end: avg={} ms max={} ms (n={})  blockstate(inferred): avg={} ms/chunk",
+		MonitorLog.info("[noisestages] start: avg={} ms max={} ms  end: avg={} ms max={} ms (n={})  blockstate(inferred): avg={} ms/chunk",
 				String.format("%.2f", startPerChunkMs),
 				formatMs(sMax),
 				String.format("%.2f", endPerChunkMs),

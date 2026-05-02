@@ -36,7 +36,7 @@ public final class HopperPerSlotMonitor {
 
 	public static void register() {
 		ServerTickEvents.END_SERVER_TICK.register(server -> maybeReport());
-		LOGGER.info("[hopper-perslot] init enable={} validate={}",
+		MonitorLog.info("[hopper-perslot] init enable={} validate={}",
 			PerSlotFireConfig.ENABLE, PerSlotFireConfig.VALIDATE);
 	}
 
@@ -52,7 +52,7 @@ public final class HopperPerSlotMonitor {
 	public static void onTickViolation(BlockPos pos, int delta) {
 		TICK_VIOLATIONS.incrementAndGet();
 		if (VAL_LOG_BUDGET.getAndDecrement() > 0) {
-			LOGGER.warn("[hopper-perslot] TICK VIOLATION at {} delta={} (>1 item moved in single tick)", pos, delta);
+			MonitorLog.warn("[hopper-perslot] TICK VIOLATION at {} delta={} (>1 item moved in single tick)", pos, delta);
 		}
 	}
 
@@ -70,7 +70,7 @@ public final class HopperPerSlotMonitor {
 		if (delta < 8L) {
 			COOLDOWN_VIOLATIONS.incrementAndGet();
 			if (VAL_LOG_BUDGET.getAndDecrement() > 0) {
-				LOGGER.warn("[hopper-perslot] COOLDOWN VIOLATION at {} slot={} delta={} ticks (<8)", pos, slot, delta);
+				MonitorLog.warn("[hopper-perslot] COOLDOWN VIOLATION at {} slot={} delta={} ticks (<8)", pos, slot, delta);
 			}
 		}
 	}
@@ -78,7 +78,7 @@ public final class HopperPerSlotMonitor {
 	public static void onStaggerCollapse(BlockPos pos, int[] cooldowns) {
 		STAGGER_COLLAPSES.incrementAndGet();
 		if (VAL_LOG_BUDGET.getAndDecrement() > 0) {
-			LOGGER.warn("[hopper-perslot] STAGGER COLLAPSE at {} cooldowns={}", pos, java.util.Arrays.toString(cooldowns));
+			MonitorLog.warn("[hopper-perslot] STAGGER COLLAPSE at {} cooldowns={}", pos, java.util.Arrays.toString(cooldowns));
 		}
 	}
 
@@ -109,7 +109,7 @@ public final class HopperPerSlotMonitor {
 		if (fires == 0L && noReady == 0L && laneH == 0L && laneF == 0L) return;
 		lastReportNs = now;
 
-		LOGGER.info(
+		MonitorLog.info(
 			"[hopper-perslot] fires={} items={} noReady={} tickViolations={} staggerCollapses={} laneHits={} laneFallbacks={} cooldownViolations={}",
 			fires, items, noReady, tickV, staggerC, laneH, laneF, cdV
 		);
@@ -122,6 +122,6 @@ public final class HopperPerSlotMonitor {
 			  .append(" max=").append(maxS[i])
 			  .append(" n=").append(cntS[i]).append("]");
 		}
-		LOGGER.info(sb.toString());
+		MonitorLog.info(sb.toString());
 	}
 }

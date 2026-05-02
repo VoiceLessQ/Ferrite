@@ -153,7 +153,7 @@ public final class MonsterPhaseMonitor {
 		// from the max-mobTick tick), so we only report self as an avg.
 		long moveSelfTotal = Math.max(0L, moveTotal - aiTotal);
 
-		LOGGER.info("[monster-phase] baseTick: avg={} max={}  movement: avg={} max={} (self={})  mobTick: avg={} max={}  n={} ticks",
+		MonitorLog.info("[monster-phase] baseTick: avg={} max={}  movement: avg={} max={} (self={})  mobTick: avg={} max={}  n={} ticks",
 				formatMs(baseTotal / ticks),
 				formatMs(baseMax),
 				formatMs(moveTotal / ticks),

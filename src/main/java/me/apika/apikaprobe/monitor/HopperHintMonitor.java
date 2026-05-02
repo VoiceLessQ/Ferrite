@@ -36,7 +36,7 @@ public final class HopperHintMonitor {
 
 	public static void register() {
 		ServerTickEvents.END_SERVER_TICK.register(server -> maybeReport());
-		LOGGER.info("[hopper-hint] init useHint={} validate={}", USE_HINT, VALIDATE);
+		MonitorLog.info("[hopper-hint] init useHint={} validate={}", USE_HINT, VALIDATE);
 	}
 
 	public static void onHit(int hintAt, long elapsedNs) {
@@ -67,7 +67,7 @@ public final class HopperHintMonitor {
 		if (stale) {
 			VAL_STALE.incrementAndGet();
 			if (VAL_LOG_BUDGET.getAndDecrement() > 0) {
-				LOGGER.warn(
+				MonitorLog.warn(
 					"[hopper-hint] STALE hint at {} hint={} but firstNonEmpty={} (slots [0..{}) non-empty)",
 					pos, hint, firstNonEmpty, hint
 				);
@@ -100,7 +100,7 @@ public final class HopperHintMonitor {
 			long calls = hits + wrapped + failed;
 			double avgStartIdx = hits > 0 ? (double) startSum / hits : 0.0;
 			double usPerCall   = totalNs / 1_000.0 / Math.max(1L, calls);
-			LOGGER.info(
+			MonitorLog.info(
 				"[hopper-hint] hint  calls={} hit={} wrap={} fail={} noInv={} avgStartIdx={} usPerCall={}",
 				calls, hits, wrapped, failed, noInv,
 				String.format("%.2f", avgStartIdx),
@@ -108,7 +108,7 @@ public final class HopperHintMonitor {
 			);
 		}
 		if (hadVal) {
-			LOGGER.info(
+			MonitorLog.info(
 				"[hopper-hint] valid total={} stale={} ({}%) noInv={} unsupported={}",
 				valTotal, valStale,
 				String.format("%.3f", 100.0 * valStale / Math.max(1L, valTotal)),
