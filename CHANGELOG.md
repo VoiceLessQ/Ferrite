@@ -19,7 +19,7 @@ marks pre-release research builds.
 
 ### Logging
 
-- **`/ferrite log monitors on|off|status`** — runtime gate for the periodic monitor reports (`[entity-tick]`, `[chunkgen]`, `[redstone-phase]`, etc.). About 5 lines/sec across 24 buckets in normal play; some users reported client lag attributable to the log volume. JVM-arg equivalent: `-Dferrite.log.monitors.off=true`. Counters keep ticking when disabled, so re-enabling picks up cleanly from the next 5s window — no backlog dump. Also applied on the 1.21.11 branch.
+- **`/ferrite log monitors on|off|status`** — runtime gate for the periodic monitor reports (`[entity-tick]`, `[chunkgen]`, `[redstone-phase]`, etc.). About 5 lines/sec across 24 buckets in normal play, plus the disk I/O. Added preemptively to avoid log-volume lag on long sessions and on hardware where I/O is the bottleneck. JVM-arg equivalent: `-Dferrite.log.monitors.off=true`. Counters keep ticking when disabled, so re-enabling picks up cleanly from the next 5s window — no backlog dump. Also applied on the 1.21.11 branch.
 
 ### Performance
 
