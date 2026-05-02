@@ -440,10 +440,10 @@ runClient is clean and a one-shot autovalidate run (gated by
   quantized-edge case (lush_caves vs dripstone_caves) that the
   ParameterPoint partitioning cannot disambiguate — same shape as
   the pre-migration miss profile.
-- Density functions: 5/50 pass at samples=2000 — real regression.
+- Density functions: 50/50 pass at samples=2000, worst diff = 0.000e+00.
+  Bit-exact, beating the 1.21.11 baseline of 41/42.
 
-The DF gap is two distinct issues, neither of which is a Rust
-interpreter bug:
+Reaching DF parity on 26.1.2 took four distinct fixes:
 
 1. 26.1.2 unified Add/Mul/Min/Max into a single `private record Ap2`
    with a `type` enum.  The walker dispatched by class-name substring
@@ -455,20 +455,32 @@ interpreter bug:
    records: the auto-generated accessor is public but the declaring
    class is not exported, so invoke throws IllegalAccessException
    inside our reflection catch-all.  Switched to `getDeclaredMethod`+
-   `setAccessible(true)` walking the superclass chain.  Fixed.
+   `setAccessible(true)` walking the superclass chain.
+3. `resolveNoiseName` in the walker used yarn `getKey`/`getValue` on the
+   NoiseHolder's noiseData Holder.  Returned empty string on every
+   call.  Rust looked up "" in state.noises, found nothing, returned
+   0.0, and every Noise leaf silently zeroed.  This was the single
+   biggest hit: lifted DF pass from 5/50 to 41/50 once corrected.
+4. New 26.1.2 DFs: FindTopSurface (`overworld/caves/noodle`) and
+   EndIslandDensityFunction (`end/sloped_cheese`) needed Rust
+   interpreter ports.  EndIsland required SimplexNoise (2D port) and
+   LegacyRandomSource (java.util.Random LCG) as new building blocks;
+   wrapped in `LazyEndIsland` with `Arc<OnceLock<SimplexNoise>>` so
+   the noise table is built lazily from `state.seed` and shared
+   across enum clones.  Walker emits `OP_FIND_TOP_SURFACE` /
+   `OP_END_ISLAND`; the validator visitor mirrors `RandomState.wrapNew`
+   by rebuilding the registry's seed=0 EndIsland with the world seed
+   so vanilla and Rust agree on the SimplexNoise table.
 
-After both fixes the headline gap is FindTopSurface (used in
-`overworld/caves/noodle`, diff = 64.08 because we stub it to 0) and
-EndIslandDensityFunction.  Both are new in 26.1.2 and need Rust
-interpreter ports.  Tracked as deferred work; current default-on
-shipping path doesn't go through the registry validator output, so
-this gap doesn't break runtime — it blocks reproducibility claims for
-the climate / caves DFs.
+DensityParity also needed `synthNameToRouterField` extended to cover
+the aquifer/* and vein/* entries — the original map only had climate
+roots so 8 of the 50 names were silently failing with "no live
+router DF" before this pass.
 
 Lessons for the next major-version port:
 
 - **Validators are first-class infrastructure, not optional.** The
-  parity validators caught both walker bugs in one autovalidate run.
+  parity validators caught every walker bug in one autovalidate run.
   Without them, every DF would silently CONSTANT-fold and we would
   not know until somebody ran `/ferrite density validate` on a
   shipped jar.
@@ -480,3 +492,10 @@ Lessons for the next major-version port:
   been moving DF types to private records for ~2 versions.  Default
   to `setAccessible(true)` on every reflective accessor walk; the
   cost is zero and the bug class is invisible until you hit it.
+- **One walker bug can fake "many DFs are broken."** The empty-
+  noise-name issue produced 45 distinct failures with diffs
+  spanning 0.04 to 64, looking like an interpreter rewrite was
+  needed.  In reality, all of them shared one root cause two layers
+  up.  Sort failures by diff magnitude and look for the smallest
+  *recurring* failure first; large diffs often share a common
+  upstream null.
