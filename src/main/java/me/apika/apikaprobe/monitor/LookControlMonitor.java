@@ -66,7 +66,7 @@ public final class LookControlMonitor {
 		double totalMsPerTick = totalNs / 1_000_000.0 / ticks;
 		double avgUsPerCall   = totalNs / 1_000.0 / calls;
 
-		LOGGER.info(
+		MonitorLog.info(
 			"[look-control] calls={}/tick total={}ms avg={}us/call  n={} ticks",
 			String.format("%.1f", callsPerTick),
 			String.format("%.3f", totalMsPerTick),

@@ -96,7 +96,7 @@ public final class TargetScanMonitor {
 		double scanMsPerTick = scanNs / 1_000_000.0 / ticks;
 		double perScanMs = scanCount > 0 ? (scanNs / 1_000_000.0 / scanCount) : 0.0;
 
-		LOGGER.info(
+		MonitorLog.info(
 			"[target-scan] canStart: avg={}/tick  scans: avg={}/tick ({})  scan_time: avg={}ms/tick  per_scan={}ms  n={} ticks",
 			String.format("%.1f", canStartPerTick),
 			String.format("%.1f", scansPerTick),

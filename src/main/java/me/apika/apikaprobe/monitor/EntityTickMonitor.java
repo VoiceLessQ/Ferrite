@@ -155,7 +155,7 @@ public final class EntityTickMonitor {
 			  .append(formatMs(maxes[i]));
 		}
 		sb.append("  n=").append(ticks).append(" ticks");
-		LOGGER.info(sb.toString());
+		MonitorLog.info(sb.toString());
 	}
 
 	private static String formatMs(long nanos) {

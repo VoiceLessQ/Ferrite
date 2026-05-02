@@ -220,7 +220,12 @@ public final class FerriteCommand {
 								.then(Commands.literal("on").executes(FerriteCommand::dispatcherProbeOn))
 								.then(Commands.literal("off").executes(FerriteCommand::dispatcherProbeOff))
 								.then(Commands.literal("status").executes(FerriteCommand::dispatcherProbeStatus))
-								.then(Commands.literal("reset").executes(FerriteCommand::dispatcherProbeReset)))));
+								.then(Commands.literal("reset").executes(FerriteCommand::dispatcherProbeReset))))
+				.then(Commands.literal("log")
+						.then(Commands.literal("monitors")
+								.then(Commands.literal("on").executes(FerriteCommand::logMonitorsOn))
+								.then(Commands.literal("off").executes(FerriteCommand::logMonitorsOff))
+								.then(Commands.literal("status").executes(FerriteCommand::logMonitorsStatus)))));
 	}
 
 	/**
@@ -1471,6 +1476,39 @@ public final class FerriteCommand {
 		FerriteDispatcherProbe.resetDiag();
 		String msg = "[ferrite/dispatcher-probe] reset";
 		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * Toggle the periodic monitor log lines (`[entity-tick]`, `[chunkgen]`,
+	 * `[redstone-phase]`, etc.).  All ~24 monitors route through
+	 * {@link me.apika.apikaprobe.monitor.MonitorLog}; flipping ENABLED off
+	 * silences them without touching one-shot bootstrap logs or command
+	 * output.  Counters in each monitor still tick normally so re-enabling
+	 * picks up cleanly from the next 5s window.  JVM-arg equivalent:
+	 * {@code -Dferrite.log.monitors.off=true}.
+	 */
+	private static int logMonitorsOn(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		me.apika.apikaprobe.monitor.MonitorLog.ENABLED = true;
+		String msg = "[log] monitor reports ENABLED";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int logMonitorsOff(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		me.apika.apikaprobe.monitor.MonitorLog.ENABLED = false;
+		String msg = "[log] monitor reports DISABLED (counters still tick; toggle on or restart to resume)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int logMonitorsStatus(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		String msg = String.format("[log] monitors=%s",
+				me.apika.apikaprobe.monitor.MonitorLog.ENABLED ? "ENABLED" : "DISABLED");
+		sendFeedback(ctx, msg, false);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
 	}

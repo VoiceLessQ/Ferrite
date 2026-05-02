@@ -122,7 +122,7 @@ public final class HopperSlotMonitor {
 		if (iCalls > 0L) {
 			double usPerCall    = iNs / 1_000.0 / iCalls;
 			double nsPerAtt     = iAtt > 0L ? (double) iNs / iAtt : 0.0;
-			LOGGER.info(
+			MonitorLog.info(
 				"[hopper-slot] insert  calls={} succ@0={} succ>0={} fail={} avgAtt={} wasted={} ({}/call) failAtt={} usPerCall={} nsPerAtt={}",
 				iCalls, iAt0, iAfter, iFCalls,
 				String.format("%.2f", (double) iAtt / iCalls),
@@ -136,7 +136,7 @@ public final class HopperSlotMonitor {
 		if (eCalls > 0L) {
 			double usPerCall    = eNs / 1_000.0 / eCalls;
 			double nsPerAtt     = eAtt > 0L ? (double) eNs / eAtt : 0.0;
-			LOGGER.info(
+			MonitorLog.info(
 				"[hopper-slot] extract calls={} succ@0={} succ>0={} fail={} avgAtt={} wasted={} ({}/call) failAtt={} usPerCall={} nsPerAtt={}",
 				eCalls, eAt0, eAfter, eFCalls,
 				String.format("%.2f", (double) eAtt / eCalls),

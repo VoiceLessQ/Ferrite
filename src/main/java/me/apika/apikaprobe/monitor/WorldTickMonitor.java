@@ -124,7 +124,7 @@ public final class WorldTickMonitor {
 			return;
 		}
 
-		LOGGER.info("[worldtick] blockentities: avg={} ms max={} ms  entities: avg={} ms max={} ms  n={} ticks",
+		MonitorLog.info("[worldtick] blockentities: avg={} ms max={} ms  entities: avg={} ms max={} ms  n={} ticks",
 				formatMs(beTotal / ticks),
 				formatMs(beMax),
 				formatMs(entTotal / ticks),

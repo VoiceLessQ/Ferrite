@@ -139,7 +139,7 @@ public final class ChunkGenMonitor {
 			return;
 		}
 
-		LOGGER.info("[chunkgen] noise-dispatch: n={} avg={} ms max={} ms  noise-sync: n={} avg={} ms max={} ms  surface: n={} avg={} ms max={} ms",
+		MonitorLog.info("[chunkgen] noise-dispatch: n={} avg={} ms max={} ms  noise-sync: n={} avg={} ms max={} ms  surface: n={} avg={} ms max={} ms",
 				nCount,
 				formatAvg(nCount, nTotal),
 				formatMs(nMax),

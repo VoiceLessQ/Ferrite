@@ -77,14 +77,14 @@ public final class LightTimingMonitor {
 
 		if (initCount > 0) {
 			double avgMs = (double) initTotal / 1_000_000.0 / (double) initCount;
-			ExampleMod.LOGGER.info(
+			MonitorLog.info(
 					"[chunkgen-light-init] n={} avg={}ms total={}ms max={}ms",
 					initCount, String.format("%.2f", avgMs),
 					initTotal / 1_000_000, initMax / 1_000_000);
 		}
 		if (lightCount > 0) {
 			double avgMs = (double) lightTotal / 1_000_000.0 / (double) lightCount;
-			ExampleMod.LOGGER.info(
+			MonitorLog.info(
 					"[chunkgen-light] n={} avg={}ms total={}ms max={}ms",
 					lightCount, String.format("%.2f", avgMs),
 					lightTotal / 1_000_000, lightMax / 1_000_000);

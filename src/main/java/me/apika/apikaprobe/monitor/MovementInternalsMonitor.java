@@ -215,7 +215,7 @@ public final class MovementInternalsMonitor {
 		long accountedTotal = crammingTotal + collisionTotal + navTotal + travelTotal + adjustTotal + handSwingTotal;
 		long otherTotal = Math.max(0L, movementSelfNs - accountedTotal);
 
-		LOGGER.info("[movement-internals] cramming: avg={} max={}  blockCollision: avg={} max={}  navigator: avg={} max={}  move: avg={} max={}  adjustColl: avg={} max={}  travel: avg={} max={}  gravity: avg={} max={}  handSwing: avg={} max={}  tickNewAi: avg={} max={}  other: avg={}  n={} ticks",
+		MonitorLog.info("[movement-internals] cramming: avg={} max={}  blockCollision: avg={} max={}  navigator: avg={} max={}  move: avg={} max={}  adjustColl: avg={} max={}  travel: avg={} max={}  gravity: avg={} max={}  handSwing: avg={} max={}  tickNewAi: avg={} max={}  other: avg={}  n={} ticks",
 				formatMs(crammingTotal / ticks),
 				formatMs(crammingMax),
 				formatMs(collisionTotal / ticks),

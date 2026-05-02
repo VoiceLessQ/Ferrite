@@ -138,7 +138,7 @@ public final class ServerTickPhaseMonitor {
 		// measured load) plus the small housekeeping phases (~0.5 ms).
 		// Not split out via @Inject — see ServerTickPhaseMixin comment
 		// for why (JIT deoptimization from @Inject on the hot tick method).
-		LOGGER.info(
+		MonitorLog.info(
 			"[server-tick-phase] total: avg={} max={}  scheduledTicks: avg={}  "
 			+ "entities+be: avg={}  other: avg={}  n={} ticks",
 			formatMs(total / ticks),
@@ -149,13 +149,13 @@ public final class ServerTickPhaseMonitor {
 			ticks
 		);
 
-		LOGGER.info(
+		MonitorLog.info(
 			"[block-tick] ticks={} total={} avg={}/tick",
 			blockCount,
 			formatMs(blockNs),
 			formatPerTick(blockNs, blockCount)
 		);
-		LOGGER.info(
+		MonitorLog.info(
 			"[fluid-tick] ticks={} total={} avg={}/tick",
 			fluidCount,
 			formatMs(fluidNs),

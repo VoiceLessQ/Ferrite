@@ -127,7 +127,7 @@ public final class GoalSelectorMonitor {
 		// = tick() total minus the tickGoals portions it contains
 		double controlsMsPerTick = totalMsPerTick - trueMsPerTick - falseMsPerTick;
 
-		LOGGER.info(
+		MonitorLog.info(
 			"[goal-selector] calls={}/tick total={}ms avg={}us/call  tickGoals(true)={}ms/tick tickGoals(false)={}ms/tick  controls={}ms/tick  n={} ticks",
 			String.format("%.1f", callsPerTick),
 			String.format("%.3f", totalMsPerTick),

@@ -118,7 +118,7 @@ public final class AquiferMonitor {
 				? 0.0
 				: (avgNs * calls) / chunks / 1_000_000.0;
 
-		LOGGER.info("[aquifer] calls={} sampled={} avg={} ns max={} ms  extrapolated={} ms/chunk",
+		MonitorLog.info("[aquifer] calls={} sampled={} avg={} ns max={} ms  extrapolated={} ms/chunk",
 				calls,
 				sampled,
 				String.format("%.0f", avgNs),

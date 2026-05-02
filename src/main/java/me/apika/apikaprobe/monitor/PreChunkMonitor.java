@@ -82,7 +82,7 @@ public final class PreChunkMonitor {
 		if (submitted == 0L && dedupeSkipped == 0L && loaded == 0L) return;
 
 		String avgLead = loaded == 0L ? "-" : String.valueOf(leadSum / loaded);
-		LOGGER.info("[prechunk] vd={} submitted={} dedupe-skipped={} loaded={} avg-lead={}t max-lead={}t",
+		MonitorLog.info("[prechunk] vd={} submitted={} dedupe-skipped={} loaded={} avg-lead={}t max-lead={}t",
 				lastViewDistance, submitted, dedupeSkipped, loaded, avgLead, leadMax);
 	}
 }

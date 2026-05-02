@@ -83,7 +83,7 @@ public final class HopperMonitor {
 		double avgUsPerScan   = scans > 0L ? totalNs / 1_000.0 / scans : 0.0;
 		double itemsPerScan   = scans > 0L ? (double) items / scans : 0.0;
 
-		LOGGER.info(
+		MonitorLog.info(
 			"[hopper] hoppers={}/tick scans={}/tick total={}ms avg={}us/scan itemsFound={}/scan  n={} ticks",
 			String.format("%.1f", hoppersPerTick),
 			String.format("%.1f", scansPerTick),
