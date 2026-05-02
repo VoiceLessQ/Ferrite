@@ -157,6 +157,30 @@ public final class WorldgenStateBootstrap {
 		// WorldgenParity.findOverworldNoiseConfig can match against
 		// Rust's root seeds (which are 0 until finalize publishes state).
 		captureOverworldClimateSampler();
+
+		// One-shot auto-validate, gated by -Dferrite.autovalidate=<int>.
+		// Runs noise+biome+density parity checks at the requested sample
+		// count and dumps results to the log. Used by 26.1.x port to
+		// confirm Rust outputs are still bit-exact vs vanilla without
+		// driving an interactive client. No-op when the property is unset.
+		String avProp = System.getProperty("ferrite.autovalidate");
+		if (avProp != null && !avProp.isEmpty()) {
+			try {
+				int n = Integer.parseInt(avProp);
+				ExampleMod.LOGGER.info("[autovalidate] starting (samples={})", n);
+				ExampleMod.LOGGER.info("[autovalidate] noise: {}",
+						WorldgenParity.runParityCheck(n, 10000));
+				ExampleMod.LOGGER.info("[autovalidate] biome: {}",
+						BiomeParity.runParityCheck(n));
+				ExampleMod.LOGGER.info("[autovalidate] density: {}",
+						DensityParity.runAll(server, n));
+				ExampleMod.LOGGER.info("[autovalidate] complete");
+			} catch (NumberFormatException nfe) {
+				ExampleMod.LOGGER.warn("[autovalidate] bad sample count: {}", avProp);
+			} catch (Throwable t) {
+				ExampleMod.LOGGER.error("[autovalidate] failure", t);
+			}
+		}
 	}
 
 	/**
@@ -749,12 +773,24 @@ public final class WorldgenStateBootstrap {
 	 */
 	private static String resolveBiomeIdentifier(Object biomeHolder) {
 		try {
-			Method unwrapKey = biomeHolder.getClass().getMethod("getKey");
+			// 26.1.2: Holder.unwrapKey + ResourceKey.identifier.  Older yarn:
+			// getKey + getValue.  Try mojmap first.
+			Method unwrapKey = null;
+			for (String n : new String[]{"unwrapKey", "getKey"}) {
+				try { unwrapKey = biomeHolder.getClass().getMethod(n); break; }
+				catch (NoSuchMethodException ignored) {}
+			}
+			if (unwrapKey == null) return "unknown";
 			Object opt = unwrapKey.invoke(biomeHolder);
 			if (opt instanceof java.util.Optional<?> o && o.isPresent()) {
 				Object regKey = o.get();
-				Method getValue = regKey.getClass().getMethod("getValue");
-				Object id = getValue.invoke(regKey);
+				Method getId = null;
+				for (String n : new String[]{"identifier", "getValue", "location"}) {
+					try { getId = regKey.getClass().getMethod(n); break; }
+					catch (NoSuchMethodException ignored) {}
+				}
+				if (getId == null) return "unknown";
+				Object id = getId.invoke(regKey);
 				return id == null ? "unknown" : id.toString();
 			}
 		} catch (ReflectiveOperationException ignored) {

@@ -338,11 +338,26 @@ public final class WorldgenParity {
 				Class<?> identifierClass = Class.forName("net.minecraft.resources.Identifier");
 				Class<?> registryKeyClass = Class.forName("net.minecraft.resources.ResourceKey");
 				Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.Registries");
-				Method identifierOf = identifierClass.getMethod("of", String.class);
-				Method registryKeyOf = registryKeyClass.getMethod("of", registryKeyClass, identifierClass);
-				Object noiseParamsRegistryKey = registryKeysClass.getField("NOISE_PARAMETERS").get(null);
-				Method getOrCreateSampler = noiseConfig.getClass().getMethod("getOrCreateSampler", registryKeyClass);
-				// Probe with minecraft:temperature to discover the sample method.
+				// 26.1.2: Identifier.parse (was Identifier.of in older yarn).
+				Method identifierOf = pickMethod(identifierClass, new Class<?>[]{String.class},
+						"parse", "of", "tryParse");
+				// 26.1.2: ResourceKey.create (was ResourceKey.of in older yarn).
+				Method registryKeyOf = pickMethod(registryKeyClass,
+						new Class<?>[]{registryKeyClass, identifierClass},
+						"create", "of");
+				// 26.1.2: Registries.NOISE (was NOISE_PARAMETERS in older yarn).
+				Object noiseParamsRegistryKey = pickField(registryKeysClass, "NOISE", "NOISE_PARAMETERS");
+				// 26.1.2: RandomState.getOrCreateNoise (was getOrCreateSampler in older yarn).
+				Method getOrCreateSampler = pickMethod(noiseConfig.getClass(),
+						new Class<?>[]{registryKeyClass},
+						"getOrCreateNoise", "getOrCreateSampler");
+				if (identifierOf == null || registryKeyOf == null || noiseParamsRegistryKey == null
+						|| getOrCreateSampler == null) {
+					ExampleMod.LOGGER.warn(
+							"[parity] resolve missing accessor: idOf={} keyOf={} regKey={} getNoise={}",
+							identifierOf, registryKeyOf, noiseParamsRegistryKey, getOrCreateSampler);
+					return null;
+				}
 				Object probeId = identifierOf.invoke(null, "minecraft:temperature");
 				Object probeKey = registryKeyOf.invoke(null, noiseParamsRegistryKey, probeId);
 				Object probeSampler = getOrCreateSampler.invoke(noiseConfig, probeKey);
@@ -350,14 +365,36 @@ public final class WorldgenParity {
 					ExampleMod.LOGGER.warn("[parity] probe sampler (minecraft:temperature) resolved to null");
 					return null;
 				}
-				Method sampleMethod = probeSampler.getClass().getMethod(
-						"sample", double.class, double.class, double.class);
+				// 26.1.2: NormalNoise.getValue (was sample in older yarn).
+				Method sampleMethod = pickMethod(probeSampler.getClass(),
+						new Class<?>[]{double.class, double.class, double.class},
+						"getValue", "sample");
+				if (sampleMethod == null) {
+					ExampleMod.LOGGER.warn("[parity] no sample method on {}",
+							probeSampler.getClass().getName());
+					return null;
+				}
 				return new YarnSampler(noiseConfig, identifierOf, registryKeyOf,
 						noiseParamsRegistryKey, getOrCreateSampler, sampleMethod);
 			} catch (ReflectiveOperationException | RuntimeException e) {
 				ExampleMod.LOGGER.warn("[parity] resolve failed: {}", e.getMessage());
 				return null;
 			}
+		}
+
+		private static Method pickMethod(Class<?> cls, Class<?>[] params, String... names) {
+			for (String n : names) {
+				try { return cls.getMethod(n, params); } catch (NoSuchMethodException ignored) {}
+			}
+			return null;
+		}
+
+		private static Object pickField(Class<?> cls, String... names) {
+			for (String n : names) {
+				try { return cls.getField(n).get(null); }
+				catch (NoSuchFieldException | IllegalAccessException ignored) {}
+			}
+			return null;
 		}
 
 		Object getSampler(String fullName) {

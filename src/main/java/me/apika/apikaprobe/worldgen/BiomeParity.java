@@ -297,7 +297,7 @@ public final class BiomeParity {
 	private static Method findGetNoiseBiomeFromTarget(Object biomeSource) {
 		Class<?> targetPointCls;
 		try {
-			targetPointCls = Class.forName("net.minecraft.world.level.biome.Climate$NoiseValuePoint");
+			targetPointCls = Class.forName("net.minecraft.world.level.biome.Climate$TargetPoint");
 		} catch (ClassNotFoundException e) {
 			return scanOneArg(biomeSource, null);
 		}
@@ -336,7 +336,7 @@ public final class BiomeParity {
 	private static Object newTargetPoint(long t, long h, long c, long e, long d, long w) {
 		// Yarn record class: Climate$NoiseValuePoint(long t, long h, long c, long e, long d, long w)
 		try {
-			Class<?> cls = Class.forName("net.minecraft.world.level.biome.Climate$NoiseValuePoint");
+			Class<?> cls = Class.forName("net.minecraft.world.level.biome.Climate$TargetPoint");
 			java.lang.reflect.Constructor<?> ctor = cls.getDeclaredConstructor(
 					long.class, long.class, long.class, long.class, long.class, long.class);
 			ctor.setAccessible(true);
@@ -350,17 +350,28 @@ public final class BiomeParity {
 	private static String resolveBiomeIdentifier(Object biomeHolder) {
 		if (biomeHolder == null) return "null";
 		try {
-			Method getKey = biomeHolder.getClass().getMethod("getKey");
-			Object opt = getKey.invoke(biomeHolder);
+			// 26.1.2: Holder.unwrapKey (was getKey in older yarn).
+			Method unwrapKey = pickMethodNoArg(biomeHolder.getClass(), "unwrapKey", "getKey");
+			if (unwrapKey == null) return "unknown";
+			Object opt = unwrapKey.invoke(biomeHolder);
 			if (opt instanceof java.util.Optional<?> o && o.isPresent()) {
 				Object regKey = o.get();
-				Method getValue = regKey.getClass().getMethod("getValue");
-				Object id = getValue.invoke(regKey);
+				// 26.1.2: ResourceKey.identifier (was getValue in older yarn).
+				Method getId = pickMethodNoArg(regKey.getClass(), "identifier", "getValue", "location");
+				if (getId == null) return "unknown";
+				Object id = getId.invoke(regKey);
 				return id == null ? "unknown" : id.toString();
 			}
 		} catch (ReflectiveOperationException ignored) {
 			// fall through
 		}
 		return "unknown";
+	}
+
+	private static Method pickMethodNoArg(Class<?> cls, String... names) {
+		for (String n : names) {
+			try { return cls.getMethod(n); } catch (NoSuchMethodException ignored) {}
+		}
+		return null;
 	}
 }

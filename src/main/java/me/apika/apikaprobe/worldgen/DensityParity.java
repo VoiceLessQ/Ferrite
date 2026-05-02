@@ -522,7 +522,13 @@ public final class DensityParity {
 			Object noiseData = noiseDataM.invoke(noiseHolder);
 			if (noiseData == null) return noiseHolder;
 			// holder.unwrapKey() → Optional<ResourceKey<NoiseParameters>>
-			Method unwrapKey = noiseData.getClass().getMethod("getKey");
+			// 26.1.2: unwrapKey; older yarn: getKey.
+			Method unwrapKey = null;
+			for (String n : new String[]{"unwrapKey", "getKey"}) {
+				try { unwrapKey = noiseData.getClass().getMethod(n); break; }
+				catch (NoSuchMethodException ignored) {}
+			}
+			if (unwrapKey == null) return noiseHolder;
 			Object opt = unwrapKey.invoke(noiseData);
 			if (!(opt instanceof java.util.Optional<?> o) || !o.isPresent()) return noiseHolder;
 			Object key = o.get();
@@ -604,12 +610,24 @@ public final class DensityParity {
 			Object manager = server.registryAccess();
 			Class<?> registryKeysClass = Class.forName("net.minecraft.core.registries.Registries");
 			Object dfKey = registryKeysClass.getField("DENSITY_FUNCTION").get(null);
-			for (String n : new String[]{"getOrThrow", "get", "getRegistry"}) {
+			Class<?> rkClass = Class.forName("net.minecraft.resources.ResourceKey");
+			for (String n : new String[]{"lookupOrThrow", "getOrThrow", "get", "getRegistry"}) {
 				try {
-					Method m = manager.getClass().getMethod(n,
-							Class.forName("net.minecraft.resources.ResourceKey"));
+					Method m = manager.getClass().getMethod(n, rkClass);
 					Object r = m.invoke(manager, dfKey);
 					if (r != null) return r;
+				} catch (ReflectiveOperationException ignored) {
+					// try next
+				}
+			}
+			// Fallback: Optional-returning lookup.
+			for (String n : new String[]{"lookup", "getOptional"}) {
+				try {
+					Method m = manager.getClass().getMethod(n, rkClass);
+					Object r = m.invoke(manager, dfKey);
+					if (r instanceof java.util.Optional<?> opt && opt.isPresent()) {
+						return opt.get();
+					}
 				} catch (ReflectiveOperationException ignored) {
 					// try next
 				}
@@ -630,7 +648,18 @@ public final class DensityParity {
 	private static Object lookupByName(Object registry, String fullName) {
 		try {
 			if (!(registry instanceof Iterable<?> iter)) return null;
-			Method getId = registry.getClass().getMethod("getId", Object.class);
+			// 26.1.2: Registry.getKey(T) → Identifier.  Older yarn: getId(T).
+			Method getId = null;
+			for (String n : new String[]{"getKey", "getId"}) {
+				for (Method m : registry.getClass().getMethods()) {
+					if (m.getName().equals(n) && m.getParameterCount() == 1
+							&& m.getParameterTypes()[0] == Object.class) {
+						getId = m; break;
+					}
+				}
+				if (getId != null) break;
+			}
+			if (getId == null) return null;
 			for (Object entry : iter) {
 				Object id = getId.invoke(registry, entry);
 				if (id != null && fullName.equals(id.toString())) {

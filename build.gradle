@@ -33,6 +33,15 @@ loom {
 			// Simulate low-end hardware — cap heap so GC pressure resembles 8GB-RAM laptops.
 			vmArg "-Xmx3G"
 			vmArg "-Xms512M"
+			// Opt-in autovalidate: -Pferrite.autovalidate=<n> on the gradle CLI
+			// also injects --quickPlaySingleplayer to skip the title screen.
+			if (project.hasProperty("ferrite.autovalidate")) {
+				def n = project.property("ferrite.autovalidate")
+				vmArg "-Dferrite.autovalidate=${n}"
+				def world = project.findProperty("ferrite.world") ?: "New World"
+				programArg "--quickPlaySingleplayer"
+				programArg world.toString()
+			}
 		}
 	}
 }
