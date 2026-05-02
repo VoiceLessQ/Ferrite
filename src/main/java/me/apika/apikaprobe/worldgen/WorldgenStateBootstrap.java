@@ -12,7 +12,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLevelEvents;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.registries.Registries;
@@ -56,17 +56,12 @@ public final class WorldgenStateBootstrap {
 	}
 
 	public static void register() {
-		// Hook SERVER_STARTED instead of per-world LOAD: the per-world
-		// lifecycle event (ServerWorldEvents.LOAD) takes a ServerLevel
-		// in its lambda which our architectury-loom + disableObfuscation
-		// classpath fails to remap from intermediary (class_3218) to
-		// mojmap (ServerLevel).  STARTED fires once per server start
-		// with just MinecraftServer in the lambda - no MC types, so
-		// the fabric-api jar's signature matches.  Bootstrap runs on
-		// the overworld, which exists by SERVER_STARTED.
-		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-			ServerLevel world = server.getLevel(Level.OVERWORLD);
-			if (world == null) {
+		// Per-level LOAD fires once per dimension; we only bootstrap on the
+		// overworld (Rust state is seed-derived and the overworld carries
+		// the canonical seed). Yarn's ServerWorldEvents was renamed
+		// ServerLevelEvents in 26.1.x as part of the World->Level pass.
+		ServerLevelEvents.LOAD.register((server, world) -> {
+			if (world.dimension() != Level.OVERWORLD) {
 				return;
 			}
 			if (initialized.getAndSet(true)) {
@@ -76,7 +71,7 @@ public final class WorldgenStateBootstrap {
 				bootstrap(server, world);
 			} catch (Throwable t) {
 				ExampleMod.LOGGER.error(
-						"[worldgen-init] bootstrap failed — Rust seed-driven dispatch will be unavailable",
+						"[worldgen-init] bootstrap failed, Rust seed-driven dispatch will be unavailable",
 						t);
 			}
 		});
@@ -400,12 +395,17 @@ public final class WorldgenStateBootstrap {
 	private static int registerBiomes(ServerLevel world) {
 		try {
 			Object chunkManager = world.getChunkSource();
-			Method getChunkGenerator = findMethod(chunkManager.getClass(), "getChunkGenerator");
-			if (getChunkGenerator == null) {
-				ExampleMod.LOGGER.warn("[worldgen-init] no getChunkGenerator() on {}", chunkManager.getClass().getName());
+			// 26.1.2 mojmap: ServerChunkCache.getGenerator(); yarn was getChunkGenerator().
+			Method getGenerator = null;
+			for (String n : new String[]{"getGenerator", "getChunkGenerator"}) {
+				getGenerator = findMethod(chunkManager.getClass(), n);
+				if (getGenerator != null) break;
+			}
+			if (getGenerator == null) {
+				ExampleMod.LOGGER.warn("[worldgen-init] no generator accessor on {}", chunkManager.getClass().getName());
 				return 0;
 			}
-			Object generator = getChunkGenerator.invoke(chunkManager);
+			Object generator = getGenerator.invoke(chunkManager);
 			Method getBiomeSource = findMethod(generator.getClass(), "getBiomeSource");
 			if (getBiomeSource == null) {
 				ExampleMod.LOGGER.warn("[worldgen-init] no getBiomeSource() on {}", generator.getClass().getName());
@@ -572,13 +572,27 @@ public final class WorldgenStateBootstrap {
 			// Pull the registry via the same accessor dance we use for noises.
 			@SuppressWarnings("rawtypes")
 			Registry dfRegistry = null;
-			for (String methodName : new String[]{"getOrThrow", "get", "getRegistry"}) {
+			for (String methodName : new String[]{"lookupOrThrow", "getOrThrow", "get", "getRegistry"}) {
 				try {
 					Method m = manager.getClass().getMethod(methodName, ResourceKey.class);
 					Object r = m.invoke(manager, dfRegistryKey);
 					if (r instanceof Registry<?> reg) { dfRegistry = reg; break; }
 				} catch (ReflectiveOperationException ignored) {
 					// try next
+				}
+			}
+			if (dfRegistry == null) {
+				for (String methodName : new String[]{"lookup", "getOptional"}) {
+					try {
+						Method m = manager.getClass().getMethod(methodName, ResourceKey.class);
+						Object r = m.invoke(manager, dfRegistryKey);
+						if (r instanceof java.util.Optional<?> opt && opt.isPresent()
+								&& opt.get() instanceof Registry<?> reg) {
+							dfRegistry = reg; break;
+						}
+					} catch (ReflectiveOperationException ignored) {
+						// try next
+					}
 				}
 			}
 			if (dfRegistry == null) {
@@ -784,7 +798,11 @@ public final class WorldgenStateBootstrap {
 	private static Registry resolveNoiseRegistry(net.minecraft.server.MinecraftServer server) {
 		Object manager = server.registryAccess();
 		Object key = Registries.NOISE;
-		String[] candidates = {"getOrThrow", "get", "getRegistry"};
+		// 26.1.2 mojmap names: lookupOrThrow(ResourceKey) -> Registry<E>,
+		// lookup(ResourceKey) -> Optional<Registry<T>>.  Older yarn names
+		// (getOrThrow/get/getRegistry/getOptional) kept as fallbacks so this
+		// code survives a future re-rename.
+		String[] candidates = {"lookupOrThrow", "getOrThrow", "get", "getRegistry"};
 		for (String methodName : candidates) {
 			try {
 				Method method = manager.getClass().getMethod(methodName, ResourceKey.class);
@@ -797,15 +815,17 @@ public final class WorldgenStateBootstrap {
 			}
 		}
 		// Fall back: try Optional-returning accessor.
-		try {
-			Method method = manager.getClass().getMethod("getOptional", ResourceKey.class);
-			Object result = method.invoke(manager, key);
-			if (result instanceof java.util.Optional<?> opt && opt.isPresent()
-					&& opt.get() instanceof Registry<?> r) {
-				return r;
+		for (String methodName : new String[]{"lookup", "getOptional"}) {
+			try {
+				Method method = manager.getClass().getMethod(methodName, ResourceKey.class);
+				Object result = method.invoke(manager, key);
+				if (result instanceof java.util.Optional<?> opt && opt.isPresent()
+						&& opt.get() instanceof Registry<?> r) {
+					return r;
+				}
+			} catch (ReflectiveOperationException ignored) {
+				// try next candidate
 			}
-		} catch (ReflectiveOperationException ignored) {
-			// give up
 		}
 		return null;
 	}

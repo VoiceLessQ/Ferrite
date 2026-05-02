@@ -99,17 +99,16 @@ public class ExampleMod implements ModInitializer {
 		ChunkPrewarmTrigger.register();
 		ChunkForcer.register();
 		ChunkForceTrigger.register();
-		// Vanilla loaded a chunk — drop our biome prediction for it.
+		// Vanilla loaded a chunk: drop our biome prediction for it.
 		// Vanilla now owns the authoritative biome data; keeping our
 		// cached int[1536] would just hog memory for chunks the cache
-		// will never serve again.
-		// DISABLED on 26.1.2: ServerChunkEvents.CHUNK_LOAD's lambda type
-		// uses class_3218 / class_2818 (intermediary names) in the fabric-api
-		// jar, which our architectury-loom + disableObfuscation setup doesn't
-		// remap to mojmap (ServerLevel / LevelChunk).  The eviction is a
-		// memory-housekeeping nicety, not correctness-critical.  Re-enable
-		// once fabric-api remapping is sorted, or replace with a mixin into
-		// ServerChunkCache.onChunkReadyToSend.
+		// will never serve again.  Third lambda param is the
+		// generated-this-tick flag (added in fabric-api 4.x); we treat
+		// loaded and freshly-generated identically for eviction.
+		ServerChunkEvents.CHUNK_LOAD.register((world, chunk, generated) -> {
+			net.minecraft.world.level.ChunkPos pos = chunk.getPos();
+			ChunkPrewarmer.evict(pos.x(), pos.z());
+		});
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			// Explicitly disable every Rust-backed dispatcher so vanilla
