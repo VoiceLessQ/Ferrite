@@ -19,7 +19,7 @@ import net.minecraft.world.entity.Mob;
 @Mixin(LivingEntity.class)
 public abstract class TickHandSwingMixin {
 
-	@Inject(method = "tickHandSwing()V", at = @At("HEAD"))
+	@Inject(method = "updateSwingTime()V", at = @At("HEAD"))
 	private void ferrite$onHandSwingBegin(CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return;
@@ -27,7 +27,7 @@ public abstract class TickHandSwingMixin {
 		MovementInternalsMonitor.onHandSwingBegin();
 	}
 
-	@Inject(method = "tickHandSwing()V", at = @At("RETURN"))
+	@Inject(method = "updateSwingTime()V", at = @At("RETURN"))
 	private void ferrite$onHandSwingEnd(CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return;

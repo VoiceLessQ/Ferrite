@@ -19,7 +19,7 @@ import net.minecraft.world.entity.Mob;
 @Mixin(Entity.class)
 public abstract class BlockCollisionMixin {
 
-	@Inject(method = "tickBlockCollision()V", at = @At("HEAD"))
+	@Inject(method = "applyEffectsFromBlocks()V", at = @At("HEAD"))
 	private void ferrite$onBlockCollisionBegin(CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return;
@@ -27,7 +27,7 @@ public abstract class BlockCollisionMixin {
 		MovementInternalsMonitor.onBlockCollisionBegin();
 	}
 
-	@Inject(method = "tickBlockCollision()V", at = @At("RETURN"))
+	@Inject(method = "applyEffectsFromBlocks()V", at = @At("RETURN"))
 	private void ferrite$onBlockCollisionEnd(CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return;

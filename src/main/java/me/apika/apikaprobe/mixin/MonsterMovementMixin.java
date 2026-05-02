@@ -22,7 +22,7 @@ import net.minecraft.world.entity.Mob;
 @Mixin(LivingEntity.class)
 public abstract class MonsterMovementMixin {
 
-	@Inject(method = "tickMovement()V", at = @At("HEAD"))
+	@Inject(method = "aiStep()V", at = @At("HEAD"))
 	private void ferrite$onMovementBegin(CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return;
@@ -30,7 +30,7 @@ public abstract class MonsterMovementMixin {
 		MonsterPhaseMonitor.onMovementBegin();
 	}
 
-	@Inject(method = "tickMovement()V", at = @At("RETURN"))
+	@Inject(method = "aiStep()V", at = @At("RETURN"))
 	private void ferrite$onMovementEnd(CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return;

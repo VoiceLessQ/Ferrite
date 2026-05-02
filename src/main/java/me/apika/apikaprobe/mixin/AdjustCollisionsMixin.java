@@ -22,7 +22,7 @@ import net.minecraft.world.phys.Vec3;
 @Mixin(Entity.class)
 public abstract class AdjustCollisionsMixin {
 
-	@Inject(method = "adjustMovementForCollisions(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;", at = @At("HEAD"))
+	@Inject(method = "collide(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;", at = @At("HEAD"))
 	private void ferrite$onAdjustBegin(Vec3 movement, CallbackInfoReturnable<Vec3> cir) {
 		if (!((Object) this instanceof Mob)) {
 			return;
@@ -30,7 +30,7 @@ public abstract class AdjustCollisionsMixin {
 		MovementInternalsMonitor.onAdjustCollisionsBegin();
 	}
 
-	@Inject(method = "adjustMovementForCollisions(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;", at = @At("RETURN"))
+	@Inject(method = "collide(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;", at = @At("RETURN"))
 	private void ferrite$onAdjustEnd(Vec3 movement, CallbackInfoReturnable<Vec3> cir) {
 		if (!((Object) this instanceof Mob)) {
 			return;

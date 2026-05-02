@@ -17,7 +17,7 @@ import net.minecraft.world.entity.Mob;
 @Mixin(LivingEntity.class)
 public abstract class CrammingMixin {
 
-	@Inject(method = "tickCramming()V", at = @At("HEAD"))
+	@Inject(method = "pushEntities()V", at = @At("HEAD"))
 	private void ferrite$onCrammingBegin(CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return;
@@ -25,7 +25,7 @@ public abstract class CrammingMixin {
 		MovementInternalsMonitor.onCrammingBegin();
 	}
 
-	@Inject(method = "tickCramming()V", at = @At("RETURN"))
+	@Inject(method = "pushEntities()V", at = @At("RETURN"))
 	private void ferrite$onCrammingEnd(CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return;

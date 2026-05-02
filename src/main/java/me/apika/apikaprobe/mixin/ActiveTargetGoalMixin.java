@@ -21,17 +21,17 @@ import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 @Mixin(NearestAttackableTargetGoal.class)
 public abstract class ActiveTargetGoalMixin {
 
-	@Inject(method = "canStart()Z", at = @At("HEAD"))
+	@Inject(method = "canUse()Z", at = @At("HEAD"))
 	private void ferrite$onCanStart(CallbackInfoReturnable<Boolean> cir) {
 		TargetScanMonitor.onCanStartCalled();
 	}
 
-	@Inject(method = "findClosestTarget()V", at = @At("HEAD"))
+	@Inject(method = "findTarget()V", at = @At("HEAD"))
 	private void ferrite$onScanBegin(CallbackInfo ci) {
 		TargetScanMonitor.onScanBegin();
 	}
 
-	@Inject(method = "findClosestTarget()V", at = @At("RETURN"))
+	@Inject(method = "findTarget()V", at = @At("RETURN"))
 	private void ferrite$onScanEnd(CallbackInfo ci) {
 		TargetScanMonitor.onScanEnd();
 	}

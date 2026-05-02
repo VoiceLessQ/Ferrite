@@ -21,7 +21,7 @@ import net.minecraft.server.level.ServerLevel;
 public abstract class ServerWorldTickMixin {
 
 	@Inject(
-		method = "tickEntity(Lnet/minecraft/world/entity/Entity;)V",
+		method = "tickNonPassenger(Lnet/minecraft/world/entity/Entity;)V",
 		at = @At("HEAD")
 	)
 	private void ferrite$onEntityBegin(Entity entity, CallbackInfo ci) {
@@ -29,7 +29,7 @@ public abstract class ServerWorldTickMixin {
 	}
 
 	@Inject(
-		method = "tickEntity(Lnet/minecraft/world/entity/Entity;)V",
+		method = "tickNonPassenger(Lnet/minecraft/world/entity/Entity;)V",
 		at = @At("RETURN")
 	)
 	private void ferrite$onEntityEnd(Entity entity, CallbackInfo ci) {

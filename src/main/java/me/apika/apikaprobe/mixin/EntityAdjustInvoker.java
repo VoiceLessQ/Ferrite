@@ -14,6 +14,6 @@ import org.spongepowered.asm.mixin.gen.Invoker;
  */
 @Mixin(Entity.class)
 public interface EntityAdjustInvoker {
-	@Invoker("adjustMovementForCollisions")
+	@Invoker("collide")
 	Vec3 ferrite$invokeAdjust(Vec3 motion);
 }

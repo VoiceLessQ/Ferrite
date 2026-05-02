@@ -28,12 +28,12 @@ public abstract class GoalSelectorMixin {
 		GoalSelectorMonitor.onTickEnd();
 	}
 
-	@Inject(method = "tickGoals(Z)V", at = @At("HEAD"))
+	@Inject(method = "tickRunningGoals(Z)V", at = @At("HEAD"))
 	private void ferrite$tickGoalsHead(boolean tickAll, CallbackInfo ci) {
 		GoalSelectorMonitor.onTickGoalsBegin(tickAll);
 	}
 
-	@Inject(method = "tickGoals(Z)V", at = @At("RETURN"))
+	@Inject(method = "tickRunningGoals(Z)V", at = @At("RETURN"))
 	private void ferrite$tickGoalsReturn(boolean tickAll, CallbackInfo ci) {
 		GoalSelectorMonitor.onTickGoalsEnd(tickAll);
 	}

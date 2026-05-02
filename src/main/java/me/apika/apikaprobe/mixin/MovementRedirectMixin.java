@@ -26,7 +26,7 @@ public abstract class MovementRedirectMixin {
 		method = "move(Lnet/minecraft/world/entity/MoverType;Lnet/minecraft/world/phys/Vec3;)V",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/world/entity/Entity;adjustMovementForCollisions(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;"
+			target = "Lnet/minecraft/world/entity/Entity;collide(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;"
 		)
 	)
 	private Vec3 ferrite$redirectAdjust(Entity self, Vec3 motion) {

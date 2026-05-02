@@ -22,7 +22,7 @@ import net.minecraft.world.entity.Mob;
 @Mixin(LivingEntity.class)
 public abstract class CrammingCancelMixin {
 
-	@Inject(method = "tickCramming()V", at = @At("HEAD"), cancellable = true)
+	@Inject(method = "pushEntities()V", at = @At("HEAD"), cancellable = true)
 	private void ferrite$onTickCramming(CallbackInfo ci) {
 		if (!((Object) this instanceof Mob)) {
 			return; // let vanilla handle non-mobs (players, etc.)

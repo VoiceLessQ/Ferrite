@@ -22,12 +22,12 @@ import net.minecraft.world.entity.Mob;
 @Mixin(Mob.class)
 public abstract class TickNewAiMixin {
 
-	@Inject(method = "tickNewAi()V", at = @At("HEAD"))
+	@Inject(method = "serverAiStep()V", at = @At("HEAD"))
 	private void ferrite$onTickNewAiBegin(CallbackInfo ci) {
 		MovementInternalsMonitor.onTickNewAiBegin();
 	}
 
-	@Inject(method = "tickNewAi()V", at = @At("RETURN"))
+	@Inject(method = "serverAiStep()V", at = @At("RETURN"))
 	private void ferrite$onTickNewAiEnd(CallbackInfo ci) {
 		MovementInternalsMonitor.onTickNewAiEnd();
 	}

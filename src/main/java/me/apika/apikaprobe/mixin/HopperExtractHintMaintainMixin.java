@@ -22,7 +22,7 @@ public abstract class HopperExtractHintMaintainMixin implements Container, Extra
 		}
 	}
 
-	@Inject(method = "removeStack(II)Lnet/minecraft/world/item/ItemStack;", at = @At("RETURN"))
+	@Inject(method = "removeItem(II)Lnet/minecraft/world/item/ItemStack;", at = @At("RETURN"))
 	private void ferrite$onRemoveStack(int slot, int amount, CallbackInfoReturnable<ItemStack> cir) {
 		if (slot != this.ferrite$getExtractHint()) return;
 		if (!this.getItem(slot).isEmpty()) return;

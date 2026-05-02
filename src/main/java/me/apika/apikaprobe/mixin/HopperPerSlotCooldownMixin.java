@@ -74,7 +74,7 @@ public abstract class HopperPerSlotCooldownMixin implements SlotCooldownAccess {
 	}
 
 	@Inject(
-		method = "serverTick(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/entity/HopperBlockEntity;)V",
+		method = "pushItemsTick(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/entity/HopperBlockEntity;)V",
 		at = @At("HEAD")
 	)
 	private static void ferrite$decrementOnTick(Level world, BlockPos pos, BlockState state, HopperBlockEntity blockEntity, CallbackInfo ci) {
@@ -82,13 +82,13 @@ public abstract class HopperPerSlotCooldownMixin implements SlotCooldownAccess {
 		((SlotCooldownAccess) (Object) blockEntity).ferrite$decrementAllSlotCooldowns();
 	}
 
-	@Inject(method = "setTransferCooldown(I)V", at = @At("HEAD"))
+	@Inject(method = "setCooldown(I)V", at = @At("HEAD"))
 	private void ferrite$broadcastOnSet(int transferCooldown, CallbackInfo ci) {
 		if (me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE) return;
 		this.ferrite$broadcastCooldown(transferCooldown);
 	}
 
-	@Inject(method = "needsCooldown()Z", at = @At("HEAD"), cancellable = true)
+	@Inject(method = "isOnCooldown()Z", at = @At("HEAD"), cancellable = true)
 	private void ferrite$needsCooldown(CallbackInfoReturnable<Boolean> cir) {
 		cir.setReturnValue(this.ferrite$allSlotsOnCooldown());
 	}
