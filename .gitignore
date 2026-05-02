@@ -47,6 +47,7 @@ src/main/resources/assets/ferrite/natives/
 
 # claude code local state
 .claude/
+CLAUDE.md
 
 # release/build artifacts at repo root
 /*.zip
