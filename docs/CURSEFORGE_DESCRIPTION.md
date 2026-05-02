@@ -2,27 +2,27 @@
 
 **What you get:** A performance mod for Minecraft 1.21.11. It's a Fabric (Java) mod that calls into native Rust via JNI for the hot paths — Java handles Minecraft integration and mixins, Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary.
 
-**Shipped wins:**
+**Live now:**
 
-- **Cramming (active by default, toggle with `/ferrite cramming on|off|status`)** — a Rust reimplementation of the mob-vs-mob cramming loop. Cuts the server's entity-tick cost by roughly 65% at high mob density. Applies to every MobEntity subclass, so villager trading halls with 50+ villagers get the same spatial hash win as mob farms. Lets you keep stable TPS standing next to a 1000+ mob farm. **Vanilla 1:1 parity** — same push math, same `isPassengerOfSameVehicle` skip, same cramming-damage application (gated by `maxEntityCramming` gamerule and per-entity 1-in-4 random, identical to vanilla). Want unbounded farms? Set `/gamerule maxEntityCramming 0` like you would in vanilla — Ferrite makes that scenario stay at 20 TPS. Want to A/B the perf claim? `/ferrite cramming off` falls back to vanilla without restart.
-- **Redstone (`/ferrite redstone ac on`)** — adapts [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current) algorithm into Ferrite. **~10× fewer wire cascades, contraptions run ~6× faster at equivalent server load.** Bit-for-bit correct vs vanilla on 150,000+ oracle checks. Works on existing worlds without toggles or migration. Per-cascade Rust BFS (default on once AC is on) adds another **~30% wire-cost reduction** on heavy contraptions.
-- **Chunkgen baseline (active automatically, no toggle)** — internal reflection cleanup on `MaterialRules.MaterialRuleContext` (`@Invoker` / `@Accessor` mixins replacing per-call `getMethod()` + `Method.invoke`) shaves **~3 ms off vanilla's per-chunk surface phase**, applied to every chunk regardless of any other Ferrite setting. Diagnostic instrumentation that was contributing ~8-10 ms/chunk overhead is also gated off by default. Both ship invisibly.
-- **Surface rule dispatcher (opt-in, default off)** — `/ferrite surface dispatch on` runs surface rule evaluation in Rust with a batched per-column heightmap update. Currently **~13.4 ms ON vs ~6.4 ms vanilla baseline** = ~7 ms structural gap remains. Useful for A/B measurement; not recommended for production until the gap closes. Parity-clean (100% match across 23,000+ chunks).
+- **Cramming** (`/ferrite cramming on|off|status`, default on) — Rust port of the mob-vs-mob cramming loop. **~65% entity-tick reduction at high mob density.** Every MobEntity subclass (villager halls, mob farms). Vanilla 1:1 parity: same push math, same `isPassengerOfSameVehicle` skip, same `maxEntityCramming` damage (gamerule + 1-in-4 random). `/gamerule maxEntityCramming 0` stays at 20 TPS for unbounded farms.
+- **Redstone** (`/ferrite redstone ac on`) — [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current). **~10× fewer cascades, ~6× faster contraptions at same load.** Bit-correct on 150,000+ oracle checks, works on existing worlds. Per-cascade Rust BFS adds another **~30%** wire-cost cut on heavy builds.
+- **Chunkgen baseline** (no toggle) — `@Invoker`/`@Accessor` mixins replace reflection on `MaterialRules.MaterialRuleContext`. **~3 ms/chunk** off vanilla's surface phase, every chunk. Diagnostic instrumentation (~8-10 ms/chunk) also gated off by default.
+- **Surface rule dispatcher** (`/ferrite surface dispatch on`, default off) — Rust evaluation + batched column heightmap. **~13.4 ms ON vs ~6.4 ms vanilla**, ~7 ms structural gap remains. A/B only, not production-ready. Parity-clean (100% across 23,000+ chunks).
 
-Every 5 seconds the mod also logs where your game is spending time, so the next optimization can target the next real bottleneck.
+Logs tick breakdowns every 5s so the next port targets real bottlenecks.
 
 ---
 
-## What's new in 0.5.1-alpha
+## What's new
 
-- **Universal vanilla baseline -3 ms per chunk** — applies automatically to every user, no toggle. `@Invoker` / `@Accessor` mixins replace per-call reflection in the surface phase. Vanilla's per-chunk surface baseline drops from ~9.3 ms to ~6.4 ms.
-- **Surface dispatcher gap closed by 2.2 ms** — when the dispatcher is on, batched per-column heightmap updates replace ~32K per-write `Heightmap.trackUpdate` calls with ~512 per-column calls. Validated bit-identical against vanilla's per-write reference across 23,204 chunks (100% match, 0 cell mismatches). Dispatcher ON: ~15.6 ms → ~13.4 ms; gap to baseline: ~9.2 ms → ~7.0 ms.
-- **`/ferrite surface heightmap-parity on|off|stats|reset`** — regression check that diffs the batched heightmap path against vanilla's per-write `trackUpdate` reference, cell-by-cell. Useful if you've changed surface rules and want to confirm correctness still holds.
-- **Diagnostic gating** (~8-10 ms/chunk noise-sync win) and **biome supplier cache + Identifier intern** (~0.7 ms dispatcher) shipped earlier in the cycle and persist into 0.5.1.
-- **PhysicsOracle parity validator** added (100% match across 700K+ dispatches at 1000-mob scale). Physics dispatcher itself stays default-off — would regress perf vs vanilla's JIT-inlined path.
-- **Java package layout reorganised** into 7 subpackages — internal cleanup, no behaviour change.
+- **Universal -3 ms/chunk** — `@Invoker`/`@Accessor` mixins drop reflection from vanilla's surface phase. ~9.3 → ~6.4 ms. No toggle, active for everyone.
+- **Surface dispatcher -2.2 ms** — batched per-column heightmap updates collapse ~32K `Heightmap.trackUpdate` calls into ~512. Bit-identical vs vanilla across 23,204 chunks. Dispatcher ON: ~15.6 → ~13.4 ms.
+- **`/ferrite surface heightmap-parity on|off|stats|reset`** — cell-by-cell regression diff against vanilla's per-write reference.
+- **Diagnostic gating** (~8-10 ms noise-sync) and **biome cache + Identifier intern** (~0.7 ms dispatcher) from earlier in the cycle persist into 0.5.1.
+- **PhysicsOracle validator** — 100% match across 700K+ dispatches at 1000 mobs. Physics dispatcher stays default-off (regresses vs vanilla's JIT).
+- **Package layout** reorganised into 7 subpackages. Internal cleanup only.
 
-Surface dispatcher remains default-off pending architectural work that bypasses the structural ~7 ms floor (palette writes + vanilla's column-boundary scanner + biome supplier chain). See [docs/PIANO_STATUS.md](https://github.com/VoiceLessQ/Ferrite/blob/main/docs/PIANO_STATUS.md) for the honest decomposition and the lesson that **counted-O(N) projections from source audit are reliable**, while JFR-frame-count projections are not.
+Surface dispatcher stays default-off; closing the structural ~7 ms floor (palette writes, column scanner, biome chain) needs architectural bypass. See [PIANO_STATUS.md](https://github.com/VoiceLessQ/Ferrite/blob/main/docs/PIANO_STATUS.md) for the decomposition.
 
 ---
 
@@ -40,7 +40,7 @@ TPS held at 20 under the same load that was costing vanilla 60 ms/tick of entity
 
 > **Isolated cramming-math sub-budget:** ~0.06 ms with Ferrite vs ~18.81 ms vanilla on the same pile — roughly **310× reduction in the cramming calculation itself**, stripped of all other entity costs. The 65% total entity-tick reduction is the user-facing number; 310× is what Rust is actually doing to the specific bottleneck.
 
-### Redstone (lag-machine benchmark, AC algorithm enabled)
+### Redstone (lag machine)
 
 | metric                 | vanilla default     | Ferrite (AC)         | change                |
 | ---------------------- | ------------------- | -------------------- | --------------------- |
@@ -50,17 +50,17 @@ TPS held at 20 under the same load that was costing vanilla 60 ms/tick of entity
 | effective TPS          | ~4                  | ~5.6                 | **+40%**              |
 | oracle mismatches      | —                   | 0 / 149,669 checked  | bit-for-bit correct   |
 
-Two user-visible effects combine:
-- **Contraptions animate ~4× faster at equivalent server load** — each wire cascade now collapses into a single network settle (~84% less wire time per gate tick), so the same per-tick budget processes more gate ticks.
-- **Server TPS climbs ~40%** on CPU-bound hardware — when the server is saturated (as in this 4-core baseline), wire savings convert directly into more completed ticks per second. On unconstrained hardware with headroom, TPS stays flat but the gate-throughput win persists.
+Two effects:
+- **~4× faster contraptions** at the same server load — each cascade collapses into one settle (~84% less wire time per gate tick).
+- **~40% TPS** on CPU-bound hardware. Unconstrained hardware: TPS flat, contraptions still faster.
 
-**Vanilla compatibility note.** Gate tick speeds (repeaters, comparators, observers, torches) are vanilla-identical. Wire update ordering intentionally differs from vanilla — AC skips intermediate power-level updates for efficiency. Contraptions relying on quasi-connectivity, 0-tick pulses, or instawire should use `/ferrite redstone ac off`.
+**Compat:** gate tick speeds (repeaters, comparators, observers, torches) are vanilla-identical. Wire ordering differs — AC skips intermediate power-level updates. QC / 0-tick / instawire builds: `/ferrite redstone ac off`.
 
-**AC is a feast-or-famine algorithm** — significant wins on dense contraptions with feedback amplifiers (like the lag machine above), slight overhead on small clean builds (e.g. a single repeater clock + 64-block wire run measured ~0.083 ms / tick on AC vs ~0.026 ms / tick on vanilla — AC's per-cascade setup cost beats vanilla only when there's enough redundancy to amortize). Both effects stay well under 1 ms / tick on realistic setups, so the small-build overhead is imperceptible.
+**Feast-or-famine:** big wins on dense contraptions with feedback amplifiers, slight overhead on small clean builds (~0.083 vs ~0.026 ms/tick on a single clock + 64-block wire). Both stay well under 1 ms/tick — small-build overhead imperceptible.
 
-> **Per-cascade Rust BFS — enabled by default in 0.4.0-alpha.** Once AC is on, each wire cascade's power propagation runs in a Rust kernel via one batched JNI call (Java still emits the resulting block/shape updates). Adds another **~30% wire-cost reduction** on heavy contraptions (1.3–2.1× per cascade across measured size buckets) on top of the AC numbers above. Imperceptible regression (~20µs / cascade) on small cold workloads — disable with `/ferrite redstone bfs off` if a specific contraption misbehaves.
+> **Per-cascade Rust BFS** (default on with AC, since 0.4.0-alpha). Each cascade's power propagation runs in a Rust kernel via one batched JNI call. **+~30% wire-cost cut** on heavy contraptions (1.3–2.1× per cascade) on top of AC. ~20µs/cascade overhead on small cold workloads. `/ferrite redstone bfs off` if a contraption misbehaves.
 
-> **Your results will vary.** Both tables are single data points on one CPU (Ryzen 9 5900X limited to 4 active cores via affinity) and specific worst-case workloads (concentrated zombie pile for cramming; clock-based lag machine for redstone). Real numbers depend on your hardware, the size and density of your mob farms or contraptions, other mods you run, and the specific redstone patterns you use. On CPU-bound hardware you'll likely see both the cascade-reduction and the TPS improvement; on unconstrained hardware the gate-throughput win (contraptions running visibly faster) persists but the TPS delta can disappear entirely because vanilla wasn't the bottleneck.
+> **YMMV.** Single CPU (Ryzen 9 5900X, 4 cores via affinity), worst-case workloads (zombie pile / clock-based lag machine). Real numbers depend on hardware, contraption density, other mods. CPU-bound hardware sees both cascade-reduction and TPS gains; unconstrained hardware: throughput wins persist, TPS delta can vanish.
 
 Measurement details in [CHANGELOG.md](https://github.com/VoiceLessQ/Ferrite/blob/main/CHANGELOG.md) and the full investigation path in [docs/PROFILING.md](https://github.com/VoiceLessQ/Ferrite/blob/main/docs/PROFILING.md).
 
@@ -84,12 +84,12 @@ A shadow-compute `RedstoneOracle` validates every sampled cascade against vanill
 
 ---
 
-## What's still in progress
+## In progress
 
-* **Surface rule dispatcher** — shipped as opt-in (`/ferrite surface dispatch on`) in 0.5.1. ~7 ms structural gap above vanilla baseline remains; closing it requires architectural work that bypasses palette write overhead or eliminates the biome supplier chain. Default-OFF until the gap closes. Ships with a heightmap-level parity validator (`/ferrite surface heightmap-parity`) for regression checks.
-* **Chunk generation density-function port** — Rust bulk-compute kernel measured ~7× faster than vanilla's noise-sync in equivalent work but blocked from shipping at the density-function layer. Vanilla evaluates DFs interleaved with interpolation inside `NoiseChunkGenerator` (marked `final`), so there's no clean intermediate cell-corner grid to hand to Rust without reimplementing the full DF tree. Honest assessment in [docs/PIANO_STATUS.md](https://github.com/VoiceLessQ/Ferrite/blob/main/docs/PIANO_STATUS.md): the per-call JIT-vs-JNI wall is the dominant pattern across density, aquifer, and other chunkgen targets — vanilla's cheap-per-call hot paths beat Rust+JNI at any realistic call frequency.
-* **Aquifer Rust port** (`/ferrite aquifer rust on`) — 99.895% parity, surface-grid artifacts at chunk boundaries unresolved. Shipped disabled. Revisit only with a fresh approach to surface-grid resolution.
-* **`adjustMovementForCollisions` port** — attempted, shelved. The AABB sweep math runs correctly in Rust, but snapshot materialization cost exceeded the sweep savings at realistic mob counts. `PhysicsOracle` parity validator in tree (100% match across 700K+ dispatches) for future re-investigation; physics dispatcher itself disabled.
+* **Surface rule dispatcher** (`/ferrite surface dispatch on`) — opt-in in 0.5.1. ~7 ms structural gap above vanilla; closing it needs architectural work that bypasses palette writes or the biome supplier chain. Default-off. Parity validator: `/ferrite surface heightmap-parity`.
+* **Density-function port** — Rust kernel ~7× faster than vanilla's noise-sync in equivalent work, but blocked at the DF layer. Vanilla interleaves DFs with interpolation inside `final NoiseChunkGenerator`; no clean cell-corner grid without reimplementing the DF tree. Per-call JIT-vs-JNI wall is the recurring pattern across density/aquifer/chunkgen targets. See [PIANO_STATUS.md](https://github.com/VoiceLessQ/Ferrite/blob/main/docs/PIANO_STATUS.md).
+* **Aquifer port** (`/ferrite aquifer rust on`) — 99.895% parity, surface-grid artifacts at chunk boundaries. In tree, default-off. Revisit needs a new surface-grid approach.
+* **`adjustMovementForCollisions`** — shelved. AABB sweep correct in Rust, but snapshot materialization cost exceeded sweep savings at realistic mob counts. `PhysicsOracle` validator in tree (100% across 700K+ dispatches) for future revisit. Dispatcher disabled.
 
 ---
 
