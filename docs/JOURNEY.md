@@ -421,3 +421,62 @@ workload honestly, oracle the output, then ship.
 The wall is real but it is not total. There are gaps in vanilla's
 architecture where flat boundaries sit exposed by accident. Finding
 them is the work.
+
+---
+
+## 26.1.x port: parity carry-over
+
+The Yarn -> Mojmap migration to 26.1.2 is on the `26.1.x` branch.
+After bulk class/method renames and per-mixin descriptor rewrites,
+runClient is clean and a one-shot autovalidate run (gated by
+`-Pferrite.autovalidate=<n>` on the gradle CLI, which also injects
+`--quickPlaySingleplayer` so the run is fully headless) confirms:
+
+- Noise stack: 62/62 pass at samples=2000, worst diff = 0.000e+00.
+  Bit-exact carry-over. The ImprovedNoise + NormalNoise + BlendedNoise
+  ports do not depend on anything that drifted between 1.21.11 and
+  26.1.2, exactly as expected since they read seeds and sample inline.
+- Biome R-tree: 1999/2000 pass at samples=2000. The single fail is a
+  quantized-edge case (lush_caves vs dripstone_caves) that the
+  ParameterPoint partitioning cannot disambiguate — same shape as
+  the pre-migration miss profile.
+- Density functions: 5/50 pass at samples=2000 — real regression.
+
+The DF gap is two distinct issues, neither of which is a Rust
+interpreter bug:
+
+1. 26.1.2 unified Add/Mul/Min/Max into a single `private record Ap2`
+   with a `type` enum.  The walker dispatched by class-name substring
+   ("TwoArgument" / "BinaryOperation"), missed Ap2, fell through to the
+   unknown path, stubbed the whole subtree as CONSTANT(0).  Fixed.
+2. Several DFs are `private record` types (YClampedGradient,
+   FindTopSurface, EndIslandDensityFunction).  Walker reflection used
+   `Class.getMethod`+`Method.invoke`, which silently fails on private
+   records: the auto-generated accessor is public but the declaring
+   class is not exported, so invoke throws IllegalAccessException
+   inside our reflection catch-all.  Switched to `getDeclaredMethod`+
+   `setAccessible(true)` walking the superclass chain.  Fixed.
+
+After both fixes the headline gap is FindTopSurface (used in
+`overworld/caves/noodle`, diff = 64.08 because we stub it to 0) and
+EndIslandDensityFunction.  Both are new in 26.1.2 and need Rust
+interpreter ports.  Tracked as deferred work; current default-on
+shipping path doesn't go through the registry validator output, so
+this gap doesn't break runtime — it blocks reproducibility claims for
+the climate / caves DFs.
+
+Lessons for the next major-version port:
+
+- **Validators are first-class infrastructure, not optional.** The
+  parity validators caught both walker bugs in one autovalidate run.
+  Without them, every DF would silently CONSTANT-fold and we would
+  not know until somebody ran `/ferrite density validate` on a
+  shipped jar.
+- **Reflective code degrades silently.** Every yarn-named accessor
+  drift returns null on miss, so the symptom is "everything is zero"
+  not "everything throws."  Add explicit warn-once logs whenever a
+  resolver returns null on a non-empty input — saves hours.
+- **Private records are the new private inner classes.** Mojang has
+  been moving DF types to private records for ~2 versions.  Default
+  to `setAccessible(true)` on every reflective accessor walk; the
+  cost is zero and the bug class is invisible until you hit it.
