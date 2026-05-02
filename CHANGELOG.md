@@ -7,6 +7,20 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Migration to Minecraft 26.1.2
+
+- **Mojmap port.** Bulk class/method/package translation from yarn 1.21.11 to mojmap 26.1.2 across 166 source files. Architectury Loom + `disableObfuscation=true` consumes a pre-deobfed jar from NeoForge maven; no Loom remap step.
+- **JDK 25.** MC 26.1.2 mandates Java 25; build.yml provisions it via `actions/setup-java` (Temurin distribution).
+- **Fabric API 0.147.0+26.1.2.** Per-level lifecycle hooks (`ServerWorldEvents` → `ServerLevelEvents`) and `ServerChunkEvents.Load` now fire on the renamed accessors; reflective probes in the worldgen bootstrap accept both mojmap and yarn names so future drift is absorbed.
+- **Density function port: 50/50 bit-exact** vs vanilla on 26.1.2 at samples=2000, beating the 1.21.11 baseline of 41/42. New variants `FindTopSurface` (overworld/caves/noodle) and `EndIslandDensityFunction` (end/sloped_cheese) are now interpreted in Rust; `SimplexNoise` (2D) and `LegacyRandomSource` (java.util.Random LCG) added as Rust building blocks. The bigger win surfaced during the port was a single yarn-name-drift bug in `resolveNoiseName` that had silently zeroed every Noise leaf and was hiding 41 working DFs as failures; fixing it lifted parity from 5/50 to 41/50, and the new ports closed the rest.
+- **Walker now handles `private record` DF types.** `Class.getMethod` + `invoke` silently fails on private records (auto-generated accessor is public but the declaring class is unexported, so invoke throws IllegalAccessException). Walker now uses `getDeclaredMethod` + `setAccessible(true)`.
+- **Autovalidate harness.** `./gradlew runClient -Pferrite.autovalidate=N` now boots the client headlessly via Mojang's `--quickPlaySingleplayer`, runs noise + biome + density parity validators at sample count N, and exits. Roughly 35 seconds end-to-end. Plain `./gradlew runClient` still goes to the title screen.
+- **16 diagnostic mixins stubbed.** Default-off in 1.21.11 already; need redesign against renamed 26.1.2 APIs but don't gate any default-on path. Tracked for follow-up.
+
+### Logging
+
+- **`/ferrite log monitors on|off|status`** — runtime gate for the periodic monitor reports (`[entity-tick]`, `[chunkgen]`, `[redstone-phase]`, etc.). About 5 lines/sec across 24 buckets in normal play; some users reported client lag attributable to the log volume. JVM-arg equivalent: `-Dferrite.log.monitors.off=true`. Counters keep ticking when disabled, so re-enabling picks up cleanly from the next 5s window — no backlog dump. Also applied on the 1.21.11 branch.
+
 ### Performance
 
 - **Hopper extract hint (active by default).** Per-source-inventory
