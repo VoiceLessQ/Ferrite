@@ -15,6 +15,14 @@ Every 5 seconds the mod also logs where your game is spending time, so the next 
 
 ---
 
+## Status: consolidation cycle
+
+Six features have shipped across cramming, redstone, hoppers, world-creation pre-gen, chunkgen baselines, and density functions. The next stretch is not adding more. It's deepening what already works. Some internals may change as we revisit the assumptions baked in during their first ports, and a few default-off paths exist because their current shape did not beat vanilla and want a structural rethink. User-facing toggles and parity validators stay; the implementations underneath get better.
+
+The hopper highway and world-creation pre-gen are default-off opt-ins. They work, and their oracles and shadow-validators show parity, but they need real-server validation across player setups before flipping default-on. Operators who enable them are helping validate the shipping shape; they are not guinea-pigging an unknown.
+
+---
+
 ## Measured results
 
 ### Cramming (1000+ active mobs)
