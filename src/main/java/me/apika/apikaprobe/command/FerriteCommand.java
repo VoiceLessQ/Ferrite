@@ -96,6 +96,10 @@ public final class FerriteCommand {
 								.then(CommandManager.literal("on").executes(FerriteCommand::enableBfs))
 								.then(CommandManager.literal("off").executes(FerriteCommand::disableBfs))
 								.then(CommandManager.literal("status").executes(FerriteCommand::statusBfs)))
+						.then(CommandManager.literal("ac-rust")
+								.then(CommandManager.literal("on").executes(FerriteCommand::enableAcRust))
+								.then(CommandManager.literal("off").executes(FerriteCommand::disableAcRust))
+								.then(CommandManager.literal("status").executes(FerriteCommand::statusAcRust)))
 						.then(CommandManager.literal("bfs-min")
 								.then(CommandManager.argument("n", IntegerArgumentType.integer(1, 4096))
 										.executes(FerriteCommand::setBfsMin))))
@@ -373,6 +377,49 @@ public final class FerriteCommand {
 			FerriteWireConfig.RUST_BFS_MIN_NODES,
 			RustBridge.NATIVE_AVAILABLE ? "available" : "MISSING",
 			FerriteWireConfig.ENABLED ? "on" : "off");
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * /ferrite redstone ac-rust on — enable the AC offer-based Rust
+	 * propagation kernel for the current server session. Default OFF.
+	 * When on AND a cascade is eligible, replaces both depowerNetwork
+	 * and the per-cascade BFS relaxation with one offer-based Rust
+	 * call that returns results in priority order. Java still does
+	 * setBlockState + neighbor emission per result.
+	 *
+	 * <p>Requires AC also enabled ({@code /ferrite redstone ac on}).
+	 * Falls back to BFS / Java if the AC kernel is unavailable or
+	 * the cascade exceeds {@link RedstoneHandoff#MAX_NODES}.
+	 */
+	private static int enableAcRust(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		if (!RustBridge.NATIVE_AVAILABLE) {
+			sendFeedback(ctx, "Rust native unavailable — flag set but no batch will run.", false);
+		}
+		FerriteWireConfig.RUST_AC = true;
+		String msg = "[redstone] Rust AC kernel enabled (this session only)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int disableAcRust(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		FerriteWireConfig.RUST_AC = false;
+		String msg = "[redstone] Rust AC kernel disabled (back to BFS / Java)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int statusAcRust(com.mojang.brigadier.context.CommandContext<ServerCommandSource> ctx) {
+		String msg = String.format(
+			"[redstone] ac-rust RUST_AC=%s native=%s ac=%s bfs=%s",
+			FerriteWireConfig.RUST_AC,
+			RustBridge.NATIVE_AVAILABLE ? "available" : "MISSING",
+			FerriteWireConfig.ENABLED ? "on" : "off",
+			FerriteWireConfig.RUST_BFS ? "on" : "off");
 		sendFeedback(ctx, msg, false);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;

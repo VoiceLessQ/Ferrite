@@ -102,6 +102,22 @@ public class RustBridge {
       int nodeCount);
 
   /**
+   * AC offer-based wire propagation. Sister to {@link #computeRedstoneBfs}
+   * with a richer per-node payload (initial flow-in, removed/shouldBreak
+   * flags, per-edge direction) and richer results (new power, new flow-in,
+   * resolved iFlowDir, result flags). Results are emitted in priority
+   * order (descending newPower, FIFO within tier); Java applies them in
+   * returned order without re-sorting through {@code updates}.
+   *
+   * <p>See {@link me.apika.apikaprobe.redstone.RedstoneHandoff#AC_REQUEST_BUF}
+   * for buffer layout and {@code redstone_ac.rs} for the kernel.
+   */
+  public static native int computeRedstoneAc(
+      java.nio.ByteBuffer requests,
+      java.nio.ByteBuffer results,
+      int nodeCount);
+
+  /**
    * Evaluates a compiled surface rule for one column position. Returns
    * the blockstate ID (≥0, indexes into the per-tree blockstate table)
    * or -1 if no rule matched.

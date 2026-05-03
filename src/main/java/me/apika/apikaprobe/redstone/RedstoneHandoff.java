@@ -69,6 +69,55 @@ public final class RedstoneHandoff {
 	public static final ByteBuffer RESULT_BUF =
 			ByteBuffer.allocateDirect(MAX_NODES * RESULT_STRIDE).order(ByteOrder.nativeOrder());
 
+	// ----- AC kernel buffers (Phase 2 of the AC port) -----------------
+	//
+	// Richer per-node payload for the offer-based propagation kernel
+	// in rust/mod/src/redstone_ac.rs. Layout:
+	//
+	// RedstoneAcNode (stride = 56 B):
+	//   +0    i32    x
+	//   +4    i32    y
+	//   +8    i32    z
+	//   +12   u8     currentPower
+	//   +13   u8     externalPower
+	//   +14   u8     initialFlowIn   (4-bit NESW mask, mirror of WireNode.flowIn)
+	//   +15   u8     flags           (AC_FLAG_*)
+	//   +16   i32[8] neighborIndices (-1 sentinel; same as old struct)
+	//   +48   u8[8]  neighborIDir    (DIR_* per edge, 0xFF = unused slot)
+	//   +56   stride
+	//
+	// RedstoneAcResult (stride = 24 B):
+	//   +0    i32    x
+	//   +4    i32    y
+	//   +8    i32    z
+	//   +12   i32    newPower
+	//   +16   u8     newFlowIn
+	//   +17   u8     resultFlags     (AC_RESULT_FLAG_*)
+	//   +18   i8     iFlowDir        (-1 if ambiguous; Java falls back
+	//                                 to wire.connections.iFlowDir)
+	//   +19..+24    pad
+	//
+	// Results arrive in priority order (descending newPower, FIFO within
+	// tier). Java applies setPower + queueNeighbors + updateNeighborShapes
+	// in returned order without re-sorting through the priority queue.
+	public static final int AC_REQUEST_STRIDE = 56;
+	public static final int AC_RESULT_STRIDE  = 24;
+
+	public static final int AC_FLAG_REMOVED      = 1 << 0;
+	public static final int AC_FLAG_SHOULD_BREAK = 1 << 1;
+	public static final int AC_FLAG_ROOT         = 1 << 2;
+	public static final int AC_FLAG_ADDED        = 1 << 3;
+
+	public static final int AC_RESULT_FLAG_REMOVED = 1 << 0;
+
+	/** Sentinel for `neighborIDir[k]` when slot k is unused. */
+	public static final byte AC_DIR_NONE = (byte) 0xFF;
+
+	public static final ByteBuffer AC_REQUEST_BUF =
+			ByteBuffer.allocateDirect(MAX_NODES * AC_REQUEST_STRIDE).order(ByteOrder.nativeOrder());
+	public static final ByteBuffer AC_RESULT_BUF =
+			ByteBuffer.allocateDirect(MAX_NODES * AC_RESULT_STRIDE).order(ByteOrder.nativeOrder());
+
 	private RedstoneHandoff() {}
 
 	/**
@@ -105,4 +154,45 @@ public final class RedstoneHandoff {
 	public static int readResultY(int index)        { return RESULT_BUF.getInt(index * RESULT_STRIDE + 4); }
 	public static int readResultZ(int index)        { return RESULT_BUF.getInt(index * RESULT_STRIDE + 8); }
 	public static int readResultNewPower(int index) { return RESULT_BUF.getInt(index * RESULT_STRIDE + 12); }
+
+	// ----- AC accessors -----------------------------------------------
+
+	public static void resetAcRequestBuffer() {
+		AC_REQUEST_BUF.clear();
+	}
+
+	public static void writeAcNode(
+			int index,
+			int x, int y, int z,
+			int currentPower,
+			int externalPower,
+			int initialFlowIn,
+			int flags,
+			int[] neighborIndices,
+			byte[] neighborIDir) {
+		int base = index * AC_REQUEST_STRIDE;
+		AC_REQUEST_BUF.putInt(base,      x);
+		AC_REQUEST_BUF.putInt(base + 4,  y);
+		AC_REQUEST_BUF.putInt(base + 8,  z);
+		AC_REQUEST_BUF.put   (base + 12, (byte) (currentPower  & 0x0F));
+		AC_REQUEST_BUF.put   (base + 13, (byte) (externalPower & 0x0F));
+		AC_REQUEST_BUF.put   (base + 14, (byte) (initialFlowIn & 0x0F));
+		AC_REQUEST_BUF.put   (base + 15, (byte) (flags         & 0xFF));
+		for (int i = 0; i < NEIGHBOR_SLOTS; i++) {
+			AC_REQUEST_BUF.putInt(base + 16 + (i * 4),
+					i < neighborIndices.length ? neighborIndices[i] : NO_NEIGHBOR);
+		}
+		for (int i = 0; i < NEIGHBOR_SLOTS; i++) {
+			AC_REQUEST_BUF.put(base + 48 + i,
+					i < neighborIDir.length ? neighborIDir[i] : AC_DIR_NONE);
+		}
+	}
+
+	public static int  readAcResultX(int index)        { return AC_RESULT_BUF.getInt(index * AC_RESULT_STRIDE); }
+	public static int  readAcResultY(int index)        { return AC_RESULT_BUF.getInt(index * AC_RESULT_STRIDE + 4); }
+	public static int  readAcResultZ(int index)        { return AC_RESULT_BUF.getInt(index * AC_RESULT_STRIDE + 8); }
+	public static int  readAcResultNewPower(int index) { return AC_RESULT_BUF.getInt(index * AC_RESULT_STRIDE + 12); }
+	public static int  readAcResultFlowIn(int index)   { return AC_RESULT_BUF.get  (index * AC_RESULT_STRIDE + 16) & 0xFF; }
+	public static int  readAcResultFlags(int index)    { return AC_RESULT_BUF.get  (index * AC_RESULT_STRIDE + 17) & 0xFF; }
+	public static int  readAcResultIFlowDir(int index) { return AC_RESULT_BUF.get  (index * AC_RESULT_STRIDE + 18); /* signed: -1 sentinel */ }
 }
