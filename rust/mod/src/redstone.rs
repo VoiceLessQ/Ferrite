@@ -26,7 +26,17 @@
 //!
 //! No JNI surface here — redstone_jni.rs is the entry point.
 
+use std::cell::RefCell;
 use std::cmp::max;
+
+// Reusable per-cascade scratch. compute_wire_power runs once per server
+// tick from a single thread, so thread_local + clear() keeps the Vec
+// allocated across cascades instead of allocating on every call. At
+// 200K+ cascades/sec on lag-machine workloads this is real allocator
+// pressure; the buffer never shrinks below MAX_NODES once warmed up.
+thread_local! {
+    static POWER_BUF: RefCell<Vec<u8>> = RefCell::new(Vec::with_capacity(1024));
+}
 
 // ============================================================================
 // Request / Result — #[repr(C)] for direct ByteBuffer mapping.
@@ -88,58 +98,61 @@ pub fn compute_wire_power(nodes: &[RedstoneNode], results: &mut [RedstoneResult]
     }
     debug_assert!(results.len() >= n);
 
-    // Work vector: current power level per node. Seed with source power
-    // (non-wire contributions) so the first relaxation step can max
-    // against neighbors.
-    let mut power: Vec<u8> = nodes.iter().map(|n| n.source_power).collect();
+    POWER_BUF.with(|buf| {
+        let mut power = buf.borrow_mut();
+        // Reuse capacity across cascades; clear() drops length to 0
+        // without freeing the backing buffer.
+        power.clear();
+        power.extend(nodes.iter().map(|n| n.source_power));
 
-    // Max 16 iterations — power decays by 1 per hop, and 15 is the max
-    // level, so after 16 passes any stable network has converged.
-    for _ in 0..16 {
-        let mut changed = false;
+        // Max 16 iterations: power decays by 1 per hop, and 15 is the
+        // max level, so after 16 passes any stable network has converged.
+        for _ in 0..16 {
+            let mut changed = false;
+            for (i, node) in nodes.iter().enumerate() {
+                let mut new_power = node.source_power;
+                for &ni in node.neighbor_indices.iter() {
+                    // Reject sentinel and any other negative before casting
+                    // to usize (a negative i32 cast becomes a huge usize and
+                    // would either panic in bounds check or read garbage).
+                    if ni < 0 {
+                        continue;
+                    }
+                    let ni_u = ni as usize;
+                    if ni_u >= n {
+                        // Malformed input; ignore rather than panic.
+                        continue;
+                    }
+                    let np = power[ni_u];
+                    if np > 0 {
+                        new_power = max(new_power, np - 1);
+                    }
+                }
+                if new_power != power[i] {
+                    power[i] = new_power;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+
+        // Emit deltas only. Java applies them as setBlockState calls.
+        let mut count = 0usize;
         for (i, node) in nodes.iter().enumerate() {
-            let mut new_power = node.source_power;
-            for &ni in node.neighbor_indices.iter() {
-                // Reject sentinel and any other negative before casting to
-                // usize (a negative i32 cast becomes a huge usize and would
-                // either panic in bounds check or silently read garbage).
-                if ni < 0 {
-                    continue;
-                }
-                let ni_u = ni as usize;
-                if ni_u >= n {
-                    // Malformed input; ignore rather than panic.
-                    continue;
-                }
-                let np = power[ni_u];
-                if np > 0 {
-                    new_power = max(new_power, np - 1);
-                }
-            }
-            if new_power != power[i] {
-                power[i] = new_power;
-                changed = true;
+            if power[i] != node.current_power {
+                results[count] = RedstoneResult {
+                    x: node.x,
+                    y: node.y,
+                    z: node.z,
+                    new_power: power[i] as i32,
+                };
+                count += 1;
             }
         }
-        if !changed {
-            break;
-        }
-    }
-
-    // Emit deltas only. Java applies them as setBlockState calls.
-    let mut count = 0usize;
-    for (i, node) in nodes.iter().enumerate() {
-        if power[i] != node.current_power {
-            results[count] = RedstoneResult {
-                x: node.x,
-                y: node.y,
-                z: node.z,
-                new_power: power[i] as i32,
-            };
-            count += 1;
-        }
-    }
-    count
+        count
+    })
 }
 
 // ============================================================================
@@ -205,8 +218,8 @@ mod tests {
         assert_eq!(by_x[&0], 10);
         assert_eq!(by_x[&1], 9);
         assert_eq!(by_x[&2], 8);  // max(10-2, 8-2) = max(8, 6) = 8
-        assert_eq!(by_x[&3], 8);
-        assert_eq!(by_x[&4], 8);
+        assert_eq!(by_x[&3], 7);  // max(10-3, 8-1) = max(7, 7) = 7
+        assert_eq!(by_x[&4], 8);  // own source 8 beats 10-4 = 6
     }
 
     #[test]
