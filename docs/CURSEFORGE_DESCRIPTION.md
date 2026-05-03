@@ -17,6 +17,19 @@ Logs tick breakdowns every 5s so the next port targets real bottlenecks.
 
 ---
 
+## What's new in 0.6.1-alpha
+
+Consolidation release. Builds on 0.6.0's hopper highway and pre-gen with audit-driven correctness, perf cleanups, and a sign-tick fix.
+
+- **Sign-tick suppression** (default-on). Vanilla ticks every placed sign every server tick to do a no-op null check 99.99% of the time. Ferrite suppresses the ticker when no player is editing the sign and re-registers immediately when someone opens the edit screen. **~70% BE-tick cost reduction at 961 placed signs (0.20 ms → 0.06 ms / tick).** Strict-class check preserves mod subclass behavior.
+- **Cramming correctness fix.** Standalone vehicles were pushing their own passengers because the sentinel-based `root_vehicle_id` check never matched. Java side now uses `e.getId()` for unmounted entities, mirroring vanilla's `getRootVehicle() == self`. New unit test confirms vehicle⇄passenger pairs are now correctly skipped.
+- **Cramming + redstone Rust kernels: thread-local buffer reuse.** Spatial-hash structures and relaxation buffers now persist across ticks instead of allocating per call. Plus a small-N brute-force fast path on the cramming side for sparse mob counts.
+- **Experimental-redstone warning.** Once-per-world warning when `/ferrite redstone ac on` is active but the world has the experimental redstone feature flag set; AC is silently bypassed on those worlds since vanilla's experimental controller doesn't route through Ferrite's installed controller. The warning surfaces what was previously a silent no-op.
+- **`RedstoneRustDispatcher` and its mixin deleted (~500 LOC).** Superseded by AC's `runRustBatch` in 0.4.0; default-off `USE_RUST` toggle since. The codebase is smaller and the next audit pass has less surface to traverse.
+- **AC fidelity audit.** Confirmed Ferrite's Alternate Current port matches [Space Walker's upstream](https://github.com/SpaceWalkerRS/alternate-current) at commit `89609e4` (2026-03-23). Full algorithmic parity, three Ferrite-side improvements (`rustIndex`, no-lambda walk, scratch buffer pre-alloc) verified present.
+
+See [CHANGELOG.md](https://github.com/VoiceLessQ/Ferrite/blob/main/CHANGELOG.md) for the full per-change detail and [docs/JOURNEY.md](https://github.com/VoiceLessQ/Ferrite/blob/main/docs/JOURNEY.md) "The May 2026 audit pass" for the retrospective on what we tried, what stuck, and the two findings that turned out to be false alarms on closer reading.
+
 ## What's new in 0.6.0-alpha
 
 - **MC 26.1.2 line.** Mojmap port across 166 source files. Architectury Loom + `disableObfuscation=true` consumes a pre-deobfed jar from NeoForge maven, no Loom remap step. JDK 25.
@@ -26,8 +39,6 @@ Logs tick breakdowns every 5s so the next port targets real bottlenecks.
 - **World creation pre-generation.** New toggle + 5-50 chunk radius slider on the Create World "More" tab. Background-thread driver feeds chunks through vanilla's ticket API with a `Semaphore(50)` backpressure cap. Cancel writes `<world>/ferrite_pregen.dat`; next world load auto-resumes from saved iterator state. Graceful complete writes `<world>/ferrite_pregen.done` (also the first-launch gate for dedicated-server `-Dferrite.pregen.radius=N`). Test commands: `/ferrite pregen <radius>`, `/ferrite pregen at <cx> <cz> <radius>`, `/ferrite pregen cancel`, `/ferrite pregen status`.
 - **`/ferrite log monitors on|off|status`** runtime gate for the periodic monitor reports. JVM-arg equivalent: `-Dferrite.log.monitors.off=true`. Counters keep ticking when disabled, so re-enabling picks up cleanly from the next 5s window without backlog dump.
 - **Autovalidate harness.** `./gradlew runClient -Pferrite.autovalidate=N` boots the client headlessly via Mojang's `--quickPlaySingleplayer`, runs noise + biome + density parity validators at sample count N, exits. Roughly 35 seconds end-to-end. Plain `./gradlew runClient` still goes to title screen.
-
-Surface dispatcher stays default-off; closing the structural ~7 ms floor (palette writes, column scanner, biome chain) needs architectural bypass. See [PIANO_STATUS.md](https://github.com/VoiceLessQ/Ferrite/blob/main/docs/PIANO_STATUS.md) for the decomposition.
 
 ---
 
