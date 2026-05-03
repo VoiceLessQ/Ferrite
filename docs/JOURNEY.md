@@ -160,6 +160,55 @@ can `/ferrite redstone bfs off` as a one-command opt-out. Oracle
 reports 0 mismatches against vanilla across every test window;
 correctness is proven, not asserted.
 
+### World creation pre-gen (26.1.x branch, default OFF toggle)
+
+Not a Rust port. A UX/lifecycle feature that runs vanilla's chunkgen
+pipeline (with all of Ferrite's existing accelerations stacked) at
+world creation time, before the player ever explores the area. The
+piano model still applies, just inverted: vanilla generates chunks
+on demand, we ask it to generate them up-front in a known pattern.
+
+Shape: a toggle + 5-50 chunk radius slider on Create World "More" tab.
+On commit, a static request is consumed by `SERVER_STARTED` and a
+daemon-thread driver walks a clean-room concentric annulus iterator,
+feeding `ChunkForcer.submitAsync` through a `Semaphore(50)` backpressure
+gate. Each submission bounces onto the server thread to satisfy the
+chunk-system contract; the driver loop itself stays off the server
+thread so ticking and chunk-system housekeeping are unblocked. A boss
+bar reports progress to the host, throttled to every 5th chunk.
+
+Cancel writes a snapshot to `<world>/ferrite_pregen.dat` (Properties
+file, four ints of iterator state plus the request metadata). Auto-
+resume on next world load reads the snapshot and continues from the
+exact same iterator position. Graceful completion deletes the snapshot
+and writes `<world>/ferrite_pregen.done`, which is also the first-launch
+gate for the dedicated-server `-Dferrite.pregen.radius=N` property
+(read once, marker prevents re-firing on every restart).
+
+ChunkForcer split during the build: the existing `/ferrite chunkforce`
+on-demand path stayed as `submitOneShot` with its non-blocking cap +
+dedup. A new `submitAsync` returns a `CompletableFuture<Void>` for
+driver-owned backpressure, no internal cap, no dedup, no `ENABLED`
+gate. Both paths share the same underlying `addTicketAndLoadWithRadius`
+call but track inflight separately so pre-gen and chunkforce do not
+contend on a shared cap.
+
+Validated: 88 chunks/sec at 441 chunks static, 70/s at 961 chunks during
+world creation, 80/s peak at 3721 chunks during cancel-and-resume cycle.
+Active flight + radius=15 pre-gen held TPS 20.00 across 100+ tick
+samples (avg 8-11ms, max 47ms within the 50ms budget). Pre-gen and
+chunkforce coexist correctly: when both target the same area the
+chunk-load executor splits worker time gracefully (53/s competing,
+104/s when chunkforce is active but inactive in the pre-gen area), no
+TPS loss, no corruption. The user-controllable workaround for max
+pre-gen throughput is `/ferrite chunkforce off`. A future cross-system
+inflight coordinator is noted in `FUTURE_PLANS.md` if operators ever
+need guaranteed throughput during active play.
+
+License clean-room: the iterator was rewritten from algorithmic
+description, not copied from Chunky (GPL-3.0). The mining of Chunky's
+internals (`docs/LOCAL_DESIGN.md`) was for *intent*, not code.
+
 ---
 
 ## What did not ship and why

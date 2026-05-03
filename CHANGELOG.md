@@ -7,6 +7,10 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Features
+
+- **World creation pre-generation (default OFF toggle).** New "Pre-generate spawn area" toggle + radius slider (5-50 chunks) on the Create World "More" tab. When enabled, a daemon-thread driver walks a concentric annulus iterator around spawn after `SERVER_STARTED` and feeds chunks through vanilla's ticket API with a `Semaphore(50)` backpressure cap. A boss bar reports progress to the host. Cancel writes `<world>/ferrite_pregen.dat`; the next world load auto-resumes from the saved iterator state. Graceful completion deletes the snapshot and writes `<world>/ferrite_pregen.done` (also the first-launch gate for the dedicated-server `-Dferrite.pregen.radius=N` property). Test commands `/ferrite pregen <radius>`, `/ferrite pregen at <cx> <cz> <radius>`, `/ferrite pregen cancel`, `/ferrite pregen status`. Validated: 70-88 chunks/sec across configurations, TPS 20.00 holding under active flight + pre-gen load. Coexists with `/ferrite chunkforce`: graceful throughput split when both target the same area (53/s competing, 104/s when chunkforce is inactive in the pre-gen area), no TPS loss. Iterator is clean-room (Chunky GPL-3.0 was mined for intent, not code).
+
 ### Migration to Minecraft 26.1.2
 
 - **Mojmap port.** Bulk class/method/package translation from yarn 1.21.11 to mojmap 26.1.2 across 166 source files. Architectury Loom + `disableObfuscation=true` consumes a pre-deobfed jar from NeoForge maven; no Loom remap step.
