@@ -7,6 +7,12 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Performance
+
+- Idle furnaces, blast furnaces, and smokers no longer tick when
+  empty and not burning. Zero BE-tick cost until a hopper or player
+  inserts items. Mod subclasses unaffected (strict-class check).
+
 ## [0.6.1-alpha] — 2026-05-03
 
 Consolidation release. Builds on 0.6.0's hopper highway and pre-gen

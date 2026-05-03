@@ -276,3 +276,18 @@ Apply the four checks. If they pass, add a section here with
 
 The instrumentation framework exists precisely so future work is
 data-driven, not speculative.
+
+---
+
+### Brewing stand getSlotsEmpty() allocation
+
+`getSlotsEmpty()` allocates `boolean[3]` every tick per brewing stand.
+At 30 stands: ~600 allocations/sec, minor GC pressure.
+
+Fix shape: three coordinated `@Redirect` on `tick()` body, brittle,
+three redirects on a 40-line method, fragile to upstream changes.
+Savings: ~14 KB/sec GC pressure at 30 stands, below TPS-relevant.
+
+Deferred: fix complexity outweighs savings at realistic scale.
+Revisit if brewing stand tick cost becomes measurable on large
+servers.
