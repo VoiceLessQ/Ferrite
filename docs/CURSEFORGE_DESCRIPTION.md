@@ -1,26 +1,31 @@
-## Ferrite
+## Ferrite (0.6.0-alpha for MC 26.1.2)
 
-**What you get:** A performance mod for Minecraft 1.21.11. It's a Fabric (Java) mod that calls into native Rust via JNI for the hot paths — Java handles Minecraft integration and mixins, Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary.
+**What you get:** A performance mod for Minecraft 26.1.2 (mojmap, JDK 25). It's a Fabric (Java) mod that calls into native Rust via JNI for the hot paths. Java handles Minecraft integration and mixins, Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary. The 1.21.11 line continues separately on the `main` branch.
 
 **Live now:**
 
-- **Cramming** (`/ferrite cramming on|off|status`, default on) — Rust port of the mob-vs-mob cramming loop. **~65% entity-tick reduction at high mob density.** Every MobEntity subclass (villager halls, mob farms). Vanilla 1:1 parity: same push math, same `isPassengerOfSameVehicle` skip, same `maxEntityCramming` damage (gamerule + 1-in-4 random). `/gamerule maxEntityCramming 0` stays at 20 TPS for unbounded farms.
-- **Redstone** (`/ferrite redstone ac on`) — [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current). **~10× fewer cascades, ~6× faster contraptions at same load.** Bit-correct on 150,000+ oracle checks, works on existing worlds. Per-cascade Rust BFS adds another **~30%** wire-cost cut on heavy builds.
-- **Chunkgen baseline** (no toggle) — `@Invoker`/`@Accessor` mixins replace reflection on `MaterialRules.MaterialRuleContext`. **~3 ms/chunk** off vanilla's surface phase, every chunk. Diagnostic instrumentation (~8-10 ms/chunk) also gated off by default.
-- **Surface rule dispatcher** (`/ferrite surface dispatch on`, default off) — Rust evaluation + batched column heightmap. **~13.4 ms ON vs ~6.4 ms vanilla**, ~7 ms structural gap remains. A/B only, not production-ready. Parity-clean (100% across 23,000+ chunks).
+- **Cramming** (`/ferrite cramming on|off|status`, default on). Rust port of the mob-vs-mob cramming loop. **~65% entity-tick reduction at high mob density.** Every MobEntity subclass (villager halls, mob farms). Vanilla 1:1 parity: same push math, same passenger-of-same-vehicle skip, same `maxEntityCramming` damage (gamerule + 1-in-4 random). `/gamerule maxEntityCramming 0` stays at 20 TPS for unbounded farms.
+- **Redstone** (`/ferrite redstone ac on`). [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current). **~10× fewer cascades, ~6× faster contraptions at same load.** Bit-correct on 150,000+ oracle checks, works on existing worlds. Per-cascade Rust BFS adds another **~30%** wire-cost cut on heavy builds.
+- **Hopper extract hint (default on).** Per-source-inventory hint tracks the first non-empty slot; extract loops start there instead of iterating from slot 0 every fire. **~23 µs/call at avgStartIdx=16 (~60% reduction), ~110 µs/call at avgStartIdx=53 (~85%)** on partially-drained chests. Validator shadow-runs reported 0 stale events across 450+ extracts.
+- **Hopper highway** (`/ferrite hopper highway on`, default off). Per-slot independent cooldowns + round-robin destination routing. Aggregate per-hopper throughput climbs from vanilla 1/(8 ticks) to up to 5/(8 ticks). **3.1× chain throughput** under back-pressure on a 100-hopper test chain. Per-tick item count stays ≤ 1 so comparator transition rate is preserved. For hopper-heavy storage; leave off for sorters tuned to vanilla 8-tick clocks.
+- **World creation pre-gen** (toggle on Create World "More" tab, default off). Pre-generates a configurable 5-50 chunk radius around spawn before the player loads in, runs through Ferrite's optimized chunkgen pipeline. Cancel writes a snapshot, next world load auto-resumes. Boss bar reports progress to the host. Dedicated servers: `-Dferrite.pregen.radius=N` first-launch only. Validated **53-104 chunks/sec** depending on server load (steady ~80/s, ~50/s when competing with active player), TPS 20 holding under flight.
+- **Chunkgen baseline** (no toggle). Universal `@Invoker`/`@Accessor` mixins on `MaterialRuleContext` save **~3 ms/chunk** off vanilla's surface phase, every chunk, no opt-in. Diagnostic instrumentation (~8-10 ms/chunk) is gated off by default.
+- **Density function port: 50/50 bit-exact on 26.1.2** (vs the 41/42 baseline on 1.21.11). Building blocks for the future Rust DF compiler are now in tree.
+- **Logging gate** (`/ferrite log monitors on|off|status`). Runtime toggle for the periodic monitor reports. About 5 lines/sec across 24 buckets in normal play; turn off on long sessions or I/O-bound hardware to cut log volume without losing the counters.
 
 Logs tick breakdowns every 5s so the next port targets real bottlenecks.
 
 ---
 
-## What's new
+## What's new in 0.6.0-alpha
 
-- **Universal -3 ms/chunk** — `@Invoker`/`@Accessor` mixins drop reflection from vanilla's surface phase. ~9.3 → ~6.4 ms. No toggle, active for everyone.
-- **Surface dispatcher -2.2 ms** — batched per-column heightmap updates collapse ~32K `Heightmap.trackUpdate` calls into ~512. Bit-identical vs vanilla across 23,204 chunks. Dispatcher ON: ~15.6 → ~13.4 ms.
-- **`/ferrite surface heightmap-parity on|off|stats|reset`** — cell-by-cell regression diff against vanilla's per-write reference.
-- **Diagnostic gating** (~8-10 ms noise-sync) and **biome cache + Identifier intern** (~0.7 ms dispatcher) from earlier in the cycle persist into 0.5.1.
-- **PhysicsOracle validator** — 100% match across 700K+ dispatches at 1000 mobs. Physics dispatcher stays default-off (regresses vs vanilla's JIT).
-- **Package layout** reorganised into 7 subpackages. Internal cleanup only.
+- **MC 26.1.2 line.** Mojmap port across 166 source files. Architectury Loom + `disableObfuscation=true` consumes a pre-deobfed jar from NeoForge maven, no Loom remap step. JDK 25.
+- **Density function port: 50/50 bit-exact** on 26.1.2 at samples=2000. New variants `FindTopSurface` (overworld/caves/noodle) and `EndIslandDensityFunction` (end/sloped_cheese) interpreted in Rust; `SimplexNoise` (2D) and `LegacyRandomSource` (java.util.Random LCG) added as Rust building blocks. The bigger win surfaced during the port was a single yarn-name-drift bug in `resolveNoiseName` that had silently zeroed every Noise leaf and was hiding 41 working DFs as failures; fixing it lifted parity from 5/50 to 41/50, and the new ports closed the rest.
+- **Hopper highway** (opt-in). Per-slot independent cooldowns with stagger init `{0, 1, 2, 3, 4}` and round-robin destination routing. **3.1× chain throughput** measured. Per-slot interval probe shows `min=8, max=8, avg=8.00` once steady state reaches (each slot at exactly vanilla 8-tick pace). Default off; per-tick decrement and NBT write are gated behind `ENABLE` so default-off users pay zero per-tick overhead and zero NBT bloat.
+- **Hopper extract hint** (default on). Validated 0 stale events across 450+ extracts. JVM-arg opt-out: `-Dferrite.hopper.extract.useHint=false`.
+- **World creation pre-generation.** New toggle + 5-50 chunk radius slider on the Create World "More" tab. Background-thread driver feeds chunks through vanilla's ticket API with a `Semaphore(50)` backpressure cap. Cancel writes `<world>/ferrite_pregen.dat`; next world load auto-resumes from saved iterator state. Graceful complete writes `<world>/ferrite_pregen.done` (also the first-launch gate for dedicated-server `-Dferrite.pregen.radius=N`). Test commands: `/ferrite pregen <radius>`, `/ferrite pregen at <cx> <cz> <radius>`, `/ferrite pregen cancel`, `/ferrite pregen status`.
+- **`/ferrite log monitors on|off|status`** runtime gate for the periodic monitor reports. JVM-arg equivalent: `-Dferrite.log.monitors.off=true`. Counters keep ticking when disabled, so re-enabling picks up cleanly from the next 5s window without backlog dump.
+- **Autovalidate harness.** `./gradlew runClient -Pferrite.autovalidate=N` boots the client headlessly via Mojang's `--quickPlaySingleplayer`, runs noise + biome + density parity validators at sample count N, exits. Roughly 35 seconds end-to-end. Plain `./gradlew runClient` still goes to title screen.
 
 Surface dispatcher stays default-off; closing the structural ~7 ms floor (palette writes, column scanner, biome chain) needs architectural bypass. See [PIANO_STATUS.md](https://github.com/VoiceLessQ/Ferrite/blob/main/docs/PIANO_STATUS.md) for the decomposition.
 
@@ -86,10 +91,11 @@ A shadow-compute `RedstoneOracle` validates every sampled cascade against vanill
 
 ## In progress
 
-* **Surface rule dispatcher** (`/ferrite surface dispatch on`) — opt-in in 0.5.1. ~7 ms structural gap above vanilla; closing it needs architectural work that bypasses palette writes or the biome supplier chain. Default-off. Parity validator: `/ferrite surface heightmap-parity`.
-* **Density-function port** — Rust kernel ~7× faster than vanilla's noise-sync in equivalent work, but blocked at the DF layer. Vanilla interleaves DFs with interpolation inside `final NoiseChunkGenerator`; no clean cell-corner grid without reimplementing the DF tree. Per-call JIT-vs-JNI wall is the recurring pattern across density/aquifer/chunkgen targets. See [PIANO_STATUS.md](https://github.com/VoiceLessQ/Ferrite/blob/main/docs/PIANO_STATUS.md).
-* **Aquifer port** (`/ferrite aquifer rust on`) — 99.895% parity, surface-grid artifacts at chunk boundaries. In tree, default-off. Revisit needs a new surface-grid approach.
-* **`adjustMovementForCollisions`** — shelved. AABB sweep correct in Rust, but snapshot materialization cost exceeded sweep savings at realistic mob counts. `PhysicsOracle` validator in tree (100% across 700K+ dispatches) for future revisit. Dispatcher disabled.
+* **Surface rule dispatcher** (`/ferrite surface dispatch on`). Opt-in. ~7 ms structural gap above vanilla; closing it needs architectural work that bypasses palette writes or the biome supplier chain. Default off. Parity validator: `/ferrite surface heightmap-parity`.
+* **Density-function compiler.** The 50/50 bit-exact interpreter shipped on 26.1.2 is the foundation; the next step is JIT-style compilation of DF trees to amortize the per-cell cost below vanilla's `Marker(CacheOnce, X)` envelope. See [PIANO_STATUS.md](https://github.com/VoiceLessQ/Ferrite/blob/main/docs/PIANO_STATUS.md).
+* **Aquifer port** (`/ferrite aquifer rust on`). 99.895% parity, surface-grid artifacts at chunk boundaries. In tree, default off. Revisit needs a new surface-grid approach.
+* **`adjustMovementForCollisions`.** Shelved. AABB sweep correct in Rust, but snapshot materialization cost exceeded sweep savings at realistic mob counts. `PhysicsOracle` validator in tree (100% across 700K+ dispatches) for future revisit. Dispatcher disabled.
+* **Pre-gen + chunkforce coordinator.** Optional. Pre-gen and `/ferrite chunkforce` currently target the chunk-load executor independently; when both touch the same region throughput halves gracefully (no corruption, no TPS loss). User workaround for max pre-gen rate is `/ferrite chunkforce off`. Future cross-system inflight coordinator could remove the workaround.
 
 ---
 
@@ -108,11 +114,12 @@ Low-end hardware (4-core CPU, integrated graphics) is especially useful — the 
 
 ## Requirements
 
-- Minecraft 1.21.11
+- Minecraft 26.1.2 (this build) / Minecraft 1.21.11 (separate `main` branch builds)
+- Java 25 (Temurin recommended; CI builds against JDK 25)
 - Fabric Loader 0.18.4+
-- Fabric API
+- Fabric API 0.147.0+26.1.2
 - Works in **singleplayer and multiplayer**
-- **Server-side compatible** — can be installed on a server without requiring players to have the mod
+- **Server-side compatible**, can be installed on a server without requiring players to have the mod
 
 ---
 
