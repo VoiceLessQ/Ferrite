@@ -9,6 +9,10 @@ marks pre-release research builds.
 
 ### Performance
 
+- Sign block entities no longer tick when no player is actively
+  editing them (~70% BE-tick cost reduction at large sign builds).
+  Default-on. Mod subclasses unaffected (strict-class check).
+
 - **Hopper extract hint (active by default).** Per-source-inventory
   hint tracks the first non-empty slot; extract loops start there
   instead of iterating from slot 0 every fire. On a partially-drained
