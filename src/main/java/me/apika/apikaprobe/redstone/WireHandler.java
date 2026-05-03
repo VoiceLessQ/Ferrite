@@ -767,12 +767,24 @@ public class WireHandler {
 			idx++;
 		}
 
-		// Resolve external power for every wire — same step the Phase-2
-		// BFS path does. Lazy-resolution semantics in AC's findWirePower
-		// don't translate to the static-snapshot kernel, so all wires
-		// must have correct externalPower before serialization.
+		// Pre-resolve each wire's effective seed power for the offer-based
+		// kernel:
+		//   1. findExternalPower: non-wire contributions (torches,
+		//      repeaters, redstone blocks, etc.).
+		//   2. findPower(wire, true): pulls offers from UNSEARCHED (i.e.
+		//      outside-this-cascade) wire neighbors and bumps virtualPower
+		//      if any offer beats externalPower. Mirrors AC's
+		//      depowerNetwork step. Without this, boundary wires whose
+		//      only power source is outside the cascade collapse to 0.
+		//
+		// After both calls, wire.virtualPower = max(externalPower, max
+		// over unsearched neighbors of (their_vp - 1)). That's the
+		// correct seed value to hand the Rust kernel as source_power
+		// (called external_power in the AC node payload, but the
+		// semantic is "power from outside the cascade compute").
 		for (int i = 0; i < n; i++) {
 			findExternalPower(rustWires[i]);
+			findPower(rustWires[i], true);
 		}
 
 		// Serialize richer payload.
@@ -806,7 +818,10 @@ public class WireHandler {
 					i,
 					w.pos.getX(), w.pos.getY(), w.pos.getZ(),
 					w.currentPower,
-					w.externalPower,
+					// virtualPower (set above by findPower(true)) carries
+					// externalPower + outside-cascade neighbor contribution,
+					// which is the correct seed for the offer-based kernel.
+					Math.max(0, w.virtualPower),
 					w.flowIn,
 					flags,
 					rustNeighbors,
