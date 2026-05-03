@@ -18,11 +18,54 @@ marks pre-release research builds.
 
 User-facing toggles and parity validators do not change. Where an internal rewrite shifts behavior under a toggle, the toggle name stays the same and the CHANGELOG entry calls out exactly what changed.
 
+## [0.6.2-alpha] — 2026-05-03
+
+Completes the block-entity ticker hygiene story started in 0.6.1.
+0.6.1 fixed signs; 0.6.2 fixes furnaces and unifies the gate
+infrastructure so future ticker suppressions are additive instead
+of conflicting.
+
 ### Performance
 
-- Idle furnaces, blast furnaces, and smokers no longer tick when
-  empty and not burning. Zero BE-tick cost until a hopper or player
-  inserts items. Mod subclasses unaffected (strict-class check).
+- **Idle furnaces, blast furnaces, and smokers no longer tick** when
+  empty and not burning. Vanilla registers a `BlockEntityTicker` for
+  every furnace at chunk load; the body does nothing useful when
+  `litTimeRemaining == 0 && cookingTimeSpent == 0` and both fuel and
+  input slots are empty. Suppression gates `WorldChunk.updateTicker`
+  via `@Redirect` on `BlockState.getBlockEntityTicker`, returning
+  null for the three vanilla types (strict-class check) when all four
+  conditions hold. Re-registers via `@Inject RETURN` on
+  `setStack(int, ItemStack)`. Measured at 500 idle furnaces:
+  **zero measurable BE-tick increase** vs the empty-area baseline
+  (0.04-0.05 ms / tick pre and post, within noise floor). Default-on.
+  Mod subclasses untouched.
+
+### Changed
+
+- **Sign and furnace ticker gates collapsed into one composite mixin**
+  (`WorldChunkBlockEntityTickerGateMixin`). Two separate `@Redirect`
+  mixins on the same INVOKE site conflict at load time, Mixin keeps
+  the first-loaded one and silently skips the second. Caught at boot
+  via the `[Mixin/WARN]` line on the first dev build. The composite
+  gate has both sign and furnace cases as independent branches;
+  future BE-type suppressions add as additional branches.
+
+### Notes
+
+- Audited the rest of vanilla's common block entities (chest, barrel,
+  bed, decorated pot, lectern, jukebox, comparator, piston). Mojang
+  already applied the dynamic-ticker pattern correctly to all of them.
+  Signs and furnaces were the two outliers. Both now closed. The
+  cheap obvious targets are exhausted; further tick-cost reductions
+  will be measurement-driven from real server logs rather than source
+  scans of vanilla.
+
+- Brewing stand `getSlotsEmpty()` allocates `boolean[3]` per tick.
+  Realistic-scale impact (30 stands → 14 KB/sec GC pressure) is below
+  TPS-relevant. Fix shape (three coordinated `@Redirect` on a 40-line
+  method) is brittle and outweighs the savings. Deferred to
+  `docs/FUTURE_PLANS.md`. Revisit if a real server surfaces brewing
+  stand tick cost as measurable.
 
 ## [0.6.1-alpha] — 2026-05-03
 
