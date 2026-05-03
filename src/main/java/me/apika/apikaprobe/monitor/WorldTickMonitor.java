@@ -42,6 +42,14 @@ public final class WorldTickMonitor {
 	private static final AtomicLong ENT_TOTAL_NS = new AtomicLong();
 	private static final AtomicLong ENT_MAX_NS = new AtomicLong();
 
+	// Sign-tick probe. Counts every invocation of SignBlockEntity.tick
+	// across the window, plus a tiny self-timed body measurement. The
+	// load-bearing measurement is the [worldtick] blockentities delta
+	// between (few signs) and (many signs) loaded; this counter just
+	// confirms how many signs are actually ticking.
+	private static final AtomicLong SIGN_TICK_COUNT = new AtomicLong();
+	private static final AtomicLong SIGN_TICK_TOTAL_NS = new AtomicLong();
+
 	private static volatile long lastReportNs = System.nanoTime();
 
 	private WorldTickMonitor() {}
@@ -93,6 +101,20 @@ public final class WorldTickMonitor {
 		ENTITY_THIS_TICK_NS.addAndGet(duration);
 	}
 
+	/**
+	 * Record one sign tick body. Called from {@code SignTickProbeMixin}
+	 * around the static {@code SignBlockEntity.tick} method. The body
+	 * timing is tiny (~5-10ns of useful work) and underestimates the
+	 * real per-sign cost which lives in the BE-tick infrastructure
+	 * around the call site (range check, ticker map walk, lambda
+	 * dispatch). Use the {@code [worldtick] blockentities} delta
+	 * between (few signs) and (many signs) for the real number.
+	 */
+	public static void recordSignTick(long durationNs) {
+		SIGN_TICK_COUNT.incrementAndGet();
+		SIGN_TICK_TOTAL_NS.addAndGet(durationNs);
+	}
+
 	// --- Internals ----------------------------------------------------------
 
 	private static void onServerTickEnd() {
@@ -117,6 +139,8 @@ public final class WorldTickMonitor {
 		long beMax = BE_MAX_NS.getAndSet(0L);
 		long entTotal = ENT_TOTAL_NS.getAndSet(0L);
 		long entMax = ENT_MAX_NS.getAndSet(0L);
+		long signCount = SIGN_TICK_COUNT.getAndSet(0L);
+		long signTotalNs = SIGN_TICK_TOTAL_NS.getAndSet(0L);
 
 		lastReportNs = now;
 
@@ -130,6 +154,20 @@ public final class WorldTickMonitor {
 				formatMs(entTotal / ticks),
 				formatMs(entMax),
 				ticks);
+
+		// Sign-tick line emits only when signs were actually ticked this
+		// window. Body-time per call is tiny; the useful number is
+		// signs/tick which tells you how many ticking signs are in
+		// loaded chunks.
+		if (signCount > 0L) {
+			double signsPerTick = (double) signCount / ticks;
+			double bodyUsPerSign = (signTotalNs / 1_000.0) / signCount;
+			MonitorLog.info("[sign-tick] signs={}/tick body={} us/sign total-body={} ms/window  n={} ticks",
+					String.format("%.1f", signsPerTick),
+					String.format("%.3f", bodyUsPerSign),
+					formatMs(signTotalNs),
+					ticks);
+		}
 	}
 
 	private static String formatMs(long nanos) {
