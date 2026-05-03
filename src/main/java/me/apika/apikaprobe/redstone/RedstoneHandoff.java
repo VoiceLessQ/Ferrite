@@ -46,18 +46,12 @@ import java.nio.ByteOrder;
  * the vanilla connectivity rules. Capped at MAX_NODES so a large
  * interconnected base can't spike the buffer — if a cascade exceeds
  * the cap, Java falls back to vanilla's update path for that tick.
+ *
+ * <p>The active producer is {@link WireHandler#runRustBatch()}; the
+ * shared structs and direct ByteBuffers are exposed here so that file
+ * and the Rust kernel agree on layout.
  */
 public final class RedstoneHandoff {
-
-	/**
-	 * A/B switch for the Rust wire-BFS path. Default OFF — flip to true
-	 * at runtime (breakpoint, mod command, or
-	 * `RedstoneHandoff.USE_RUST = true`) to route wire cascades through
-	 * [RedstoneRustDispatcher] instead of vanilla. The oracle
-	 * instrumentation keeps running on whichever path is active, so
-	 * mismatches surface the same way in both modes.
-	 */
-	public static volatile boolean USE_RUST = false;
 
 	public static final int MAX_NODES       = 1024;
 	public static final int REQUEST_STRIDE  = 48;
