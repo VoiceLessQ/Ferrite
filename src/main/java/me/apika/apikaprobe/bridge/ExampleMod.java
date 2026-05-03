@@ -12,9 +12,7 @@ import me.apika.apikaprobe.worldgen.chunk.ChunkForcer;
 import me.apika.apikaprobe.worldgen.chunk.ChunkPrewarmTrigger;
 import me.apika.apikaprobe.worldgen.chunk.ChunkPrewarmer;
 import me.apika.apikaprobe.worldgen.chunk.PregenLifecycle;
-import me.apika.apikaprobe.redstone.RedstoneHandoff;
 import me.apika.apikaprobe.redstone.RedstoneOracle;
-import me.apika.apikaprobe.redstone.RedstoneRustDispatcher;
 import me.apika.apikaprobe.RustBridge;
 import me.apika.apikaprobe.command.FerriteCommand;
 import me.apika.apikaprobe.entity.CrammingDispatcher;
@@ -92,7 +90,6 @@ public class ExampleMod implements ModInitializer {
 		PreChunkDispatcher.register();
 		RedstonePhaseMonitor.register();
 		RedstoneOracle.register();
-		RedstoneRustDispatcher.register();
 		FerriteCommand.register();
 		WorldgenStateBootstrap.register();
 		ChunkDecoratorTiming.register();
@@ -121,9 +118,10 @@ public class ExampleMod implements ModInitializer {
 			//
 			// FerriteWireConfig (pure-Java Alternate Current redstone) is
 			// intentionally not touched — it has no native dependency.
+			// AC's Rust BFS step has its own NATIVE_AVAILABLE guard inside
+			// WireHandler.runRustBatch.
 			CrammingDispatcher.ENABLED = false;
 			PhysicsDispatcher.ENABLED = false;
-			RedstoneHandoff.USE_RUST = false;
 			LOGGER.warn("Native engine unavailable — Rust-backed paths disabled, vanilla behavior restored.");
 			return;
 		}

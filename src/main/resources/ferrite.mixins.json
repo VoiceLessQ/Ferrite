@@ -52,7 +52,6 @@
 		"ExperimentalRedstoneControllerMixin",
 		"RedstoneOracleMixin",
 		"RedstoneControllerInvoker",
-		"RedstoneRustMixin",
 		"FerriteControllerInstallMixin",
 		"SurfaceValidatorMixin",
 		"NoiseConfigCaptureMixin",

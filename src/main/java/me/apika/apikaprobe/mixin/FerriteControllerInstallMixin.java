@@ -25,12 +25,6 @@ import net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator;
  * dispatch on {@code update(...)} runs the Ferrite logic (which
  * internally gates on {@link me.apika.apikaprobe.redstone.FerriteWireConfig#ENABLED}
  * and falls back to {@code super.update(...)} when AC is disabled).
- *
- * <p>This mixin co-exists with {@link RedstoneRustMixin} — the Rust
- * BFS @Redirect still fires first on the {@code controller.update}
- * INVOKE call site. When Rust BFS is off, the call falls through to
- * virtual dispatch, which lands in {@link FerriteRedstoneController}
- * thanks to this install.
  */
 @Mixin(RedStoneWireBlock.class)
 public abstract class FerriteControllerInstallMixin {
