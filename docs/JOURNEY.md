@@ -514,6 +514,83 @@ specific cascade sizes. Per-cascade losses in narrow buckets are
 real but get drowned out by the aggregate wins on the wider
 distribution.
 
+**Block-entity ticker hygiene fell out of the audit too.** A
+chase-the-tick-cost question (Etho mentioned signs lagging on
+Hermitcraft scale) opened a vein neither cramming nor redstone had
+reached. Vanilla registers a `BlockEntityTicker` for every sign at
+chunk load and ticks all of them every server tick to do, in 99.99%
+of cases, a single null check on the `editor` field. The body work
+is ~5-10 ns per sign per tick. The infrastructure around it (range
+check, ticker map walk, lambda dispatch, profiler push/pop) costs
+~120 ns per sign per tick regardless. At 961 placed signs that is
+0.20 ms / tick of pure overhead doing nothing useful. Same shape we
+had been finding everywhere else: vanilla maintains a flat data
+structure (the per-chunk ticker map) and iterates all of it
+unconditionally, so the win comes from pulling out the entries that
+have nothing to do, not from making the inner work faster.
+
+The fix is a single `@Redirect` on `BlockState.getBlockEntityTicker`
+inside `WorldChunk.updateTicker`, returning null for vanilla
+`SignBlockEntity` and `HangingSignBlockEntity` (strict-class check)
+when the editor field is null. Vanilla's existing
+`if (ticker == null) removeBlockEntityTicker(...)` branch handles
+deregistration. `setEditor(UUID)` re-evaluates the gate via the
+same `updateTicker` call when a player opens the edit screen. 961
+placed signs measured: 0.20 ms / tick → 0.06 ms / tick, ~70%
+reduction. Self-heals from persisted-editor state within two ticks
+of chunk load.
+
+The same pattern then applied to furnaces. `AbstractFurnaceBlockEntity`
+ticks every furnace at chunk load, runs through ~6 ItemStack/field
+reads, falls through every branch, and returns when the furnace is
+idle (no fuel, no input, not burning, no recipe in progress). The
+gate adds three more conditions on top of the sign check: redirect
+to null when the strict-class is `FurnaceBlockEntity`,
+`BlastFurnaceBlockEntity`, or `SmokerBlockEntity`, and all of
+`litTimeRemaining == 0`, `cookingTimeSpent == 0`, slot 0 empty,
+slot 1 empty hold. Re-registration via `@Inject RETURN` on
+`setStack(int, ItemStack)`: the moment a hopper inserts fuel or
+input, vanilla's ticker comes back through the same path. 500 idle
+furnaces measured: zero measurable BE-tick increase versus
+empty-area baseline, within the noise floor.
+
+Two mistakes worth recording. First: the sign and furnace gates
+started as two separate `@Redirect` mixins on the same
+`BlockState.getBlockEntityTicker` INVOKE site. Mixin's redirect
+machinery only allows one handler per call site, so it kept the
+first-loaded one (sign) and silently skipped the second (furnace).
+We caught it at the next dev boot via the `[Mixin/WARN]` line, not
+because the fix had no effect on the bench. The lesson is that boot
+warnings are part of the verification, not optional output to skim
+past. Second: collapsing the two into one composite mixin
+(`WorldChunkBlockEntityTickerGateMixin`) means future BE-type
+gates add as additional `if` branches inside one handler, which
+also avoids tripping the same conflict again.
+
+The remaining audit question was whether the pattern has more
+candidates. We checked the rest of vanilla's common block entities:
+chest, barrel, bed, decorated pot, lectern, jukebox, comparator,
+piston. Mojang already applied the dynamic-ticker pattern correctly
+to all eight. Comparators and lecterns never tick and recompute
+event-driven. Pistons only have a `BlockEntity` during the
+extension/retraction animation and the BE is removed when motion
+ends. Jukebox registers its ticker conditionally on the
+`HAS_RECORD` blockstate property, which is exactly the pattern we
+hand-rolled for signs and furnaces. Chest is client-only-tick (lid
+animation). Barrel, bed, decorated pot have no `getTicker` at all.
+Mojang knows this trick. They applied it consistently except for
+signs and furnaces. Both gaps are now closed.
+
+The cheap obvious targets are exhausted. Beacon, brewing stand,
+campfire (unlit), sculk sensor still tick but each of them does at
+least some load-bearing work per tick (beam scans, recipe-progress
+drains, vibration listening) where suppression isn't a clean win.
+From here the work is measurement-driven: the `[worldtick]`,
+`[entity-tick]`, `[block-tick]`, `[sign-tick]`, `[redstone-bfs]`
+log lines are the discovery layer. When a real server surfaces an
+unexpected hot band, that becomes the next target. Source-scanning
+vanilla for more sign-shaped wins has finished.
+
 ---
 
 ## What's live now
