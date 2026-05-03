@@ -404,6 +404,69 @@ Listed so that future us, having forgotten why, does not re-open them:
 
 ---
 
+## The May 2026 audit pass
+
+After cramming and AC redstone had been shipped a while, we did a
+consolidation pass: deep-probe every default-on system, confirm
+behavior against vanilla source, find inefficiencies, fix them, push.
+Two patterns emerged worth remembering.
+
+**Reading the source one more time before any edit caught the false
+alarms.** Of seven concrete redstone findings written up after the
+deep probe, two turned out wrong on closer reading. Finding #3 said
+the `@Redirect` on `RedstoneController.update` was catching both the
+experimental and default branches, opening a hidden footgun.
+Re-reading javac's bytecode rules: the static type at the call site
+is `ExperimentalRedstoneController`, not the parent class, so Mixin's
+descriptor-based match never fires there. The redirect already
+worked correctly. Finding #5 said the Rust path was redundantly
+calling `findExternalPower` on every wire when AC-Java only calls it
+on decreased wires. Tracing the lazy-resolution semantics in
+`WireHandler` showed the per-wire call is necessary correctness
+work, because Rust takes a static snapshot and can't reproduce AC's
+deferred priority-queue resolution. Both findings would have shipped
+regressions if we'd gone straight from "looks redundant" to a patch.
+The discipline of writing it up, then re-reading the source once
+more before editing, paid for itself twice in one session.
+
+**Most of the actual win was deletion, not addition.**
+`RedstoneRustDispatcher` had been superseded by AC's `runRustBatch`
+in v0.4.0 and was ~500 lines of dead code by the time we looked at
+it. Default-off, untested, sharing buffer layout with the live path,
+which meant removing it required checking what was shared first.
+The dispatcher class, its mixin, its command, and the `USE_RUST`
+toggle field all came out in one commit. The codebase is smaller
+and the next audit pass has less surface to traverse.
+
+The cramming batch had the same shape: one real correctness fix
+(a standalone vehicle's `root_vehicle_id` sentinel never matched
+its passenger's parent reference, so vehicles were pushing their
+own passengers), plus three perf fixes (FxHashMap reuse, small-N
+brute-force fast path, monitor inject gated behind the `ENABLED`
+flag). When you go looking for hot-loop inefficiencies after a
+system has been live for months, the wins still on the table are
+specific and small. The big ones got found and fixed at ship time.
+
+**Fidelity audit confirmed AC matches upstream.** Space Walker's
+repo at `89609e4` (March 2026) is what we ported from, and there
+have been no commits to the `wire/` package since. Every
+algorithmic touchpoint, from node lifecycle through neighbor/shape
+updates, is preserved verbatim modulo correct yarn renames. The
+size deltas (Ferrite's `WireHandler` 178 lines shorter,
+`UpdateOrder` 75 lines shorter) all resolve to javadoc trimming
+and constant extraction. No drift, no regressions, no missing
+methods. We can stop second-guessing the adaptation.
+
+The redstone audit also confirmed `MIN_NODES=1` is the right default
+for the Rust BFS gate: aggregate wire-cost is lower with Rust
+running on every cascade than with any threshold we tried, even on
+workloads where the per-bucket numbers showed Rust losing on
+specific cascade sizes. Per-cascade losses in narrow buckets are
+real but get drowned out by the aggregate wins on the wider
+distribution.
+
+---
+
 ## What's live now
 
 Surface rule dispatcher swap is the open target. Validator sits at
