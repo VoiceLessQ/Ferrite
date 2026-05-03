@@ -100,6 +100,8 @@ public class WireHandler {
 	 */
 	private final WireNode[] rustWires = new WireNode[RedstoneHandoff.MAX_NODES];
 	private final int[] rustNeighbors = new int[RedstoneHandoff.NEIGHBOR_SLOTS];
+	/** Pre-allocated scratch for the AC path's per-edge direction array. */
+	private final byte[] rustNeighborIDir = new byte[RedstoneHandoff.NEIGHBOR_SLOTS];
 
 	public WireHandler(ServerLevel world) {
 		this.world = world;
@@ -584,16 +586,26 @@ public class WireHandler {
 		long cascadeStart = System.nanoTime();
 
 		// Phase 2 of the AC Rust core port (docs/REDSTONE_PORT_PLAN.md).
-		// When toggled on AND the cascade has at least N wires, run one
-		// JNI batch instead of Java's iterative propagation. Below the
-		// threshold OR if the network exceeds the buffer cap, fall back
-		// to the Java depower path. Either way, powerNetwork() runs
-		// unchanged afterward — only the compute step differs.
+		// Selection priority:
+		//   1. RUST_AC: full AC offer-based propagation kernel. Replaces
+		//      depowerNetwork + powerNetwork's wire-application step.
+		//      Java still does setBlockState + queueNeighbors +
+		//      updateNeighborShapes per result, in returned order.
+		//   2. RUST_BFS: relaxation kernel (computes powers only, Java's
+		//      priority queue still owns ordering).
+		//   3. Pure Java (depowerNetwork + powerNetwork).
+		// If a kernel bails (overflow / native missing / link error),
+		// next path in the chain runs.
 		boolean batched = false;
-		if (FerriteWireConfig.RUST_BFS
-				&& cascadeWires >= FerriteWireConfig.RUST_BFS_MIN_NODES
+		boolean acHandledEmission = false;
+		boolean eligible = cascadeWires >= FerriteWireConfig.RUST_BFS_MIN_NODES
 				&& cascadeWires <= RedstoneHandoff.MAX_NODES
-				&& me.apika.apikaprobe.RustBridge.NATIVE_AVAILABLE) {
+				&& me.apika.apikaprobe.RustBridge.NATIVE_AVAILABLE;
+		if (FerriteWireConfig.RUST_AC && eligible) {
+			batched = runRustAcBatch();
+			acHandledEmission = batched;
+		}
+		if (!batched && FerriteWireConfig.RUST_BFS && eligible) {
 			batched = runRustBatch();
 		}
 		if (!batched) {
@@ -601,6 +613,8 @@ public class WireHandler {
 		}
 
 		try {
+			// AC path emits inline; powerNetwork() drains any non-wire
+			// neighbor updates that queueNeighbors fed into `updates`.
 			powerNetwork();
 		} catch (Throwable t) {
 			// Leave the handler in a consistent state on exception;
@@ -612,6 +626,12 @@ public class WireHandler {
 				me.apika.apikaprobe.monitor.RedstonePhaseMonitor.onCascade(
 						cascadeWires, System.nanoTime() - cascadeStart, batched);
 			}
+		}
+
+		// Suppress unused-variable warning when the AC emission path is
+		// inert (RUST_AC off). The flag exists for future telemetry.
+		if (acHandledEmission) {
+			// no-op; placeholder for path-specific monitor in Phase 3
 		}
 	}
 
@@ -704,6 +724,154 @@ public class WireHandler {
 
 		// Clear rustIndex marks + scratch slots so subsequent cascades
 		// don't see stale tags. Cheap — straight-line write.
+		for (int i = 0; i < n; i++) {
+			rustWires[i].rustIndex = -1;
+			rustWires[i] = null;
+		}
+		me.apika.apikaprobe.monitor.RedstonePhaseMonitor.onRustBfsActivation();
+		return true;
+	}
+
+	/**
+	 * AC offer-based batch path. Drains {@link #search}, serializes the
+	 * richer payload (initialFlowIn, removed/shouldBreak/root/added
+	 * flags, per-edge iDir) into {@link RedstoneHandoff#AC_REQUEST_BUF},
+	 * calls the Rust AC kernel, and applies results in returned priority
+	 * order via {@code setPower + queueNeighbors + updateNeighborShapes}.
+	 *
+	 * <p>Differs from {@link #runRustBatch()} in three ways:
+	 * <ul>
+	 *   <li>Serializes flow-direction state (initial flow-in mask, per-
+	 *       edge direction) so Rust can compute new flow directions.</li>
+	 *   <li>Skips the Java {@code depowerNetwork} step — Rust does the
+	 *       depower + propagate as one offer-based simulation.</li>
+	 *   <li>Iterates results in returned order, calling setPower and
+	 *       neighbor emission directly. Bypasses {@code updates} priority
+	 *       queue for wires; non-wire neighbor updates still go through
+	 *       {@code updates} via {@link #queueNeighbors}.</li>
+	 * </ul>
+	 *
+	 * <p>Returns {@code true} on success; {@code false} on overflow,
+	 * native unavailability, or kernel link error (caller falls back
+	 * to {@link #runRustBatch()} or the Java path).
+	 */
+	private boolean runRustAcBatch() {
+		int n = search.size();
+
+		// Drain `search` into scratch, tag each wire with its slot index.
+		int idx = 0;
+		while (!search.isEmpty()) {
+			WireNode w = search.poll();
+			rustWires[idx] = w;
+			w.rustIndex = idx;
+			idx++;
+		}
+
+		// Resolve external power for every wire — same step the Phase-2
+		// BFS path does. Lazy-resolution semantics in AC's findWirePower
+		// don't translate to the static-snapshot kernel, so all wires
+		// must have correct externalPower before serialization.
+		for (int i = 0; i < n; i++) {
+			findExternalPower(rustWires[i]);
+		}
+
+		// Serialize richer payload.
+		RedstoneHandoff.resetAcRequestBuffer();
+		for (int i = 0; i < n; i++) {
+			WireNode w = rustWires[i];
+
+			// Walk connections, fill neighborIndices + neighborIDir.
+			int slot = 0;
+			for (WireConnection c = w.connections.head(); c != null; c = c.next) {
+				if (slot >= RedstoneHandoff.NEIGHBOR_SLOTS) break;
+				int ni = c.wire.rustIndex;
+				if (ni >= 0) {
+					rustNeighbors[slot] = ni;
+					rustNeighborIDir[slot] = (byte) c.iDir;
+					slot++;
+				}
+			}
+			for (int k = slot; k < RedstoneHandoff.NEIGHBOR_SLOTS; k++) {
+				rustNeighbors[k] = RedstoneHandoff.NO_NEIGHBOR;
+				rustNeighborIDir[k] = RedstoneHandoff.AC_DIR_NONE;
+			}
+
+			int flags = 0;
+			if (w.removed)     flags |= RedstoneHandoff.AC_FLAG_REMOVED;
+			if (w.shouldBreak) flags |= RedstoneHandoff.AC_FLAG_SHOULD_BREAK;
+			if (w.root)        flags |= RedstoneHandoff.AC_FLAG_ROOT;
+			if (w.added)       flags |= RedstoneHandoff.AC_FLAG_ADDED;
+
+			RedstoneHandoff.writeAcNode(
+					i,
+					w.pos.getX(), w.pos.getY(), w.pos.getZ(),
+					w.currentPower,
+					w.externalPower,
+					w.flowIn,
+					flags,
+					rustNeighbors,
+					rustNeighborIDir);
+		}
+
+		// One JNI call.
+		int changed;
+		try {
+			changed = me.apika.apikaprobe.RustBridge.computeRedstoneAc(
+					RedstoneHandoff.AC_REQUEST_BUF,
+					RedstoneHandoff.AC_RESULT_BUF,
+					n);
+		} catch (UnsatisfiedLinkError | RuntimeException e) {
+			// Native blew up — re-seed search with our drained wires so
+			// the fallback path runs cleanly. Clear rustIndex marks.
+			for (int i = 0; i < n; i++) {
+				rustWires[i].rustIndex = -1;
+				search.offer(rustWires[i]);
+				rustWires[i] = null;
+			}
+			return false;
+		}
+
+		// Apply results in returned (priority) order. setPower writes
+		// to world; queueNeighbors and updateNeighborShapes emit block
+		// + shape updates.
+		for (int i = 0; i < changed; i++) {
+			long key = net.minecraft.core.BlockPos.asLong(
+					RedstoneHandoff.readAcResultX(i),
+					RedstoneHandoff.readAcResultY(i),
+					RedstoneHandoff.readAcResultZ(i));
+			Node node = nodes.get(key);
+			if (!(node instanceof WireNode wire)) continue;
+
+			int newPower    = RedstoneHandoff.readAcResultNewPower(i);
+			int newFlowIn   = RedstoneHandoff.readAcResultFlowIn(i);
+			int rustIFlow   = RedstoneHandoff.readAcResultIFlowDir(i);
+			// resultFlags read for future diagnostics; Java's setPower
+			// already routes via wire.removed / wire.shouldBreak set
+			// before serialization, so we don't need to act on it here.
+			// int resultFlags = RedstoneHandoff.readAcResultFlags(i);
+
+			wire.virtualPower = newPower;
+			wire.flowIn       = newFlowIn;
+
+			// findPowerFlow fallback: AC-Java falls back to
+			// connections.iFlowDir when the flow-in mask is ambiguous
+			// (FLOW_IN_TO_FLOW_OUT returns -1). Rust returns -1 in that
+			// case; mirror the fallback here.
+			if (rustIFlow >= 0) {
+				wire.iFlowDir = rustIFlow;
+			} else if (wire.connections.iFlowDir >= 0) {
+				wire.iFlowDir = wire.connections.iFlowDir;
+			}
+
+			// setPower routes removed -> no-op, shouldBreak -> dropStacks
+			// + AIR, normal -> setBlockState(POWER, newPower).
+			if (wire.setPower()) {
+				queueNeighbors(wire);
+				updateNeighborShapes(wire);
+			}
+		}
+
+		// Clear rustIndex marks + scratch slots.
 		for (int i = 0; i < n; i++) {
 			rustWires[i].rustIndex = -1;
 			rustWires[i] = null;

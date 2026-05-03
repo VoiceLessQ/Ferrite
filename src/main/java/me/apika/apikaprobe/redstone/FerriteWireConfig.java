@@ -72,4 +72,26 @@ public final class FerriteWireConfig {
 	 * <n>} raises it at runtime to disable the path for small cascades.
 	 */
 	public static volatile int RUST_BFS_MIN_NODES = 1;
+
+	/**
+	 * AC Rust core port — Phase 2 (full offer-based propagation kernel).
+	 *
+	 * <p>When {@code true}, AC's {@code WireHandler.update} sends each
+	 * cascade through {@code WireHandler.runRustAcBatch()} which uses the
+	 * Rust kernel in {@code rust/mod/src/redstone_ac.rs}. The kernel
+	 * mirrors AC-Java's {@code powerNetwork()} loop: priority-queue drain,
+	 * offer-based propagation with flow-direction tracking, results in
+	 * descending-priority order. Java applies setPower + queueNeighbors +
+	 * updateNeighborShapes per result without re-sorting.
+	 *
+	 * <p>Default-off so existing 0.6.x behavior is preserved. Selectable
+	 * via {@code /ferrite redstone ac-rust on} once the cascade-validation
+	 * gate clears (oracle 0-mismatch + non-regression on the lag machine).
+	 *
+	 * <p>When this flag is on AND a cascade is eligible (>= MIN_NODES,
+	 * <= MAX_NODES, native available), the AC kernel runs INSTEAD of the
+	 * Phase-2 BFS relaxation kernel ({@code RUST_BFS}). If
+	 * {@code RUST_AC} is off, the existing BFS path runs as it does today.
+	 */
+	public static volatile boolean RUST_AC = false;
 }
