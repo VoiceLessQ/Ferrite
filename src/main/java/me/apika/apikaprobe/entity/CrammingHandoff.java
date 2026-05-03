@@ -75,14 +75,18 @@ public final class CrammingHandoff {
 
 			float halfWidth = (float) ((aabb.maxX - aabb.minX) * 0.5);
 
-			// Root vehicle id — vanilla's isPassengerOfSameVehicle uses
-			// getRootVehicle() == other.getRootVehicle(). -1 sentinel for
-			// "not riding anything," so two -1s never compare equal in Rust
-			// (sentinel-equal pairs are explicitly skipped on Rust side).
-			int rootVehicleId = -1;
+			// Root vehicle id — vanilla's isConnectedThroughVehicle is
+			// getRootVehicle() == other.getRootVehicle(). For a standalone
+			// entity, vanilla's getRootVehicle() returns the entity itself,
+			// so we use e.getId() here. That makes a vehicle V (standalone,
+			// root=V.id) match its own passenger P (root=V.id) under the
+			// Rust-side equality check — the case the -1 sentinel missed.
+			int rootVehicleId;
 			if (e.hasVehicle()) {
 				net.minecraft.entity.Entity root = e.getRootVehicle();
-				if (root != null) rootVehicleId = root.getId();
+				rootVehicleId = (root != null) ? root.getId() : e.getId();
+			} else {
+				rootVehicleId = e.getId();
 			}
 
 			REQUEST_BUF.putInt(e.getId());          // +0

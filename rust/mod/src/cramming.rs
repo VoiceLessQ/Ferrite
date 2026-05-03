@@ -21,7 +21,24 @@
 //! No JNI surface here — this module is pure logic. cramming_jni.rs
 //! is the entry point.
 
-use std::collections::HashMap;
+use std::cell::RefCell;
+use fxhash::FxHashMap;
+
+// Reusable spatial-hash storage. compute_cramming is called once per server
+// tick from a single thread; thread_local + clear() keeps the HashMap and its
+// per-cell Vecs allocated across ticks instead of recreating ~hundreds of
+// allocations per call. FxHashMap because the keys are small integer tuples
+// where SipHash is overkill.
+thread_local! {
+    static CELL_HASH: RefCell<FxHashMap<(i32, i32), Vec<u32>>> =
+        RefCell::new(FxHashMap::default());
+}
+
+// Below this entity count, the spatial hash overhead (build + lookup) costs
+// more than an O(N^2) sweep. Threshold picked from the cell-build overhead
+// (one HashMap insert + Vec push per entity ~= dozens of ns) crossing the
+// dense-cluster pair test cost.
+const BRUTE_FORCE_THRESHOLD: usize = 16;
 
 // ============================================================================
 // Flags (must match Java PhysicsHandoff/cramming-side constants)
@@ -56,9 +73,11 @@ pub struct CrammingInput {
     pub aabb_half_width: f32,   // 24  half-extent on X (and Z — mob bbox is square in plan)
     pub aabb_min_y:      f32,   // 28
     pub aabb_max_y:      f32,   // 32
-    /// Vanilla isPassengerOfSameVehicle uses this comparison (root vehicle id).
-    /// -1 sentinel = not riding anything; pairs with both -1 still skip the
-    /// same-vehicle check (sentinel is not equal-equal in spirit).
+    /// Vanilla isConnectedThroughVehicle = getRootVehicle() == other.getRootVehicle().
+    /// Java side passes the entity's own id when standalone (vanilla's
+    /// getRootVehicle returns self in that case), so equality alone covers
+    /// both the "two riders share a vehicle" case and the
+    /// "vehicle vs its own passenger" case.
     pub root_vehicle_id: i32,   // 36  stride = 40
 }
 const _: [(); 40] = [(); std::mem::size_of::<CrammingInput>()];
@@ -128,6 +147,14 @@ pub fn compute_cramming(inputs: &[CrammingInput], results: &mut [CrammingResult]
         return;
     }
 
+    // Tiny batches: O(N^2) beats spatial-hash setup. Most ticks land here
+    // because tickCramming() only triggers a batch when at least one mob's
+    // AABB needs a cramming check.
+    if n < BRUTE_FORCE_THRESHOLD {
+        brute_force_cramming(inputs, results);
+        return;
+    }
+
     // --- Derive cell size from widest entity in this batch -------------------
     // Two AABBs can overlap when |dx| < half_a + half_b. Worst case across
     // the batch is 2 * max_half. The 3×3 neighbourhood covers all pairs
@@ -136,37 +163,55 @@ pub fn compute_cramming(inputs: &[CrammingInput], results: &mut [CrammingResult]
     let max_half = inputs.iter().map(|e| e.aabb_half_width).fold(0.0f32, f32::max);
     let cell_size = (2.0 * max_half as f64).max(CELL_SIZE_MIN);
 
-    // --- Build hash ----------------------------------------------------------
-    let mut cells: HashMap<(i32, i32), Vec<u32>> = HashMap::with_capacity(n);
-    for (i, input) in inputs.iter().enumerate() {
-        let key = cell_key(input.x, input.z, cell_size);
-        cells.entry(key).or_insert_with(|| Vec::with_capacity(8)).push(i as u32);
-    }
+    CELL_HASH.with(|cell_ref| {
+        let mut cells = cell_ref.borrow_mut();
+        // Mobs move every tick, so we can't reuse keyed buckets — but the
+        // map's bucket array and hasher state survive across calls, which is
+        // where the alloc churn lived.
+        cells.clear();
 
-    // --- Pair iteration ------------------------------------------------------
+        for (i, input) in inputs.iter().enumerate() {
+            let key = cell_key(input.x, input.z, cell_size);
+            cells.entry(key).or_insert_with(|| Vec::with_capacity(8)).push(i as u32);
+        }
+
+        for i in 0..n {
+            let a = inputs[i];
+            if (a.flags & FLAG_NO_PHYSICS) != 0 {
+                continue;
+            }
+            let (cx, cz) = cell_key(a.x, a.z, cell_size);
+
+            for dcx in -1..=1i32 {
+                for dcz in -1..=1i32 {
+                    let neighbor_key = (cx + dcx, cz + dcz);
+                    let indices = match cells.get(&neighbor_key) {
+                        Some(v) => v,
+                        None => continue,
+                    };
+                    for &j_u32 in indices {
+                        let j = j_u32 as usize;
+                        if j <= i {
+                            continue;
+                        }
+                        process_pair(inputs, results, i, j, &a);
+                    }
+                }
+            }
+        }
+    });
+}
+
+#[inline]
+fn brute_force_cramming(inputs: &[CrammingInput], results: &mut [CrammingResult]) {
+    let n = inputs.len();
     for i in 0..n {
         let a = inputs[i];
         if (a.flags & FLAG_NO_PHYSICS) != 0 {
             continue;
         }
-        let (cx, cz) = cell_key(a.x, a.z, cell_size);
-
-        for dcx in -1..=1i32 {
-            for dcz in -1..=1i32 {
-                let neighbor_key = (cx + dcx, cz + dcz);
-                let indices = match cells.get(&neighbor_key) {
-                    Some(v) => v,
-                    None => continue,
-                };
-                for &j_u32 in indices {
-                    let j = j_u32 as usize;
-                    // Array-index guard: visit each pair exactly once.
-                    if j <= i {
-                        continue;
-                    }
-                    process_pair(inputs, results, i, j, &a);
-                }
-            }
+        for j in (i + 1)..n {
+            process_pair(inputs, results, i, j, &a);
         }
     }
 }
@@ -184,11 +229,10 @@ fn process_pair(
         return;
     }
 
-    // Vanilla isPassengerOfSameVehicle: skip the entire push if both
-    // entities share a root vehicle. -1 sentinel means "not riding,"
-    // and two -1s must NOT match (they're not in any vehicle, let alone
-    // the same one).
-    if a.root_vehicle_id != -1 && a.root_vehicle_id == b.root_vehicle_id {
+    // Vanilla isConnectedThroughVehicle: skip the entire push if both
+    // entities share a root vehicle. Java sends self.getId() when
+    // standalone, so a vehicle vs its own passenger also matches here.
+    if a.root_vehicle_id == b.root_vehicle_id {
         return;
     }
 
@@ -271,7 +315,8 @@ mod tests {
             aabb_half_width: 0.3, // zombie-ish
             aabb_min_y: min_y,
             aabb_max_y: max_y,
-            root_vehicle_id: -1,
+            // Standalone entities mirror vanilla's getRootVehicle() == self.
+            root_vehicle_id: id as i32,
         }
     }
 
@@ -370,8 +415,7 @@ mod tests {
     #[test]
     fn same_root_vehicle_skips_pair() {
         // Two mobs riding the same vehicle (root_vehicle_id == 100). Vanilla
-        // isPassengerOfSameVehicle skips the entire push. Two -1s must NOT
-        // count as same vehicle (they're not riding anything).
+        // isConnectedThroughVehicle skips the entire push.
         let mut a = make_mob(1, 0.0, 0.0, 64.0, 66.0);
         let mut b = make_mob(2, 0.5, 0.0, 64.0, 66.0);
         a.root_vehicle_id = 100;
@@ -399,11 +443,34 @@ mod tests {
         assert!(results[0].accum_dx < 0.0);
         assert!(results[1].accum_dx > 0.0);
 
-        // Both -1 (no vehicle) → push normally.
+        // Two standalone mobs (each root_vehicle_id == self.id) push normally.
         let inputs2 = [make_mob(1, 0.0, 0.0, 64.0, 66.0), make_mob(2, 0.5, 0.0, 64.0, 66.0)];
         let mut results2 = [CrammingResult::default(); 2];
         compute_cramming(&inputs2, &mut results2);
         assert!(results2[0].accum_dx < 0.0);
+    }
+
+    #[test]
+    fn vehicle_does_not_push_its_own_passenger() {
+        // Vanilla isConnectedThroughVehicle: a standalone vehicle V and its
+        // passenger P share the same root (V). Vanilla skips the entire push.
+        // Pre-fix Ferrite used -1 sentinel for V (standalone) and V.id for P,
+        // so equality failed and P was pushed by its own mount.
+        let mut vehicle = make_mob(100, 0.0, 0.0, 64.0, 66.0);
+        vehicle.flags = FLAG_PUSHABLE | FLAG_VEHICLE;
+        vehicle.root_vehicle_id = 100; // standalone -> self.id
+        let mut passenger = make_mob(101, 0.4, 0.0, 64.0, 66.0);
+        passenger.flags = FLAG_PUSHABLE | FLAG_PASSENGER;
+        passenger.root_vehicle_id = 100; // root = the vehicle
+        let inputs = [vehicle, passenger];
+        let mut results = [CrammingResult::default(); 2];
+        compute_cramming(&inputs, &mut results);
+        assert_eq!(results[0].accum_dx, 0.0, "vehicle should not be pushed");
+        assert_eq!(results[1].accum_dx, 0.0, "passenger should not be pushed by its own mount");
+        assert_eq!(results[0].neighbor_count, 0);
+        assert_eq!(results[1].neighbor_count, 0);
+        assert_eq!(results[0].crowded_count, 0);
+        assert_eq!(results[1].crowded_count, 0);
     }
 
     #[test]
@@ -475,12 +542,12 @@ mod tests {
         let mut a = CrammingInput {
             entity_id: 1, flags: FLAG_PUSHABLE, _pad0: [0; 3],
             x: 0.0, z: 0.0, aabb_half_width: 1.5,
-            aabb_min_y: 64.0, aabb_max_y: 66.0, root_vehicle_id: -1,
+            aabb_min_y: 64.0, aabb_max_y: 66.0, root_vehicle_id: 1,
         };
         let mut b = CrammingInput {
             entity_id: 2, flags: FLAG_PUSHABLE, _pad0: [0; 3],
             x: 2.5, z: 0.0, aabb_half_width: 1.5,
-            aabb_min_y: 64.0, aabb_max_y: 66.0, root_vehicle_id: -1,
+            aabb_min_y: 64.0, aabb_max_y: 66.0, root_vehicle_id: 2,
         };
         // Confirm they actually overlap: |dx|=2.5 < half_sum=3.0.
         let _ = (&mut a, &mut b);
