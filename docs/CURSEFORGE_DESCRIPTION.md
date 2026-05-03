@@ -17,6 +17,25 @@ Logs tick breakdowns every 5s so the next port targets real bottlenecks.
 
 ---
 
+## What's new in 0.6.3-alpha
+
+AC offer-based Rust kernel. Mirrors Alternate Current's `powerNetwork()` loop in Rust with flow-direction tracking and priority-queue ordered output. **~16% aggregate wire-cost reduction** vs the existing relaxation kernel on heavy contraptions.
+
+- **Per-bucket measurements vs the existing Rust BFS path:**
+  - 1-4 wire cascades: tied (JNI dispatch dominates at this size)
+  - 5-8 wire cascades: **1.20× faster**
+  - 9-16 wire cascades: **2.09× faster**
+- **Parity-clean.** Phase 3 oracle validation: 6,409 node-checks across 65 seconds of heavy lag-machine activity, zero mismatches sustained. The kernel produces bit-equivalent power values to vanilla AC.
+- **Opt-in.** Both flags must be enabled:
+  ```
+  /ferrite redstone ac on
+  /ferrite redstone ac-rust on
+  ```
+  Default off this release. Will flip default-on in a future release after a full alpha cycle of clean user reports.
+- **Existing relaxation kernel stays as fallback.** If the new path bails (cascade exceeds buffer cap, native unavailable), Ferrite falls through to the relaxation kernel that's been default-on since 0.4.0.
+
+See [CHANGELOG.md](https://github.com/VoiceLessQ/Ferrite/blob/main/CHANGELOG.md) for the full per-change detail and [docs/JOURNEY.md](https://github.com/VoiceLessQ/Ferrite/blob/main/docs/JOURNEY.md) for the audit retrospective.
+
 ## What's new in 0.6.2-alpha
 
 Block-entity ticker hygiene completion. 0.6.1 fixed signs (~70% BE-tick cost reduction at large sign builds); 0.6.2 fixes furnaces and unifies the gate infrastructure so future suppressions are additive.
@@ -24,8 +43,6 @@ Block-entity ticker hygiene completion. 0.6.1 fixed signs (~70% BE-tick cost red
 - **Idle furnaces, blast furnaces, and smokers no longer tick** when empty and not burning. Smelter arrays sitting idle between bulk smelts now cost zero BE-tick time. Active furnaces (with fuel + input, or mid-recipe) still tick as before, immediately on hopper insert via `setStack`. Default-on. Strict-class check preserves mod furnace subclass behavior.
 - **Composite ticker-gate mixin.** Two separate `@Redirect` mixins on the same INVOKE site conflict at Mixin load time; resolved by collapsing both sign and furnace gates into one handler with strict-class dispatch. Future BE-type suppressions add as additional branches.
 - **Pattern observation.** Audited the rest of vanilla's common block entities (chest, barrel, bed, decorated pot, lectern, jukebox, comparator, piston). Mojang already applied the dynamic-ticker pattern correctly to all of them. Signs and furnaces were the two outliers; both now closed. The cheap obvious targets are exhausted, future tick-cost reductions will be measurement-driven from real server logs rather than source scans.
-
-See [CHANGELOG.md](https://github.com/VoiceLessQ/Ferrite/blob/main/CHANGELOG.md) for the full per-change detail and [docs/JOURNEY.md](https://github.com/VoiceLessQ/Ferrite/blob/main/docs/JOURNEY.md) for the audit retrospective.
 
 ## What's new in 0.6.1-alpha
 
