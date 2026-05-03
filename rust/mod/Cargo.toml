@@ -11,3 +11,4 @@ rosttasse = { path = "../api/" }
 rosttasse-mc = { path = "../mc/" }
 rayon = "1.10"
 md-5 = "0.10"
+fxhash = "0.2"
