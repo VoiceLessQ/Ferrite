@@ -7,11 +7,131 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.6.1-alpha] — 2026-05-03
+
+Consolidation release. Builds on 0.6.0's hopper highway and pre-gen
+with audit-driven correctness, perf cleanups, and a sign-tick fix.
+
 ### Performance
 
-- Sign block entities no longer tick when no player is actively
-  editing them (~70% BE-tick cost reduction at large sign builds).
-  Default-on. Mod subclasses unaffected (strict-class check).
+- **Sign block entities no longer tick when no player is actively
+  editing them.** Vanilla registers a `BlockEntityTicker` for every
+  sign at chunk load. The body is one null check on the editor field
+  (useful only while a player has the edit screen open), but the
+  per-tick infrastructure (range check, ticker map walk, lambda
+  dispatch, profiler push/pop) costs ~120 ns per sign per tick
+  regardless. Fix gates `WorldChunk.updateTicker` via `@Redirect` on
+  `BlockState.getBlockEntityTicker`, returning null for vanilla
+  `SignBlockEntity` and `HangingSignBlockEntity` (strict-class check)
+  with `editor == null`. Vanilla's existing
+  `if (ticker == null) removeBlockEntityTicker(...)` branch handles
+  deregistration. `SignBlockEntity.setEditor(UUID)` re-evaluates the
+  gate via `WorldChunkInvoker.updateTicker` the moment the editor
+  field flips. Measured on 961 placed signs:
+  **0.20 ms / tick → 0.06 ms / tick (~70% reduction)**. Default-on.
+  Mod subclasses untouched. Self-heals from persisted-editor state
+  within 2 ticks of chunk load.
+
+- **Cramming Rust kernel: thread-local FxHashMap reuse + small-N
+  brute-force fast path.** Spatial-hash structure now persists across
+  ticks instead of allocating per call (`fxhash` crate added). Below
+  16 mobs, a brute-force O(N²) sweep beats hash setup. Both default-
+  on. No behavior change.
+
+- **Cramming monitor inject gated on dispatcher state.** When the
+  Rust dispatcher is enabled, the timing mixin's HEAD/RETURN injects
+  early-return instead of running monitor work that would never be
+  observed (the vanilla body is cancelled). Eliminates ~6,000
+  `CallbackInfo` allocations per tick at 2,000 mobs.
+
+- **Redstone Rust kernel: thread-local `Vec<u8>` buffer reuse.**
+  Eliminates per-cascade allocation in the relaxation loop on the
+  AC `runRustBatch` path. Same pattern as the cramming kernel fix.
+
+### Correctness
+
+- **Cramming: standalone vehicles no longer push their own
+  passengers.** The Java side now sets `rootVehicleId = e.getId()`
+  for entities with no vehicle (mirroring vanilla's
+  `getRootVehicle() == self`), so equality alone covers both
+  same-vehicle pairs and vehicle⇄passenger pairs. Pre-fix, the
+  `-1` sentinel for standalone vehicles never matched the
+  passenger's `vehicle.getId()`, leaving the pair processed and
+  the passenger pushed by its own mount. Validated by a new
+  `vehicle_does_not_push_its_own_passenger` Rust unit test.
+
+- **Redstone: once-per-world warning when AC is enabled on an
+  experimental-redstone world.** Vanilla's `RedstoneWireBlock.update`
+  routes to `new ExperimentalRedstoneController(...).update(...)`
+  before reaching `this.redstoneController.update(...)` when the
+  world has the `redstone_experiments` feature flag set, so AC's
+  installed controller never sees the cascade. The warning surfaces
+  the silent-bypass case so users know `/ferrite redstone ac on`
+  has no effect on that world. Deduped per `RegistryKey<World>`.
+
+### Removed
+
+- **`RedstoneRustDispatcher` and its `RedstoneRustMixin` deleted
+  (~500 LOC).** Superseded by `WireHandler.runRustBatch` in 0.4.0;
+  default-off `USE_RUST` toggle since. The
+  `/ferrite redstone rust on|off|status` subcommand and
+  `RedstoneHandoff.USE_RUST` field also removed. Buffer infrastructure
+  shared with the live `runRustBatch` path stays in
+  `RedstoneHandoff`.
+
+### Fixed
+
+- **README + project memory: AC and Rust BFS shipping defaults
+  documented correctly.** AC ships default-off (user opt-in via
+  `/ferrite redstone ac on`); Rust BFS is default-on but unreachable
+  until AC is enabled. README line 56 was reading as if AC were on
+  by default; corrected. Code and the user-facing defaults table
+  were always correct, only the prose around them needed alignment.
+
+### Added
+
+- **`[sign-tick]` diagnostic line.** Reports `signs=N/tick`,
+  per-call body time, and total body time per 5-second window when
+  signs actually tick. Used to validate the suppression fix; kept
+  in tree as a regression detector.
+
+### Notes
+
+- Two audit findings turned out to be false alarms on closer reading
+  of vanilla source. (1) A `@Redirect` on `RedstoneController.update`
+  was claimed to catch both the experimental and default branches,
+  opening a hidden footgun; javac's invokevirtual receiver type
+  (`ExperimentalRedstoneController`, not the parent) means Mixin's
+  descriptor-based match never fires on the experimental branch. The
+  redirect already worked correctly. (2) The per-wire
+  `findExternalPower` call in `runRustBatch` was claimed redundant
+  vs AC-Java's selective call; tracing the lazy-resolution semantics
+  showed Rust takes a static snapshot and can't reproduce AC's
+  deferred priority-queue resolution, so the per-wire call is
+  necessary correctness work. Both would have shipped regressions if
+  patched. See [docs/JOURNEY.md](docs/JOURNEY.md) "The May 2026 audit
+  pass" for the retrospective.
+
+- AC fidelity audit confirmed Ferrite's Alternate Current port is a
+  faithful adaptation of [Space Walker's upstream](https://github.com/SpaceWalkerRS/alternate-current)
+  at commit `89609e4` (2026-03-23). No upstream changes to backport;
+  full algorithmic parity preserved modulo correct yarn renames.
+  Three Ferrite-side improvements (`rustIndex`, `head()` accessor,
+  scratch buffer pre-alloc) verified present. Documented in
+  [docs/REDSTONE_PORT_PLAN.md](docs/REDSTONE_PORT_PLAN.md) "Fidelity
+  audit".
+
+- Redstone `RUST_BFS_MIN_NODES = 1` default investigated and kept.
+  Per-bucket measurement on a parallel-repeater farm showed Rust
+  losing 1.48× in the 9-16 bucket but winning 1.29× and 1.50× in
+  1-4 and 5-8. Aggregate wall-time per second is lower with Rust on
+  every cascade than with any threshold tested. Per-cascade losses
+  in narrow buckets get drowned out by aggregate wins on the wider
+  distribution. Documented in [docs/JOURNEY.md](docs/JOURNEY.md).
+
+## [0.6.0-alpha] — 2026-05-03
+
+### Performance
 
 - **Hopper extract hint (active by default).** Per-source-inventory
   hint tracks the first non-empty slot; extract loops start there
