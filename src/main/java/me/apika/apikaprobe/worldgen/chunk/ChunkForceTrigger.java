@@ -73,6 +73,6 @@ public final class ChunkForceTrigger {
 			ChunkPrewarmer.evict(cx, cz);
 			return false;
 		}
-		return ChunkForcer.submit(world, cx, cz);
+		return ChunkForcer.submitOneShot(world, cx, cz);
 	}
 }

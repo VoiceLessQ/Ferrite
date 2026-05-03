@@ -11,6 +11,7 @@ import me.apika.apikaprobe.worldgen.chunk.ChunkForceTrigger;
 import me.apika.apikaprobe.worldgen.chunk.ChunkForcer;
 import me.apika.apikaprobe.worldgen.chunk.ChunkPrewarmTrigger;
 import me.apika.apikaprobe.worldgen.chunk.ChunkPrewarmer;
+import me.apika.apikaprobe.worldgen.chunk.PregenLifecycle;
 import me.apika.apikaprobe.redstone.RedstoneHandoff;
 import me.apika.apikaprobe.redstone.RedstoneOracle;
 import me.apika.apikaprobe.redstone.RedstoneRustDispatcher;
@@ -99,6 +100,7 @@ public class ExampleMod implements ModInitializer {
 		ChunkPrewarmTrigger.register();
 		ChunkForcer.register();
 		ChunkForceTrigger.register();
+		PregenLifecycle.register();
 		// Vanilla loaded a chunk: drop our biome prediction for it.
 		// Vanilla now owns the authoritative biome data; keeping our
 		// cached int[1536] would just hog memory for chunks the cache

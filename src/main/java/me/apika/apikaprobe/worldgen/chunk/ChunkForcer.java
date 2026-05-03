@@ -2,6 +2,7 @@ package me.apika.apikaprobe.worldgen.chunk;
 
 import me.apika.apikaprobe.bridge.ExampleMod;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -56,10 +57,11 @@ public final class ChunkForcer {
 				new TicketType(80L, TicketType.FLAG_LOADING));
 	}
 
-	/** Submit a force-gen request. Caller must already be on server thread.
-	 *  Returns true if newly queued; false if disabled, capped, already
-	 *  inflight, or registration didn't run. */
-	public static boolean submit(ServerLevel world, int cx, int cz) {
+	/** On-demand single-chunk path. /ferrite chunkforce uses this.
+	 *  Non-blocking cap + dedup via inflight map; returns true if newly
+	 *  queued, false if disabled, capped, already inflight, or
+	 *  registration didn't run. Caller must already be on server thread. */
+	public static boolean submitOneShot(ServerLevel world, int cx, int cz) {
 		if (!ENABLED) return false;
 		if (ticketType == null) return false;
 		if (inflight.size() >= MAX_INFLIGHT) return false;
@@ -83,6 +85,26 @@ public final class ChunkForcer {
 			inflight.remove(key);
 			errored.incrementAndGet();
 			return false;
+		}
+	}
+
+	/** Driver-owned-backpressure path for pre-gen.
+	 *  No internal cap, no dedup, no ENABLED gate — caller throttles
+	 *  (see PregenDriver's Semaphore). Future completes when the chunk
+	 *  reaches FULL status, or fails on registration miss / submit throw.
+	 *  Caller must already be on server thread. */
+	public static CompletableFuture<Void> submitAsync(ServerLevel world, int cx, int cz) {
+		if (ticketType == null) {
+			return CompletableFuture.failedFuture(
+					new IllegalStateException("ChunkForcer.register() not called"));
+		}
+		ChunkPos pos = new ChunkPos(cx, cz);
+		try {
+			return world.getChunkSource()
+					.addTicketAndLoadWithRadius(ticketType, pos, 0)
+					.thenAccept(ignored -> ChunkPrewarmer.evict(cx, cz));
+		} catch (Throwable t) {
+			return CompletableFuture.failedFuture(t);
 		}
 	}
 

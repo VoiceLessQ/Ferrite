@@ -5,7 +5,10 @@
 	"client": [
 		"ExampleClientMixin",
 		"EntityRenderMixin",
-		"RecordingNameMixin"
+		"RecordingNameMixin",
+		"MoreTabPregenMixin",
+		"CreateWorldScreenPregenMixin",
+		"GridLayoutTabAccessor"
 	],
 	"injectors": {
 		"defaultRequire": 1

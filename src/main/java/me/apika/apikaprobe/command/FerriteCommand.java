@@ -15,6 +15,8 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import me.apika.apikaprobe.worldgen.BiomeParity;
 import me.apika.apikaprobe.worldgen.chunk.ChunkForcer;
 import me.apika.apikaprobe.worldgen.chunk.ChunkPrewarmer;
+import me.apika.apikaprobe.worldgen.chunk.PregenDriver;
+import me.apika.apikaprobe.worldgen.chunk.PregenProgressListener;
 import me.apika.apikaprobe.entity.CrammingDispatcher;
 import me.apika.apikaprobe.worldgen.DensityParity;
 import me.apika.apikaprobe.bridge.ExampleMod;
@@ -42,6 +44,9 @@ import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
  * /ferrite command — runtime toggles for Ferrite's optional paths.
@@ -180,6 +185,16 @@ public final class FerriteCommand {
 						.then(Commands.literal("on").executes(FerriteCommand::chunkForceOn))
 						.then(Commands.literal("off").executes(FerriteCommand::chunkForceOff))
 						.then(Commands.literal("status").executes(FerriteCommand::chunkForceStatus)))
+				.then(Commands.literal("pregen")
+						.then(Commands.argument("radius", IntegerArgumentType.integer(1, 50))
+								.executes(FerriteCommand::pregenStart))
+						.then(Commands.literal("at")
+								.then(Commands.argument("cx", IntegerArgumentType.integer())
+										.then(Commands.argument("cz", IntegerArgumentType.integer())
+												.then(Commands.argument("radius", IntegerArgumentType.integer(1, 50))
+														.executes(FerriteCommand::pregenStartAt)))))
+						.then(Commands.literal("cancel").executes(FerriteCommand::pregenCancel))
+						.then(Commands.literal("status").executes(FerriteCommand::pregenStatus)))
 				.then(Commands.literal("noise")
 						.then(Commands.literal("rust")
 								.then(Commands.literal("on").executes(FerriteCommand::noiseRustOn))
@@ -1336,6 +1351,79 @@ public final class FerriteCommand {
 				ChunkForcer.scheduledCount(), ChunkForcer.completedCount(),
 				ChunkForcer.erroredCount());
 		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int pregenStart(CommandContext<CommandSourceStack> ctx) {
+		int radius = IntegerArgumentType.getInteger(ctx, "radius");
+		CommandSourceStack source = ctx.getSource();
+		int blockX = (int) Math.floor(source.getPosition().x());
+		int blockZ = (int) Math.floor(source.getPosition().z());
+		return pregenLaunch(ctx, source.getLevel(), blockX >> 4, blockZ >> 4, radius);
+	}
+
+	private static int pregenStartAt(CommandContext<CommandSourceStack> ctx) {
+		int cx = IntegerArgumentType.getInteger(ctx, "cx");
+		int cz = IntegerArgumentType.getInteger(ctx, "cz");
+		int radius = IntegerArgumentType.getInteger(ctx, "radius");
+		return pregenLaunch(ctx, ctx.getSource().getLevel(), cx, cz, radius);
+	}
+
+	private static int pregenLaunch(CommandContext<CommandSourceStack> ctx, ServerLevel world,
+			int cx, int cz, int radius) {
+		PregenProgressListener listener = new PregenProgressListener() {
+			@Override
+			public void onProgress(int done, int total, double rate) {
+				if (done % 100 == 0 || done == total) {
+					double eta = rate > 0 ? (total - done) / rate : 0;
+					ExampleMod.LOGGER.info(String.format(
+							"[ferrite-pregen] %d/%d chunks (%.1f/s, ETA %.0fs)",
+							done, total, rate, eta));
+				}
+			}
+			@Override
+			public void onComplete(int total) {
+				ExampleMod.LOGGER.info("[ferrite-pregen] complete -- {} chunks", total);
+			}
+			@Override
+			public void onCancelled(int done, int total) {
+				ExampleMod.LOGGER.info("[ferrite-pregen] cancelled -- {}/{} chunks", done, total);
+			}
+		};
+
+		CompletableFuture<Void> f = PregenDriver.run(world, cx, cz, radius, listener);
+		if (f.isCompletedExceptionally()) {
+			sendFeedback(ctx, "[pregen] another pre-gen is already running -- /ferrite pregen cancel first", false);
+			return 0;
+		}
+		int total = (2 * radius + 1) * (2 * radius + 1);
+		String msg = String.format(
+				"[pregen] started @ chunk (%d, %d) radius=%d (%d chunks) -- watch [ferrite-pregen] in latest.log",
+				cx, cz, radius, total);
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int pregenCancel(CommandContext<CommandSourceStack> ctx) {
+		if (PregenDriver.cancelActive()) {
+			sendFeedback(ctx, "[pregen] cancel requested -- waiting for inflight to drain", true);
+			return Command.SINGLE_SUCCESS;
+		}
+		sendFeedback(ctx, "[pregen] no active pre-gen", false);
+		return 0;
+	}
+
+	private static int pregenStatus(CommandContext<CommandSourceStack> ctx) {
+		PregenDriver d = PregenDriver.active();
+		if (d == null) {
+			sendFeedback(ctx, "[pregen] idle", false);
+		} else {
+			String msg = String.format("[pregen] %d/%d (%.1f/s)%s",
+					d.doneCount(), d.totalCount(), d.chunksPerSecond(),
+					d.isCancelled() ? " [cancelling]" : "");
+			sendFeedback(ctx, msg, false);
+		}
 		return Command.SINGLE_SUCCESS;
 	}
 
