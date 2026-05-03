@@ -62,7 +62,7 @@ Two user-visible effects combine:
 - **Contraptions animate ~4× faster at equivalent server load** — each wire cascade now collapses into a single network settle (~84% less wire time per gate tick), so the same per-tick budget processes more gate ticks.
 - **Server TPS climbs ~40%** on CPU-bound hardware — when the server is saturated (as in this 4-core baseline), wire savings convert directly into more completed ticks per second. On unconstrained hardware with headroom, TPS stays flat but the gate-throughput win persists.
 
-**Vanilla compatibility note.** Gate tick speeds (repeaters, comparators, observers, torches) are vanilla-identical. Wire update ordering intentionally differs from vanilla — AC skips intermediate power-level updates for efficiency. Contraptions relying on quasi-connectivity, 0-tick pulses, or instawire should use `/ferrite redstone ac off`.
+**Vanilla compatibility note.** Gate tick speeds (repeaters, comparators, observers, torches) are vanilla-identical. Wire update ordering intentionally differs from vanilla — AC skips intermediate power-level updates for efficiency. Contraptions relying on quasi-connectivity, 0-tick pulses, or instawire should leave `/ferrite redstone ac` off (the default).
 
 **AC is a feast-or-famine algorithm** — significant wins on dense contraptions with feedback amplifiers (like the lag machine above), slight overhead on small clean builds (e.g. a single repeater clock + 64-block wire run measured ~0.083 ms / tick on AC vs ~0.026 ms / tick on vanilla — AC's per-cascade setup cost beats vanilla only when there's enough redundancy to amortize). Both effects stay well under 1 ms / tick on realistic setups, so the small-build overhead is imperceptible.
 
@@ -103,7 +103,7 @@ All Ferrite toggles live under `/ferrite`. Default state is in the rightmost col
 | `/ferrite cramming on\|off\|status` | Rust spatial-hash mob-vs-mob cramming. Vanilla parity, A/B switchable. | **on** |
 | `/ferrite hopper highway on\|off\|status` | Per-slot independent cooldowns + round-robin destination routing. ~3× chain throughput. Each slot still vanilla 8-tick speed; aggregate is 5 lanes in parallel. Turn off for sorters tuned to vanilla pacing. Extract hint stays default-on regardless. | off |
 | `/ferrite redstone ac on\|off\|status` | Alternate Current wire algorithm (~15× fewer cascades). Turn on for performance; turn off if a contraption relies on quasi-connectivity, 0-tick pulses, or instawire. | off |
-| `/ferrite redstone bfs on\|off\|status` | Per-cascade Rust BFS for power propagation (~30% additional wire-cost reduction). Only effective when AC is on. | **on** |
+| `/ferrite redstone bfs on\|off\|status` | Per-cascade Rust BFS for power propagation (~30% additional wire-cost reduction). Only effective when AC is on. | on (unreachable until AC is enabled via `/ferrite redstone ac on`) |
 | `/ferrite redstone bfs-min <int>` | Minimum cascade size (in wires) before dispatching through Rust. Raise this to skip small cascades where JNI overhead exceeds the win. | 1 |
 | `/ferrite redstone bench` | Run a built-in lag-machine benchmark in the current world. | — |
 
