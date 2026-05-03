@@ -7,6 +7,45 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.6.3-alpha] — 2026-05-03
+
+### Added
+
+- AC offer-based Rust kernel (`/ferrite redstone ac-rust on`).
+  Mirrors AC's `powerNetwork()` loop in Rust: offer-based propagation
+  with flow-direction tracking, priority-queue ordered output.
+  Parity-clean (0 oracle mismatches sustained across Phase 3
+  validation). **~16% aggregate wire-cost reduction** vs the
+  existing relaxation kernel on heavy workloads.
+
+  Per-bucket vs relaxation kernel (lag-machine measurement):
+  ```
+  1-4 wires:  tied (JNI dispatch dominates at this size)
+  5-8 wires:  1.20x faster
+  9-16 wires: 2.09x faster
+  ```
+
+  Default OFF, requires both AC and AC-Rust enabled:
+  ```
+  /ferrite redstone ac on
+  /ferrite redstone ac-rust on
+  ```
+
+  Will flip default-on in a future release after a full alpha cycle
+  of clean user reports. Oracle validation opt-in via
+  `-Dferrite.redstone.ac.validate=true`.
+
+### Notes
+
+- Existing relaxation kernel (`RUST_BFS`) stays in tree as fallback.
+  Both kernels coexist; AC-Rust activates first when enabled, BFS
+  takes over if the AC path bails (overflow / native unavailable).
+- Phase 3 depower fix: `runRustAcBatch()` now calls
+  `findPower(wire, true)` after `findExternalPower()` to pull
+  outside-cascade wire contributions before serializing. Fixes
+  boundary wire power=0 mismatches the oracle surfaced during
+  initial validation (~5% mismatch rate before fix, 0 after).
+
 ## [0.6.2-alpha] — 2026-05-03
 
 Completes the block-entity ticker hygiene story started in 0.6.1.
