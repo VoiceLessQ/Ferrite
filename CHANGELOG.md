@@ -18,6 +18,12 @@ marks pre-release research builds.
 
 User-facing toggles and parity validators do not change. Where an internal rewrite shifts behavior under a toggle, the toggle name stays the same and the CHANGELOG entry calls out exactly what changed.
 
+### Performance
+
+- Idle furnaces, blast furnaces, and smokers no longer tick when
+  empty and not burning. Zero BE-tick cost until a hopper or player
+  inserts items. Mod subclasses unaffected (strict-class check).
+
 ## [0.6.1-alpha] — 2026-05-03
 
 Consolidation release. Builds on 0.6.0's hopper highway and pre-gen
