@@ -30,8 +30,12 @@ loom {
 		configureEach {
 			def rustLibDir = file("rust/mod/../../target/x86_64-pc-windows-gnu/release").absolutePath
 			vmArg "-Djava.library.path=${rustLibDir}"
-			// Simulate low-end hardware — cap heap so GC pressure resembles 8GB-RAM laptops.
-			vmArg "-Xmx3G"
+			// Simulate low-end hardware by default. Cap heap so GC pressure
+			// resembles 8GB-RAM laptops. Override via -Pferrite.heap=8G when
+			// testing memory-heavy mods (Distant Horizons, etc.) where the
+			// constrained default thrashes GC and masks the actual workload.
+			def heapMax = project.findProperty("ferrite.heap") ?: "3G"
+			vmArg "-Xmx${heapMax}"
 			vmArg "-Xms512M"
 			// Opt-in autovalidate: -Pferrite.autovalidate=<n> on the gradle CLI
 			// also injects --quickPlaySingleplayer to skip the title screen.
