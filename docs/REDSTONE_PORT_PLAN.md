@@ -416,3 +416,27 @@ framing.
   vanilla redstone dust; doesn't match project goals.
 - **Replacing vanilla redstone dust via registry swap.** High
   mod-interop risk for small additional gain over Option A/B.
+
+---
+
+## Fidelity audit — 2026-05-03
+
+Confirmed faithful adaptation of Space Walker's AC at upstream commit
+89609e4 (2026-03-23). No upstream changes to backport.
+
+Algorithmic parity: full. Every node lifecycle, BFS search, depower,
+priority queue, flow-direction, power transmission, neighbor/shape
+update preserved verbatim vs upstream modulo correct yarn renames.
+
+Ferrite additions confirmed present:
+  - rustIndex field on WireNode (eliminates HashMap allocation per cascade)
+  - head() accessor on WireConnectionManager (eliminates lambda allocation)
+  - Scratch buffers pre-allocated to MAX_NODES (no per-cascade alloc)
+
+One conservative divergence: defensive REDSTONE_WIRE re-check in
+powerNetwork -- early-skips wires whose state changed between
+discovery and commit. Inert, not regressive.
+
+Vanilla redstone intact when AC disabled (default). Experimental
+redstone controller untouched (audit fix #2 adds warning when both
+AC and experimental are active simultaneously).
