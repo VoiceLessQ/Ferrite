@@ -27,10 +27,11 @@ use fxhash::FxHashMap;
 // Reusable spatial-hash storage. compute_cramming is called once per server
 // tick from a single thread; thread_local + clear() keeps the HashMap and its
 // per-cell Vecs allocated across ticks instead of recreating ~hundreds of
-// allocations per call. FxHashMap because the keys are small integer tuples
-// where SipHash is overkill.
+// allocations per call. Keys are pre-mixed u64s (see cell_hash) so FxHash
+// just hashes a primitive, and the mix function is project-specific so
+// blind binary reuse across mods would need to reverse-engineer it.
 thread_local! {
-    static CELL_HASH: RefCell<FxHashMap<(i32, i32), Vec<u32>>> =
+    static CELL_HASH: RefCell<FxHashMap<u64, Vec<u32>>> =
         RefCell::new(FxHashMap::default());
 }
 
@@ -102,12 +103,32 @@ const _: [(); 32] = [(); std::mem::size_of::<CrammingResult>()];
 // Spatial hash
 // ============================================================================
 
-/// 2D hash of entity indices into `cell_size`-block cells on the XZ plane.
+/// 2D cell coordinate on the XZ plane, used both as the spatial hash
+/// input and for the 3x3 neighbour walk (which needs the integers).
 #[inline]
-fn cell_key(x: f64, z: f64, cell_size: f64) -> (i32, i32) {
+fn cell_coords(x: f64, z: f64, cell_size: f64) -> (i32, i32) {
     let cx = (x / cell_size).floor() as i32;
     let cz = (z / cell_size).floor() as i32;
     (cx, cz)
+}
+
+/// Project-specific cell hash. Combines (cx, cz) into a u64 then runs
+/// the splitmix64 finalizer (Stafford 2014) with a Ferrite-chosen XOR
+/// seed. The two odd-multiplier-and-shift rounds are the standard
+/// finalizer constants and produce well-distributed hashes from
+/// sequential integer inputs without us inventing untested mixing;
+/// the seed is the project-specific bit so binary reuse across mods
+/// would have to either match this seed or accept a different bucket
+/// distribution at runtime.
+#[inline]
+fn cell_hash(cx: i32, cz: i32) -> u64 {
+    let mut k = ((cz as u32 as u64) << 32) | (cx as u32 as u64);
+    k ^= 0xFE221E5EED1A0DBE;
+    k = k.wrapping_mul(0xBF58476D1CE4E5B9);
+    k ^= k >> 27;
+    k = k.wrapping_mul(0x94D049BB133111EB);
+    k ^= k >> 31;
+    k
 }
 
 // ============================================================================
@@ -171,7 +192,8 @@ pub fn compute_cramming(inputs: &[CrammingInput], results: &mut [CrammingResult]
         cells.clear();
 
         for (i, input) in inputs.iter().enumerate() {
-            let key = cell_key(input.x, input.z, cell_size);
+            let (cx, cz) = cell_coords(input.x, input.z, cell_size);
+            let key = cell_hash(cx, cz);
             cells.entry(key).or_insert_with(|| Vec::with_capacity(8)).push(i as u32);
         }
 
@@ -180,11 +202,11 @@ pub fn compute_cramming(inputs: &[CrammingInput], results: &mut [CrammingResult]
             if (a.flags & FLAG_NO_PHYSICS) != 0 {
                 continue;
             }
-            let (cx, cz) = cell_key(a.x, a.z, cell_size);
+            let (cx, cz) = cell_coords(a.x, a.z, cell_size);
 
             for dcx in -1..=1i32 {
                 for dcz in -1..=1i32 {
-                    let neighbor_key = (cx + dcx, cz + dcz);
+                    let neighbor_key = cell_hash(cx + dcx, cz + dcz);
                     let indices = match cells.get(&neighbor_key) {
                         Some(v) => v,
                         None => continue,
