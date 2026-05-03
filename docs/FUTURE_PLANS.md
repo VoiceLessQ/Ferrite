@@ -276,3 +276,12 @@ Apply the four checks. If they pass, add a section here with
 
 The instrumentation framework exists precisely so future work is
 data-driven, not speculative.
+
+---
+
+### Pre-generation throughput note
+
+Pregen + chunkforce competing for same region: ~53/s (49% drop).
+Graceful split, no corruption. User workaround: /ferrite chunkforce off.
+Future: optional cross-system inflight coordinator if operators need
+guaranteed pregen throughput during active play.
