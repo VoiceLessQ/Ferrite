@@ -3,20 +3,19 @@ package me.apika.apikaprobe.mixin;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
- * Exposes {@link WorldChunk}'s private {@code updateTicker(BlockEntity)}
- * so {@link SignEditorChangeMixin} can re-evaluate a sign's ticker
- * registration the moment its editor field flips. Vanilla's update
- * path runs unchanged: getBlockEntityTicker is re-queried, the
- * gating mixin returns null when the sign has no editor, and
- * removeBlockEntityTicker cleans up.
+ * Exposes LevelChunk's private updateBlockEntityTicker(T) so other
+ * mixins can re-evaluate a block entity's ticker registration on
+ * demand. Vanilla's update path runs unchanged: getTicker is
+ * re-queried, the gating mixin returns null when suppression
+ * applies, and removeBlockEntityTicker cleans up.
  */
-@Mixin(WorldChunk.class)
+@Mixin(LevelChunk.class)
 public interface WorldChunkInvoker {
 
-	@Invoker("updateTicker")
-	<T extends BlockEntity> void apikaprobe$updateTicker(T blockEntity);
+	@Invoker("updateBlockEntityTicker")
+	<T extends BlockEntity> void apikaprobe$updateBlockEntityTicker(T blockEntity);
 }
