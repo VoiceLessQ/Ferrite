@@ -96,11 +96,74 @@ Candidates with documented vanilla cost:
 
 - **Aquifer** — ~8 ms/chunk
 - **Decoration** — ~3 ms/chunk
-- **Lighting** — ~5–12 ms steady, ~15–19 ms init (but stateful — likely
-  fails Piano check #5)
+- **Lighting** — measured 2026-05-04, see below; verdict: not next.
 
 Apply the five Piano questions before picking. See "Next-target
 analysis" section below.
+
+### Lighting measurement (2026-05-04)
+
+Built a `LightTimingMonitor` mixin set covering `runTasks`,
+`doLightUpdates` (split server vs client via a ThreadLocal flag set
+by `ServerLightingProvider.runTasks`), and `initializeLight` /
+`light` for chunkgen. Ran a flat creative world, spectator at
+(150, 100, 0), forceloaded the test region, and ran graduated `/fill`
+volumes with chat MARK lines for log correlation.
+
+Single-window server-side cost per fill (32×32×32 = 32,768 unless
+noted; 1024 = single 32×32 layer):
+
+| Fill | server-block | server-sky | runTasks calls |
+|---|---|---|---|
+| glass 32k | 39 ms / max 33 ms | 5 ms / max 5 ms | 2 |
+| stone 32k | 51 ms / max 11 ms | 176 ms / max 16 ms | 34 |
+| stone-roof 1024 | 0 ms | **117 ms / max 98 ms** | 3 |
+| stone-clear 32k | 5 ms | 47 ms / max 4 ms | 33 |
+| roof-clear 1024 | 0 ms | 2 ms | 3 |
+| torch-grid 1024 | 18 ms / max 15 ms | 0 ms | 3 |
+
+**Steady-state idle cost is near zero.** All `total=0ms` between
+edits. The 5-12 ms "steady" number cited earlier was actually
+chunkgen `initializeLight` averaged across many chunks.
+
+Findings:
+
+1. **Sky decrease cost scales with column count, not volume.**
+   Stone-fill 32k (1024 columns × 32 thick) and stone-roof 1024
+   (1024 columns × 1 thick) cost the same 117-176 ms in server-sky,
+   because adding stone below an existing surface doesn't move the
+   sky-light surface. Predicted 3.6 s for 32k stone, got 176 ms.
+2. **Add-vs-remove asymmetry on sky is ~3.7-60×.** Adding 1024
+   stones at y=32: 117 ms sky. Removing them: 2 ms sky. Adding
+   32k stone (column-walks): 176 ms. Removing: 47 ms. The
+   "subtract sky from below new opaque blocker" path is the
+   expensive direction.
+3. **Worst-case single blocking call observed: 98 ms.** One
+   `super.doLightUpdates()` invocation, draining the whole
+   stone-roof event in one BFS pass.
+4. **Larger volumes are friendlier to tick latency.** Stone-fill
+   32k tripped the 1000-task batch threshold 34 times, max
+   per-call 16 ms. Stone-roof 1024 fit in 3 calls, max 98 ms.
+   The kill case is "wide-area heightmap shift in a single tick"
+   (piston wall, falling block sheet, structure spawn), not bulk
+   `/fill`.
+5. **Block engine cost is dominated by framework overhead.**
+   Glass (non-trivial-for-lighting) and stone gave near-identical
+   block costs at 32k (39 vs 51 ms). The trivial-bit shortcut is
+   not the lever.
+6. **Client lighting engine takes nearly as much wall time as
+   server.** Stone-roof 1024: server 117 ms + client 83 ms.
+   Server-side JNI port wouldn't help client; that's half the
+   total cost on the wrong side of the network.
+
+Verdict: real but niche workload. Worst single call ~100 ms on a
+dedicated thread that doesn't tank server TPS. Activation surface
+(many columns getting opacity changes in one tick) is rare in
+normal play. Fails Piano check #1 (vanilla actually the bottleneck)
+in the steady state and is borderline at peaks. Compare to
+candidates whose cost is continuous and on the tick thread.
+
+Monitor stays in tree as evidence and future regression detector.
 
 ## physics dispatcher thread CLOSED (2026-04-28)
 

@@ -391,6 +391,28 @@ Listed so that future us, having forgotten why, does not re-open them:
   single-threaded for anything that touches world state. More cores
   do not help until we have a subsystem that can run off the tick
   thread, which cramming partially does but redstone never can.
+- **Lighting (block + sky engines).** Investigated 2026-05-04
+  with a `LightTimingMonitor` covering `runTasks`,
+  `doLightUpdates` (server vs client via ThreadLocal flag), and
+  the chunkgen init paths. Steady-state idle cost is near zero;
+  the "5-12 ms steady" number from earlier PIANO speculation was
+  chunkgen `initializeLight` averaged per-chunk, not edit cost.
+  Worst single blocking call observed: 98 ms server-sky on a
+  1024-column heightmap shift (single-layer stone roof). Sky
+  decrease cost scales with column count, not volume; 32k stone
+  cost 176 ms not the predicted 3.6 s, because stones below the
+  existing column surface are free. Add-vs-remove asymmetry on
+  sky is 3.7-60× (placing opaque blockers expensive, removing
+  cheap). Block-engine cost is framework overhead, not
+  `BlockState` fetch; trivial-bit shortcut is not the lever.
+  Client engine takes nearly as much wall time as server, so a
+  server-side JNI port would only address half the cost on a
+  dedicated thread that already doesn't tank server TPS.
+  Activation surface (many columns getting opacity changes in
+  one tick) is rare. Fails Piano check #1 in steady state,
+  borderline at peaks. Monitor stays in tree as a regression
+  detector. See `docs/PIANO_STATUS.md` "Lighting measurement
+  (2026-05-04)" for the per-fill numbers.
 - **Cross-referencing other Rust Minecraft ports.** Mojang's source
   is the single source of truth for every port in Ferrite's Track B
   roadmap. Pumpkin, Valence, FerrumC, and any future Rust MC project

@@ -65,6 +65,7 @@
 		"MultiNoiseBiomeSourceRouteMixin",
 		"ChunkDecoratorTimingMixin",
 		"LightTimingMixin",
+		"LightDoUpdatesMixin",
 		"ChunkNoiseSamplerMixin",
 		"CacheRouteCaptureMixin",
 		"BulkSampleDensityMixin",

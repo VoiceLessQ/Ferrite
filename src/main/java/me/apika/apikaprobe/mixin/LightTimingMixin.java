@@ -6,6 +6,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.minecraft.server.world.ServerLightingProvider;
@@ -37,6 +38,10 @@ public abstract class LightTimingMixin {
 
 	@Unique
 	private static final ThreadLocal<long[]> ferrite$lightStart =
+			ThreadLocal.withInitial(() -> new long[1]);
+
+	@Unique
+	private static final ThreadLocal<long[]> ferrite$runTasksStart =
 			ThreadLocal.withInitial(() -> new long[1]);
 
 	@Inject(method = "initializeLight", at = @At("HEAD"))
@@ -72,6 +77,22 @@ public abstract class LightTimingMixin {
 		if (f != null && startNs != 0L) {
 			f.whenComplete((c, t) ->
 					LightTimingMonitor.recordLight(System.nanoTime() - startNs));
+		}
+	}
+
+	@Inject(method = "runTasks", at = @At("HEAD"))
+	private void ferrite$runTasksHead(CallbackInfo ci) {
+		ferrite$runTasksStart.get()[0] = System.nanoTime();
+		LightTimingMonitor.setInServerRunTasks(true);
+	}
+
+	@Inject(method = "runTasks", at = @At("RETURN"))
+	private void ferrite$runTasksReturn(CallbackInfo ci) {
+		LightTimingMonitor.setInServerRunTasks(false);
+		long startNs = ferrite$runTasksStart.get()[0];
+		ferrite$runTasksStart.get()[0] = 0L;
+		if (startNs != 0L) {
+			LightTimingMonitor.recordRunTasks(System.nanoTime() - startNs);
 		}
 	}
 }
