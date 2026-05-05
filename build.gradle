@@ -46,6 +46,12 @@ loom {
 				programArg "--quickPlaySingleplayer"
 				programArg world.toString()
 			}
+			// Opt-in dispatcher latency + run-duration probe.
+			// Boot with -Pferrite.dispatcherProbe=true to enable from the
+			// start; otherwise toggle in-game via /ferrite probe dispatcher on.
+			if (project.findProperty("ferrite.dispatcherProbe")?.toString() == "true") {
+				vmArg "-Dferrite.dispatcherProbe=true"
+			}
 		}
 	}
 }
