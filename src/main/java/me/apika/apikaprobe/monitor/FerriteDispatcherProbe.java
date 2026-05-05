@@ -53,6 +53,18 @@ public final class FerriteDispatcherProbe {
 		};
 	}
 
+	/** Records a task's run duration (execution-start → execution-end)
+	 *  against the named scope. Complements {@link #wrap}'s queue-wait
+	 *  measurement: queue-wait answers "did this task pile up?" while
+	 *  duration answers "did this task take long once it ran?" Both
+	 *  signals together separate "tasks dispatch fast but execute slow"
+	 *  from "tasks pile up at the dispatcher." No-op when disabled. */
+	public static void recordTaskDuration(String scope, long durationNanos) {
+		if (!ENABLED) return;
+		String scopeKey = scope != null ? scope : "unknown";
+		byScope.computeIfAbsent(scopeKey, k -> new Stats()).record(durationNanos);
+	}
+
 	public static String diagSummary() {
 		if (byScope.isEmpty()) {
 			return String.format("[ferrite/dispatcher-probe] enabled=%s no samples yet", ENABLED);
