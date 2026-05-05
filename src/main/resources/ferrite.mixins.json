@@ -5,10 +5,8 @@
 	"mixins": [
 		"ChunkPhaseMixin",
 		"NoiseStageMixin",
-		"AquiferMixin",
 		"TerrainBulkHandoffMixin",
 		"ChunkNoiseSamplerAccessor",
-		"DensityInterpolatorAccessor",
 		"InterpolatorDiagnosticMixin",
 		"WorldTickMixin",
 		"SignTickProbeMixin",
@@ -70,10 +68,7 @@
 		"BulkSampleDensityMixin",
 		"BulkChunkDensityMixin",
 		"FerriteDispatcherProbeMixin",
-		"AquiferRouteMixin",
-		"MaterialRuleContextInvoker",
-		"MaterialRuleContextAccessor",
-		"BlockStateRuleInvoker"
+		"AquiferRouteMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
