@@ -121,15 +121,13 @@ Measure on a world with 20+ villagers. If `creature` bucket in
 **Uncertainty:** Brain tick involves world reads (POI lookup, path queries).
 May not have a clean pure-math slice. Measure first.
 
-**26.1.x context:** villager trades shifted from hardcoded
-`TradeOffers` lists to a fully data-driven datapack format
-(`villager_trade` folder, deterministic random sequences parallel to
-the loot system). If a port ever happens, the trade-roll dispatch
-shape on 26.1.x is different from pre-26.1: a data-walking lookup
-rather than hardcoded. Measure which path is the actual bottleneck
-(Brain sensor evaluation vs trade roll) before scoping; trade rolls
-on the new shape may or may not be the hot path. Captured here
-before the context goes stale.
+**26.1 note:** villager trades are now fully data-driven via the
+`villager_trade` datapack folder and use deterministic random sequences
+(similar to loot tables). If villager AI ever surfaces as hot, the trade
+roll path is now walkable from source - same seed-driven dispatch shape
+as the noise/biome registry. The Brain sensor + activity evaluation path
+is still the likely bottleneck, not the trade roll, but the data-driven
+change makes the trade side cleaner to port if it ever shows up in logs.
 
 ### Mob spawning candidate sampling
 Per-tick: vanilla samples random positions in loaded chunks, checks biome
