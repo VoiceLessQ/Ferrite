@@ -60,6 +60,9 @@ gradle/wrapper/gradle-wrapper.jar
 # windows
 Thumbs.db
 
+# runClient log directory — populated each dev session, never committed
+logs/
+
 
 # extracted Mojang source (reference reading only)
 /26.1.2/
