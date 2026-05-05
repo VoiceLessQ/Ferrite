@@ -39,7 +39,6 @@ public final class SurfaceValidator {
 	private SurfaceValidator() {}
 
 	private static final int SAMPLE_EVERY_N = 1000;
-	private static final long REPORT_INTERVAL_TICKS = 100; // 5 seconds @ 20 TPS
 
 	private static volatile CompiledRuleTree cachedTree = null;
 
@@ -110,7 +109,6 @@ public final class SurfaceValidator {
 	private static final AtomicLong rustSamples = new AtomicLong();
 	private static final AtomicLong rustJavaAgreement = new AtomicLong();
 	private static final AtomicLong rustJavaDivergence = new AtomicLong();
-	private static long lastReportTick = 0;
 
 	public static boolean isEnabled() {
 		return cachedTree != null;
@@ -668,18 +666,6 @@ public final class SurfaceValidator {
 		return String.format(
 				"[surface-validate] samples=%d match=%.1f%% mismatches=%d nullVanilla=%d evalNull=%d ctxBuildFails=%d | rust samples=%d java=rust=%.1f%% divergences=%d",
 				total, rate, mm, nv, en, cf, rs, javaRustRate, rd);
-	}
-
-	/**
-	 * Per-server-tick reporter hook. Logs the stats line every
-	 * {@link #REPORT_INTERVAL_TICKS} ticks while the validator is
-	 * enabled. Currently unused — wire from a tick mixin if desired.
-	 */
-	public static void onServerTick(long currentTick) {
-		if (!isEnabled()) return;
-		if (currentTick - lastReportTick < REPORT_INTERVAL_TICKS) return;
-		lastReportTick = currentTick;
-		ExampleMod.LOGGER.info(statsLine());
 	}
 
 	/**
