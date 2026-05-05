@@ -1,6 +1,6 @@
 ## Ferrite (0.6.3-alpha+26.1.2)
 
-**What you get:** A performance mod for Minecraft 26.1.2 (mojmap, JDK 25). It's a Fabric (Java) mod that calls into native Rust via JNI for the hot paths. Java handles Minecraft integration and mixins, Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary. The 1.21.11 line continues separately on the `main` branch.
+**What you get:** A performance mod for Minecraft 26.1.2 (mojmap, JDK 25). Built natively against 26.1's deobfuscated source rather than recompiled from the 1.21.11 codebase, so the parity and tick-cost numbers below are measured on 26.1.2 directly. It's a Fabric (Java) mod that calls into native Rust via JNI for the hot paths. Java handles Minecraft integration and mixins, Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary. The 1.21.11 line continues separately on the `main` branch.
 
 **Live now:**
 
