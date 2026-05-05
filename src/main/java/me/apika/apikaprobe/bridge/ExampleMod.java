@@ -23,6 +23,7 @@ import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
 import me.apika.apikaprobe.monitor.AquiferMonitor;
 import me.apika.apikaprobe.monitor.ChunkGenMonitor;
 import me.apika.apikaprobe.monitor.EntityTickMonitor;
+import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
 import me.apika.apikaprobe.monitor.LightTimingMonitor;
 import me.apika.apikaprobe.monitor.MonsterPhaseMonitor;
 import me.apika.apikaprobe.monitor.MovementInternalsMonitor;
@@ -90,6 +91,7 @@ public class ExampleMod implements ModInitializer {
 		PreChunkDispatcher.register();
 		RedstonePhaseMonitor.register();
 		RedstoneOracle.register();
+		FerriteDispatcherProbe.register();
 		FerriteCommand.register();
 		WorldgenStateBootstrap.register();
 		ChunkDecoratorTiming.register();

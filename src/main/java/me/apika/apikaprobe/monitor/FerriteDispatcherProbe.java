@@ -7,6 +7,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongArray;
 
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+
 /**
  * Ferrite step-0 probe — measures submission-to-execution latency on
  * {@link net.minecraft.server.level.ChunkTaskDispatcher}'s
@@ -38,6 +40,27 @@ public final class FerriteDispatcherProbe {
 			System.getProperty("ferrite.dispatcherProbe", "false"));
 
 	private static final ConcurrentHashMap<String, Stats> byScope = new ConcurrentHashMap<>();
+
+	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
+	private static volatile long lastReportNs = System.nanoTime();
+
+	/** Wires a 5-second periodic logger that emits {@link #diagSummary()}
+	 *  through {@link MonitorLog} and resets the per-scope buckets so each
+	 *  log line reflects the most recent 5-second window. No-op when
+	 *  {@link #ENABLED} is false; flip the flag at runtime via
+	 *  {@code /ferrite probe dispatcher on} or boot with
+	 *  {@code -Dferrite.dispatcherProbe=true}. */
+	public static void register() {
+		ServerTickEvents.END_SERVER_TICK.register(server -> {
+			if (!ENABLED) return;
+			long now = System.nanoTime();
+			if (now - lastReportNs < REPORT_INTERVAL_NS) return;
+			lastReportNs = now;
+			if (byScope.isEmpty()) return;
+			MonitorLog.info(diagSummary());
+			byScope.clear();
+		});
+	}
 
 	/** Wraps the inner runnable submitted to a dispatcher so that its
 	 *  queue-wait time (submission → execution start) is recorded
