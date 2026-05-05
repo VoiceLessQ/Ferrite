@@ -300,10 +300,10 @@ gate; the seed-handoff template is the implementation.
   doc** for every vanilla worldgen class involved in seed/PRNG/noise/
   math. Per-class effort estimates, yarn ↔ mojmap mappings, dependency
   ordering. Open this when you start any port from the roadmap above.
-- `JOURNEY.md` — the broader retrospective; this doc is the
+- [JOURNEY.md](JOURNEY.md) — the broader retrospective; this doc is the
   Track B / surface-dispatcher chapter expanded.
-- `docs/SURFACE_RULE_STATUS.md` — current numbers + the dispatcher
+- [docs/SURFACE_RULE_STATUS.md](SURFACE_RULE_STATUS.md) — current numbers + the dispatcher
   arc that motivated capturing this design.
-- `docs/PROFILING.md` — the JNI cost regimes section that
+- [docs/PROFILING.md](PROFILING.md) — the JNI cost regimes section that
   underwrites the "flat boundary" framing.
 - `rust/mod/src/xoroshiro.rs` — the foundation port.

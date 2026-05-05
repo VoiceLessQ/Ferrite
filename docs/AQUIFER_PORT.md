@@ -17,7 +17,7 @@ profiler showed the per-block `@Inject HEAD/RETURN` pair on
 of pure observation overhead** to the `noise-sync` phase even when
 the Rust aquifer port itself was off. Re-enable with
 `AquiferMonitor.ENABLED = true` only when actively measuring aquifer
-per-block cost. See `PIANO_STATUS.md` "diagnostic gating" section for
+per-block cost. See [PIANO_STATUS.md](PIANO_STATUS.md) "diagnostic gating" section for
 the full finding.
 
 ## TL;DR

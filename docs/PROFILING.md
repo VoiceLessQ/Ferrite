@@ -36,7 +36,7 @@ approach. Key findings:
   inlined the supplier chain. **Lesson: estimate cost from the
   profiler, not from reading the code.**
 
-See `PIANO_STATUS.md` "diagnostic gating" section for the full
+See [PIANO_STATUS.md](PIANO_STATUS.md) "diagnostic gating" section for the full
 JFR-data → finding → action chain.
 
 ## Test environment
@@ -164,7 +164,7 @@ per call). That cost structure applies to any port target that needs
 to carry more than primitives across the boundary.
 
 It is not a universal JNI number. Redstone Phase 1 (live bench in
-`docs/REDSTONE_PORT_PLAN.md`, commit `0cfac8c`) measured a different
+[docs/REDSTONE_PORT_PLAN.md](REDSTONE_PORT_PLAN.md), commit `0cfac8c`) measured a different
 regime: pass two direct ByteBuffers and an int, receive an int back.
 That call shape clocks in at single-digit nanoseconds amortized,
 roughly two orders of magnitude below the worldgen estimate.

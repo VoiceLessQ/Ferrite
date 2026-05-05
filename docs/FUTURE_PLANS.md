@@ -236,7 +236,7 @@ init, not the edit-spike pattern that was already measured.
 Lighting was instrumented and measured 2026-05-05. Steady-state cost
 is near-zero idle, scales with column count not volume; peak observed
 was ~117 ms on a 1024-column sky-light decrease (full breakdown in
-`docs/PIANO_STATUS.md`). Edit spikes under heavy /fill or explosions
+[docs/PIANO_STATUS.md](PIANO_STATUS.md)). Edit spikes under heavy /fill or explosions
 are not the signal that would justify a port; they are linear in
 column count and the BFS itself is JIT-locked the same way density
 functions are.
@@ -321,14 +321,14 @@ Document as out of scope unless user logs show it as a bottleneck.
 
 ### Aquifer Rust port
 99.895% parity. Visible surface-grid artifacts at chunk boundaries.
-7 sessions couldn't close the gap. Documented in `docs/AQUIFER_PORT.md`.
+7 sessions couldn't close the gap. Documented in [docs/AQUIFER_PORT.md](AQUIFER_PORT.md).
 
 **Status:** default-off indefinitely. Revisit only with a fresh approach
 to the surface-grid resolution problem.
 
 ### Surface rule dispatcher structural floor
 ~7ms irreducible gap vs ~6ms vanilla baseline. Documented in
-`docs/PIANO_STATUS.md`. Closing it requires bypassing vanilla's chunk
+[docs/PIANO_STATUS.md](PIANO_STATUS.md). Closing it requires bypassing vanilla's chunk
 API — incompatible with mod compatibility promise at current scope.
 
 **Status:** default-off. Ships as opt-in. Gap is documented and honest.

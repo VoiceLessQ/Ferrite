@@ -12,9 +12,9 @@ doc needs a re-audit pass — the file paths are stable but yarn names
 and method signatures will move.
 
 **Companion docs:**
-- `SEED_DRIVEN_DISPATCH.md` — the design philosophy these ports serve
-- `SURFACE_RULE_STATUS.md` — current dispatcher status
-- `JOURNEY.md` — broader cross-port retrospective
+- [SEED_DRIVEN_DISPATCH.md](SEED_DRIVEN_DISPATCH.md) — the design philosophy these ports serve
+- [SURFACE_RULE_STATUS.md](SURFACE_RULE_STATUS.md) — current dispatcher status
+- [JOURNEY.md](JOURNEY.md) — broader cross-port retrospective
 
 ---
 
@@ -612,7 +612,7 @@ Update triggers:
 - Vanilla updates to 1.22+ → re-audit; the structure is stable but
   yarn names and field obfuscation will shift
 - A row in the TL;DR table moves from ❌ to ✅ → update the row + add
-  a section note + update `SEED_DRIVEN_DISPATCH.md` roadmap
+  a section note + update [SEED_DRIVEN_DISPATCH.md](SEED_DRIVEN_DISPATCH.md) roadmap
 - New noise types added by Mojang (rare; happens with major worldgen
   changes like the 1.18 caves & cliffs update)
 - DensityFunction port begins → expand the "skip for now" section

@@ -10,7 +10,7 @@ reflective DF tree walk) per Marker wrap during chunkgen, contributing
 is diagnostic for the steps below, all of which are themselves
 default-off — so it was paying the cost without delivering value in
 normal play. Re-enable with `CacheRouteStats.ENABLED = true` only when
-actively investigating cache-fill routing. See `PIANO_STATUS.md`
+actively investigating cache-fill routing. See [PIANO_STATUS.md](PIANO_STATUS.md)
 "diagnostic gating" section for the full finding.
 
 This doc captures *why* we pivoted from the earlier Phase 2.5 attempt (which fired 0 times in practice) and *how* the new approach is structured so we don't have to rebuild context next session.

@@ -181,7 +181,7 @@ Gate cleared at every realistic AC workload size, including the N=100
 case where pre-bench prediction said Rust would lose to JNI overhead.
 
 **Calibration update for the project:** the 200–500 ns "per-call JNI"
-figure from `PROFILING.md` was for the cramming/physics path with
+figure from [PROFILING.md](PROFILING.md) was for the cramming/physics path with
 snapshot materialization on each crossing. For "pass two direct
 ByteBuffers and an int" the boundary cost is far smaller — likely
 single-digit nanoseconds amortized inside the bench's 2 µs total.
@@ -355,7 +355,7 @@ before we wire Phase 2 into the controller at all.
 ## Lessons from the Phase 1 through 2c arc
 
 Six takeaways, extracted for future port attempts so we do not re-learn
-them the expensive way. See `JOURNEY.md` for the broader cross-port
+them the expensive way. See [JOURNEY.md](JOURNEY.md) for the broader cross-port
 framing.
 
 1. **The gate rule needs a sanity check before it fires.** Phase 2's

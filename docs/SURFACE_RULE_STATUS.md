@@ -29,7 +29,7 @@ dispatcher's ON-vs-OFF gap lives. Three takeaways:
   general chunkgen profiles aggregate across phases and miss the
   dispatch-internal hot frames.
 
-See `PIANO_STATUS.md` "diagnostic gating" section for the full JFR
+See [PIANO_STATUS.md](PIANO_STATUS.md) "diagnostic gating" section for the full JFR
 data and reasoning chain.
 
 ## Headline (current)

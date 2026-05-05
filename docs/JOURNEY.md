@@ -19,7 +19,7 @@ being coupled to world objects by design. That is the whole project, in
 one sentence.
 
 The JNI boundary is cheap (single-digit nanoseconds for a direct
-ByteBuffer pass, measured in `docs/REDSTONE_PORT_PLAN.md` Phase 1). The
+ByteBuffer pass, measured in [docs/REDSTONE_PORT_PLAN.md](REDSTONE_PORT_PLAN.md) Phase 1). The
 cost of assembling enough flat state on the Java side to cross that
 boundary is not. Whenever vanilla has already done the flattening for us
 (entity position arrays, an already-built graph, 256 independent
@@ -187,7 +187,7 @@ amplification.
 
 With AC already collapsing the cascade count, the question was whether
 Rust could accelerate what remained. The port path here is in
-`docs/REDSTONE_PORT_PLAN.md` with every measurement, false start, and
+[docs/REDSTONE_PORT_PLAN.md](REDSTONE_PORT_PLAN.md) with every measurement, false start, and
 pivot documented. Short version: first attempt shipped with a
 conservative `MIN_NODES=32` gate that turned out to exclude 100% of
 production cascades on the target workload, which made the feature look
@@ -244,7 +244,7 @@ chunk-load executor splits worker time gracefully (53/s competing,
 104/s when chunkforce is active but inactive in the pre-gen area), no
 TPS loss, no corruption. The user-controllable workaround for max
 pre-gen throughput is `/ferrite chunkforce off`. A future cross-system
-inflight coordinator is noted in `FUTURE_PLANS.md` if operators ever
+inflight coordinator is noted in [FUTURE_PLANS.md](FUTURE_PLANS.md) if operators ever
 need guaranteed throughput during active play.
 
 License clean-room: the iterator was rewritten from algorithmic
@@ -269,7 +269,7 @@ There is no flat boundary. Shelved.
 
 ### Chunk-gen density function
 
-The full story is in `docs/PROFILING.md`. Vanilla's `finalDensity`
+The full story is in [docs/PROFILING.md](PROFILING.md). Vanilla's `finalDensity`
 evaluation is interleaved with an interpolator state machine that
 rotates through a `[2][49]` buffer per sub-function, ~7 sub-functions
 per chunk, ~25 snapshots per interpolator. Extracting the flat
@@ -315,7 +315,7 @@ Multi-session work ahead: `DoublePerlinNoiseSampler`,
 The full design philosophy — Golden Rule, port template, Four
 Checks application, roadmap, and other targets the pattern
 unlocks (structure placement, density compiler, spawn attempts) —
-lives in `docs/SEED_DRIVEN_DISPATCH.md`. Read it before starting
+lives in [docs/SEED_DRIVEN_DISPATCH.md](SEED_DRIVEN_DISPATCH.md). Read it before starting
 the next subsystem port.
 
 ### Lighting palette reads
@@ -405,7 +405,7 @@ single-digit nanoseconds range.
 
 This matters for port-target selection. A 200 ns per-call JNI budget
 rules out anything called more than ~5K times per chunk. A 5 ns budget
-rules out only the tightest inner loops. See `docs/PROFILING.md`
+rules out only the tightest inner loops. See [docs/PROFILING.md](PROFILING.md)
 "JNI cost regimes" for which regime applies to which call shape.
 
 ### Allocation dominance
@@ -800,8 +800,8 @@ prep. Five commits of cleanup, one tag:
   version this jar targets without burning the version namespace
   on per-MC variants.
 - `0266ae8` adds a measurement-scope disclaimer to
-  `PIANO_STATUS.md` so readers do not assume the 1.21.11 baseline
-  numbers carried to 26.1.2 unchanged.
+  [PIANO_STATUS.md](PIANO_STATUS.md) so readers do not assume the 1.21.11
+  baseline numbers carried to 26.1.2 unchanged.
 
 Tag pushed as `0.6.3-alpha+26.1.2`. CI picked up the tag and
 published to Modrinth and CurseForge per the existing release flow.

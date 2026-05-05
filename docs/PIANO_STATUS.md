@@ -38,7 +38,7 @@ and re-read this doc.
 > as Rust DF variants and lifts density parity to **50/50 bit-exact**
 > at samples=2000, ahead of the 41/42 baseline above. The
 > `EndIslandDensityFunction` port required `SimplexNoise` (2D) and
-> `LegacyRandomSource` as new building blocks. See `JOURNEY.md`
+> `LegacyRandomSource` as new building blocks. See [JOURNEY.md](JOURNEY.md)
 > "26.1.x port: parity carry-over" for the full breakdown and the
 > `26.1.x` git branch for the code.
 
