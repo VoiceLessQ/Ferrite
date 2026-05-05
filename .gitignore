@@ -67,3 +67,5 @@ logs/
 # extracted Mojang source (reference reading only)
 /26.1.2/
 /1.21.11/
+
+docs/LOCAL_DESIGN.md
