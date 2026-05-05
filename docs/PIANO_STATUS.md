@@ -1,5 +1,16 @@
 # Piano Architecture — Status & Next Move (2026-04-28)
 
+> **Measurement scope.** All ms-per-chunk and ms-per-tick figures in
+> this doc were captured on the **MC 1.21.11 / yarn** codepath (the
+> shipped line as of writing). The 26.1.x port (mojmap + JDK 25) is
+> at parity correctness-wise (noise 62/62 + density 50/50 bit-exact,
+> see "26.1.x branch update" callout below) but its perf numbers
+> have **not yet been re-measured on 26.1.2**. Treat the figures
+> below as 1.21.11 baselines; 26.1.2 may shift them up or down once
+> JFR is re-run on that branch. The shapes (which subsystems regress
+> vs win, which gates fail Piano questions) should carry over since
+> the underlying algorithms didn't change in the port.
+
 ## TL;DR — Piano model is built. Scaffolding is not the bottleneck.
 
 The "Piano" mental model — vanilla hands Rust the seed once at world
