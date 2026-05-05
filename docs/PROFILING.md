@@ -365,6 +365,29 @@ calling method is, not how often the hook fires.
 The chunkTick cost (~3.4ms) is still recoverable as `other =
 total - scheduledTicks - entities - blockEntities`.
 
+### Audit for duplicate work before scaffolding new ports
+
+The five port-discipline questions in JOURNEY catch novel work but
+not duplicate work. A 2026-05 chunkgen revisit looked at three
+"missing" pieces (LegacyRandomSource, SimplexNoise,
+EndIslandDensityFunction) and started scaffolding ports for all
+three before discovering each was already shipped in tree. Four
+duplicate-port commits got reset with `git reset --hard`; the
+fixture capturers were re-landed pointed at the existing
+implementations as parity tests (commit `3def5ce`), which is what
+they should have been from the start.
+
+**Rule:** before any new Rust file, grep the crate first.
+`grep -rn "<thing>" rust/mod/src`. Habit-driven file location can
+hide a working implementation in plain sight; the five questions do
+not save you because "is vanilla actually the bottleneck" passes
+trivially when measuring duplicate ports against vanilla.
+
+The corollary is a positive one: when "we already ship this" is the
+honest answer, the productive work is verifying it via parity tests
+against captured vanilla fixtures, not building a parallel
+implementation that will eventually need to be reconciled.
+
 ## Common Lag Myths
 
 ### "Item frames cause lag"

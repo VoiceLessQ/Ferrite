@@ -730,3 +730,83 @@ Lessons for the next major-version port:
   up.  Sort failures by diff magnitude and look for the smallest
   *recurring* failure first; large diffs often share a common
   upstream null.
+
+---
+
+## Post-port revisit and the 0.6.3-alpha release
+
+After the 50/50 DF parity result on 26.1.x, the natural next move
+felt like "find the next gap." What the gap-finding session actually
+surfaced was that there wasn't a gap, and the time was better spent
+verifying what was already there.
+
+The candidates the source audit walked into:
+
+- **LegacyRandomSource**, java.util.Random's LCG, used by
+  EndIslandDensityFunction's seed setup. The first reading said
+  "this is missing on the Rust side, port it." It was already at
+  `rust/mod/src/xoroshiro.rs:369`, added during the original DF
+  parity push as a building block for `LazyEndIsland`. Same module
+  as the Xoroshiro128++ implementation, just sitting in a different
+  file from where habit said to look.
+- **SimplexNoise**, 2D simplex used by EndIsland for the cone/cliffs
+  term. Same story: already at `rust/mod/src/perlin.rs:119`,
+  imported by `LazyEndIsland::get_or_init` line 220.
+- **EndIslandDensityFunction**, the DF op that combines them.
+  `OP_END_ISLAND` (opcode 0x19) at `rust/mod/src/density.rs:622`.
+  Walker emits it, interpreter handles it via `LazyEndIsland`,
+  parity validator at 50/50 already covers end-island terrain.
+
+Three "gaps" were three things we had already shipped and just
+hadn't internalized. Four commits got created scaffolding duplicate
+ports before the duplication landed. `git reset --hard 4f2b845`
+dropped them. The Java fixture capturers
+(`LegacyRandomFixtureCapture`, `SimplexNoiseFixtureCapture`) had
+real value as parity validators against the existing Rust side, so
+those re-landed pointed at the existing implementations: commit
+`3def5ce` adds three LegacyRandomSource parity tests plus one
+SimplexNoise test, all bit-exact against captured vanilla fixtures.
+
+Lesson, durable: if a port "feels missing," confirm it actually is
+missing before scaffolding the replacement. The five questions
+catch novel work; they do not catch duplicate work, because
+duplicate work passes "is vanilla actually the bottleneck"
+trivially. Add a sixth check before any new file:
+`grep -rn "<thing>" rust/mod/src` first.
+
+After the duplication recovery, the session shifted to release
+prep. Five commits of cleanup, one tag:
+
+- `efae14b` gates five dead-target mixins out of
+  `ferrite.mixins.json` for 26.1.x. The targets either did not
+  exist on 26.1.2 (AquiferMixin's hooks moved, MaterialRuleContext
+  fields renamed) or wrapped methods that 26.1.2 deobf had
+  restructured. The mixin loader was warning loudly on each, and
+  warnings on every world load erode trust in the rest.
+- `82b9294` fixes factual claims in `CHANGELOG.md` and
+  `CURSEFORGE_DESCRIPTION.md`. The 26.1.x port did not carry the
+  MaterialRuleContext 3 ms/chunk surface win to 26.1.2 (the
+  underlying class was restructured); both docs claimed it did.
+  Same commit fixes yarn → mojmap renames in the 0.6.2 entry:
+  `cookingTimeSpent` → `cookingTimer`, `setStack` → `setItem`,
+  `setEditor` → `setAllowedPlayerEditor`,
+  `WorldChunk.updateTicker` → `LevelChunk.updateBlockEntityTicker`,
+  `BlockState.getBlockEntityTicker` → `BlockState.getTicker`.
+- `522b072` populates `fabric.mod.json` contact URLs. Modrinth and
+  CurseForge surface these on the mod page; missing them looked
+  unfinished.
+- `2a798e1` bumps `mod_version` to `0.6.3-alpha+26.1.2`. The
+  `+26.1.2` suffix is SemVer build metadata, encoding which MC
+  version this jar targets without burning the version namespace
+  on per-MC variants.
+- `0266ae8` adds a measurement-scope disclaimer to
+  `PIANO_STATUS.md` so readers do not assume the 1.21.11 baseline
+  numbers carried to 26.1.2 unchanged.
+
+Tag pushed as `0.6.3-alpha+26.1.2`. CI picked up the tag and
+published to Modrinth and CurseForge per the existing release flow.
+
+The whole session was the opposite shape from a typical port arc.
+No new Rust code, one targeted test commit, five small-but-honest
+cleanup commits, one release. That is also the work, when the
+work is verifying what shipped.
