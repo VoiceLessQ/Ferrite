@@ -8,8 +8,9 @@ The structurally safe parts are sound by construction. The unknown
 parts are flagged as test gates so that when a user does run the
 stack under load, we know what to look at.
 
-Last refreshed 2026-05-05. Update on each release that changes the
-JNI surface, mixin set, or worldgen bootstrap path.
+Last refreshed 2026-05-05 (full code-level audit landed this revision;
+prior revision was desk-level only). Update on each release that
+changes the JNI surface, mixin set, or worldgen bootstrap path.
 
 ## Scope
 
@@ -69,37 +70,129 @@ Every shared static is one of: `ConcurrentHashMap`, `AtomicLong`,
 `CopyOnWriteArrayList`. No plain `HashMap` or `ArrayList` on the
 worldgen path.
 
+`WorldgenStateBootstrap.identifiedRouterDfs` and `fingerprintToName`
+are `volatile Map<...>` fields published as `Collections.unmodifiableMap(localMap)`
+after the local map is fully built. Standard safe-publication idiom:
+volatile reference + immutable wrapper + builder reference dropped
+after assignment. Concurrent readers from chunkgen workers see a
+fully-initialized read-only map.
+
+`RustBiomeRouter.holdersById` is a `volatile Holder<Biome>[]` published
+the same way: array filled by caller, then `install(...)` writes the
+reference; the only post-install reference is the volatile field itself
+and no code path mutates through it. Vanilla biome holders are
+themselves immutable post-registry-freeze, which lands before any
+chunk gen, so the array's contents are also frozen by the time a
+reader sees the published reference.
+
+### Rust-side concurrency posture
+
+Code-level audit of the full Rust crate. Sync-primitive inventory:
+
+- **`OnceLock` for write-once-then-read-forever publication.**
+  `WORLDGEN_STATE` (the world's noise/biome/DF state) plus the
+  `Arc<OnceLock<>>` cache cells inside `LazyEndIsland` and
+  `LazyBlendedNoise`. Closures depend only on world seed and root
+  factory, both stable per world; same closure inputs across threads
+  → same outcome regardless of which thread wins the init race.
+- **`Mutex` for the init-only build state.** `BUILDER:
+  Mutex<Option<WorldgenBuilder>>` is held only during the
+  init→register→finalize sequence driven from the Java LOAD handler,
+  then drops back to `None`. Single-threaded by call pattern; Mutex
+  serializes correctly even if it weren't.
+- **`thread_local!` + `RefCell` for per-thread scratch.** Cramming
+  (`CELL_HASH`), redstone (`POWER_BUF`), and AC redstone (four
+  buffers) use this idiom for per-tick scratch space. Per-thread
+  isolation by construction; no cross-thread sharing possible.
+
+The DF interpreter's `compute(&self, ctx, state) -> f64` takes
+immutable references throughout. Recursion through `Add`, `Mul`,
+`Min`, `Max`, `Marker` etc. is pure functional with no per-call
+accumulator or memoization side-table. The `MarkerKind` tags
+(`FlatCache`, `Cache2D`, `CacheOnce`, `CacheAllInCell`) are recorded
+in the bytecode but the interpreter doesn't actually cache based on
+them — `Marker` always passes through to `wrapped.compute(...)`.
+For threading purposes the lack of memoization is positive: no
+shared state to race.
+
+Crate-wide grep confirms zero `static mut`, zero plain `Cell<>`,
+zero `OnceCell` (the non-thread-safe variant), zero `UnsafeCell`,
+zero `AtomicX`, and zero `Mutex<T>` or `RwLock<T>` outside the
+init-only `BUILDER`. Every interior-mutability primitive in the
+crate is one of the three patterns above.
+
 ## Tier 2: safe today, latent risk
 
 These are safe under the current vanilla execution model but rely
 on assumptions that some future mod could break.
 
-### Entity tick scratch buffers
+### Entity tick scratch buffers and counters
 
-The non-worldgen kernels (cramming, redstone, hopper, physics) use
-plain static collections on the Java side:
+Code-level audit pass enumerated every non-`volatile`, non-`Atomic*`,
+non-`Concurrent*` static field touched on the entity-tick path. Two
+sub-classes by severity:
 
-- `CrammingDispatcher.MOB_SCRATCH` (ArrayList)
+**Sub-class A — undercount-on-race, no game-state corruption.**
+Per-tick accumulator counters that get incremented from per-call
+mixins and drained on `END_SERVER_TICK`. Worst case under hypothetical
+parallel entity ticking: lost increments produce slightly wrong log
+numbers, no game state involved.
+
+- `CrammingDispatcher.lastProcessedTick` and `diag*` counters
+- `PhysicsDispatcher.diag*` counters (build / dispatch / fallback /
+  rebuild / bucket counters)
+- `PhysicsHandoff.cellScratch` (grow-on-demand `int[]`, written
+  during snapshot build)
+- Monitor accumulators: `thisTick*` `long`/`int` fields in
+  `GoalSelectorMonitor`, `HopperMonitor`, `LookControlMonitor`,
+  `MoveControlMonitor`, `TargetScanMonitor`, `TpsMonitor`,
+  `MovementInternalsMonitor`, `RedstonePhaseMonitor` (8 classes).
+  Same shape as the dispatchers: incremented from per-call mixin
+  hooks, drained from `END_SERVER_TICK`.
+
+**Sub-class B — JNI snapshot state, would corrupt on race.**
+Higher severity, called out separately because the failure mode is
+structural rather than statistical:
+
+- `PhysicsDispatcher.currentlyLoadedBucketKey`
+- `PhysicsDispatcher.currentlyLoadedTickId`
+- `PhysicsDispatcher.currentWorld`
 - `PhysicsDispatcher.BUCKETS` (HashMap)
 - `PhysicsHandoff.STATE_TO_PALETTE`, `PALETTE_AABBS` (HashMap, ArrayList)
+- `CrammingDispatcher.MOB_SCRATCH` (ArrayList)
 
-These are not thread-safe. They rely on the entity tick being
-single-threaded.
+The bucket cluster is the most fragile: `key != currentlyLoadedBucketKey`
+triggers a Rust-side snapshot rebuild via JNI, then `currentlyLoadedTickId`
+is incremented and used as a tag in the next request. If two workers
+ran `adjust` concurrently on different buckets, they would thrash the
+snapshot every call and the `key`/`tickId` write ordering would feed
+inconsistent state to the JNI side. This class would actually
+misbehave under parallelism, not just lose counts.
 
 **Vanilla runs entity ticks on the server main thread, and no
 mainstream concurrent-chunkgen mod we are aware of parallelizes
-entity ticking.** Cramming, redstone, hopper, and physics
-dispatchers all hook into `ServerTickEvents` or per-entity tick
-mixins, which fire from the server main thread. Today this holds.
+entity ticking.** Every sub-class A and sub-class B field is written
+from per-entity-tick mixins or per-world-tick mixins, all dispatched
+serially from `ServerLevel.tick`. Today this holds.
 
-If a mod ever parallelizes entity ticks (a recurring proposal in
-the modding community, never shipped at the time of writing),
-these buffers would corrupt under concurrent access. The Rust side
-is already protected by `thread_local!` so it would just spin up
-per-thread copies; the Java side would race.
+Note that the Rust side of these subsystems is already protected by
+`thread_local!` (cramming, redstone). The latent risk here is
+exclusively Java-side. If a mod ever parallelizes entity ticking,
+the Rust buffers would just spin up per-thread copies; the Java
+buffers would race.
 
-Mitigation if that day comes: replace the static lists with
-`ThreadLocal<>`, which mirrors what the Rust side already does.
+Mitigation when that day comes:
+
+- Sub-class A: replace plain `long`/`int` counters with `LongAdder`
+  or move to `ThreadLocal<long[]>` and aggregate on tick end. Cost:
+  small; benefit: undercount goes away.
+- Sub-class B: replace `MOB_SCRATCH`-style scratch lists with
+  `ThreadLocal<>` (mirrors the Rust side). For the
+  `PhysicsDispatcher` bucket cluster, the structural answer is to
+  redesign so the bucket key is per-snapshot rather than a static —
+  passed as an argument through the JNI request. That work would
+  land as part of any port discipline pass on entity ticking
+  parallelism, since the redesign is non-trivial.
 
 ### Pre-chunk dispatcher
 
@@ -231,6 +324,20 @@ Until the Tier 3 items are resolved with logs from a real run:
 - **Ferrite + Lithium + a concurrent-chunkgen mod**: the same
   caveats as the previous item. Lithium does not introduce new
   threading concerns on top.
+
+## Audit cleanup notes (non-threading)
+
+The code-level audit also surfaced one item that is not a threading
+concern but is worth recording so it doesn't get re-discovered:
+
+- `SurfaceValidator.lastReportTick` and its containing
+  `onServerTick(long currentTick)` method are dead code. Zero
+  callers found via `grep -rn "SurfaceValidator.onServerTick"`. The
+  method's own doc comment confirms: "Currently unused — wire from
+  a tick mixin if desired." Either delete the field and method, or
+  wire the registration; do not leave it as-is. Listed here rather
+  than in a tier because there is no thread that touches it, so
+  there is no concurrency claim to make either way.
 
 ## Update protocol
 
