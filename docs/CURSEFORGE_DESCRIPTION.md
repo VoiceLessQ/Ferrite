@@ -1,4 +1,4 @@
-## Ferrite (0.6.0-alpha for MC 26.1.2)
+## Ferrite (0.6.3-alpha+26.1.2)
 
 **What you get:** A performance mod for Minecraft 26.1.2 (mojmap, JDK 25). It's a Fabric (Java) mod that calls into native Rust via JNI for the hot paths. Java handles Minecraft integration and mixins, Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary. The 1.21.11 line continues separately on the `main` branch.
 
@@ -9,7 +9,6 @@
 - **Hopper extract hint (default on).** Per-source-inventory hint tracks the first non-empty slot; extract loops start there instead of iterating from slot 0 every fire. **~23 µs/call at avgStartIdx=16 (~60% reduction), ~110 µs/call at avgStartIdx=53 (~85%)** on partially-drained chests. Validator shadow-runs reported 0 stale events across 450+ extracts.
 - **Hopper highway** (`/ferrite hopper highway on`, default off). Per-slot independent cooldowns + round-robin destination routing. Aggregate per-hopper throughput climbs from vanilla 1/(8 ticks) to up to 5/(8 ticks). **3.1× chain throughput** under back-pressure on a 100-hopper test chain. Per-tick item count stays ≤ 1 so comparator transition rate is preserved. For hopper-heavy storage; leave off for sorters tuned to vanilla 8-tick clocks.
 - **World creation pre-gen** (toggle on Create World "More" tab, default off). Pre-generates a configurable 5-50 chunk radius around spawn before the player loads in, runs through Ferrite's optimized chunkgen pipeline. Cancel writes a snapshot, next world load auto-resumes. Boss bar reports progress to the host. Dedicated servers: `-Dferrite.pregen.radius=N` first-launch only. Validated **53-104 chunks/sec** depending on server load (steady ~80/s, ~50/s when competing with active player), TPS 20 holding under flight.
-- **Chunkgen baseline** (no toggle). Universal `@Invoker`/`@Accessor` mixins on `MaterialRuleContext` save **~3 ms/chunk** off vanilla's surface phase, every chunk, no opt-in. Diagnostic instrumentation (~8-10 ms/chunk) is gated off by default.
 - **Density function port: 50/50 bit-exact on 26.1.2** (vs the 41/42 baseline on 1.21.11). Building blocks for the future Rust DF compiler are now in tree.
 - **Logging gate** (`/ferrite log monitors on|off|status`). Runtime toggle for the periodic monitor reports. About 5 lines/sec across 24 buckets in normal play; turn off on long sessions or I/O-bound hardware to cut log volume without losing the counters.
 
@@ -40,7 +39,7 @@ See [CHANGELOG.md](https://github.com/VoiceLessQ/Ferrite/blob/main/CHANGELOG.md)
 
 Block-entity ticker hygiene completion. 0.6.1 fixed signs (~70% BE-tick cost reduction at large sign builds); 0.6.2 fixes furnaces and unifies the gate infrastructure so future suppressions are additive.
 
-- **Idle furnaces, blast furnaces, and smokers no longer tick** when empty and not burning. Smelter arrays sitting idle between bulk smelts now cost zero BE-tick time. Active furnaces (with fuel + input, or mid-recipe) still tick as before, immediately on hopper insert via `setStack`. Default-on. Strict-class check preserves mod furnace subclass behavior.
+- **Idle furnaces, blast furnaces, and smokers no longer tick** when empty and not burning. Smelter arrays sitting idle between bulk smelts now cost zero BE-tick time. Active furnaces (with fuel + input, or mid-recipe) still tick as before, immediately on hopper insert via `setItem`. Default-on. Strict-class check preserves mod furnace subclass behavior.
 - **Composite ticker-gate mixin.** Two separate `@Redirect` mixins on the same INVOKE site conflict at Mixin load time; resolved by collapsing both sign and furnace gates into one handler with strict-class dispatch. Future BE-type suppressions add as additional branches.
 - **Pattern observation.** Audited the rest of vanilla's common block entities (chest, barrel, bed, decorated pot, lectern, jukebox, comparator, piston). Mojang already applied the dynamic-ticker pattern correctly to all of them. Signs and furnaces were the two outliers; both now closed. The cheap obvious targets are exhausted, future tick-cost reductions will be measurement-driven from real server logs rather than source scans.
 

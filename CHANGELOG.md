@@ -69,12 +69,12 @@ of conflicting.
 - **Idle furnaces, blast furnaces, and smokers no longer tick** when
   empty and not burning. Vanilla registers a `BlockEntityTicker` for
   every furnace at chunk load; the body does nothing useful when
-  `litTimeRemaining == 0 && cookingTimeSpent == 0` and both fuel and
-  input slots are empty. Suppression gates `WorldChunk.updateTicker`
-  via `@Redirect` on `BlockState.getBlockEntityTicker`, returning
+  `litTimeRemaining == 0 && cookingTimer == 0` and both fuel and
+  input slots are empty. Suppression gates `LevelChunk.updateBlockEntityTicker`
+  via `@Redirect` on `BlockState.getTicker`, returning
   null for the three vanilla types (strict-class check) when all four
   conditions hold. Re-registers via `@Inject RETURN` on
-  `setStack(int, ItemStack)`. Measured at 500 idle furnaces:
+  `setItem(int, ItemStack)`. Measured at 500 idle furnaces:
   **zero measurable BE-tick increase** vs the empty-area baseline
   (0.04-0.05 ms / tick pre and post, within noise floor). Default-on.
   Mod subclasses untouched.
@@ -115,17 +115,17 @@ with audit-driven correctness, perf cleanups, and a sign-tick fix.
 
 - **Sign block entities no longer tick when no player is actively
   editing them.** Vanilla registers a `BlockEntityTicker` for every
-  sign at chunk load. The body is one null check on the editor field
-  (useful only while a player has the edit screen open), but the
-  per-tick infrastructure (range check, ticker map walk, lambda
-  dispatch, profiler push/pop) costs ~120 ns per sign per tick
-  regardless. Fix gates `WorldChunk.updateTicker` via `@Redirect` on
-  `BlockState.getBlockEntityTicker`, returning null for vanilla
+  sign at chunk load. The body is one null check on the
+  playerWhoMayEdit field (useful only while a player has the edit
+  screen open), but the per-tick infrastructure (range check, ticker
+  map walk, lambda dispatch, profiler push/pop) costs ~120 ns per
+  sign per tick regardless. Fix gates `LevelChunk.updateBlockEntityTicker`
+  via `@Redirect` on `BlockState.getTicker`, returning null for vanilla
   `SignBlockEntity` and `HangingSignBlockEntity` (strict-class check)
-  with `editor == null`. Vanilla's existing
+  with `getPlayerWhoMayEdit() == null`. Vanilla's existing
   `if (ticker == null) removeBlockEntityTicker(...)` branch handles
-  deregistration. `SignBlockEntity.setEditor(UUID)` re-evaluates the
-  gate via `WorldChunkInvoker.updateTicker` the moment the editor
+  deregistration. `SignBlockEntity.setAllowedPlayerEditor(UUID)`
+  re-evaluates the gate via the chunk invoker the moment the editor
   field flips. Measured on 961 placed signs:
   **0.20 ms / tick → 0.06 ms / tick (~70% reduction)**. Default-on.
   Mod subclasses untouched. Self-heals from persisted-editor state
@@ -242,7 +242,7 @@ with audit-driven correctness, perf cleanups, and a sign-tick fix.
 - **Density function port: 50/50 bit-exact** vs vanilla on 26.1.2 at samples=2000, beating the 1.21.11 baseline of 41/42. New variants `FindTopSurface` (overworld/caves/noodle) and `EndIslandDensityFunction` (end/sloped_cheese) are now interpreted in Rust; `SimplexNoise` (2D) and `LegacyRandomSource` (java.util.Random LCG) added as Rust building blocks. The bigger win surfaced during the port was a single yarn-name-drift bug in `resolveNoiseName` that had silently zeroed every Noise leaf and was hiding 41 working DFs as failures; fixing it lifted parity from 5/50 to 41/50, and the new ports closed the rest.
 - **Walker now handles `private record` DF types.** `Class.getMethod` + `invoke` silently fails on private records (auto-generated accessor is public but the declaring class is unexported, so invoke throws IllegalAccessException). Walker now uses `getDeclaredMethod` + `setAccessible(true)`.
 - **Autovalidate harness.** `./gradlew runClient -Pferrite.autovalidate=N` now boots the client headlessly via Mojang's `--quickPlaySingleplayer`, runs noise + biome + density parity validators at sample count N, and exits. Roughly 35 seconds end-to-end. Plain `./gradlew runClient` still goes to the title screen.
-- **16 diagnostic mixins stubbed.** Default-off in 1.21.11 already; need redesign against renamed 26.1.2 APIs but don't gate any default-on path. Tracked for follow-up.
+- **16 diagnostic mixins stubbed.** Default-off in 1.21.11 already; need redesign against renamed 26.1.2 APIs. **One exception:** the `MaterialRuleContext` invoker/accessor pair was the 1.21.11 chunkgen baseline win (~3 ms/chunk default-on) and that surface does not exist on 26.1.2 — the renamed `Context` class doesn't expose the same hot fields/methods. The pair is gated out of `ferrite.mixins.json` on this branch; the win does not carry over.
 
 ### Logging
 
