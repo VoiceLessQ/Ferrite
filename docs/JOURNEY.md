@@ -27,6 +27,28 @@ post-density columns), Rust wins decisively. When it has not, Rust
 cannot buy us anything; we spend the win on serialization before we ever
 call the kernel.
 
+One more thing the frame implies, worth stating outright since
+Henrik's GDC talk on the cliffs-and-caves overhaul made it visible.
+Vanilla expresses worldgen as a tree of compositional density-function
+ops plus spline points loaded from JSON, not as hardcoded math. When
+Mojang ships a new MC version they mostly move spline dots around
+and occasionally rename or add a DF type; the op set itself stays
+remarkably stable. Ferrite's Java-side walker compiles whatever DF
+tree the live registry produces into a small bytecode, and
+`density.rs` interprets it. A Mojang version bump propagates as
+"different bytecode flowing through the same interpreter," not as a
+code change in our crate. The 1.21.11 → 26.1.2 port confirmed this
+empirically: noise and density math carried over intact, parity
+validators went from 41/42 on 1.21.11 to 50/50 bit-exact on 26.1.2,
+and what broke was the Java-side classpath surface (yarn → mojmap
+renames, vanilla class restructures) not the Rust kernel. The
+"move the dots and the world changes" model Mojang teaches at GDC
+is the same property that keeps our kernel decoupled from any
+specific MC version. Modders writing custom DF trees for datapacks
+get this for free too: the registry hands the new tree to our walker,
+the walker compiles different bytecode, the kernel runs it. No
+recompile of the mod required.
+
 ---
 
 ## What shipped and why
