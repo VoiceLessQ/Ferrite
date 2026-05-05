@@ -8,7 +8,8 @@
 		"NoZeroG"
 	],
 	"contact": {
-		"issues": ""
+		"issues": "https://github.com/VoiceLessQ/Ferrite/issues",
+		"sources": "https://github.com/VoiceLessQ/Ferrite"
 	},
 	"license": "MIT",
 	"icon": "assets/ferrite/icon.png",
