@@ -202,23 +202,105 @@ neither is closed.
 
 ## No instrumentation at all
 
-### Chunk saving / serialization
-Vanilla serializes chunks to NBT on save — palette encoding, heightmap
-write, entity serialization. Never profiled. On servers with active
-exploration or frequent saves this could be significant.
+### Chunk IO / serialization
+**Parked until external signal:** JFR logs from a real server with
+active exploration and frequent autosave traffic showing this on the
+hot path.
 
-**Next step:** instrument `ChunkSerializer.serialize` timing. Measure
-during active play. Palette encoding is pure math — possible Rust target
-if it's hot.
+Vanilla's chunk IO path covers both directions: on load, palette
+decode, heightmap rebuild, NBT parse from disk. On save, palette
+encode, heightmap write, NBT serialize. Never profiled in Ferrite
+context. On servers with active exploration or frequent autosaves
+either side could be significant.
+
+This is a strong architectural fit for Ferrite. Palette encode/decode
+and heightmap rebuild are pure-math flat-buffer work: bit-packed input,
+bit-packed output, no world-state reads, no JIT inlining vanilla has
+already optimized to nanoseconds. The five questions plausibly all pass.
+
+**Next step (when signal arrives):** instrument `ChunkSerializer.write`
+and the chunk-load deserialize path. Measure during active play. If
+hot, check Piano shape on palette decode first (smallest scope, fewest
+dependencies).
+
+**Uncertainty:** the IO path crosses several layers (region file
+decompress, NBT tree walk, palette unpack). The flat-buffer kernel is
+in there but may be sandwiched between non-flat work. Measure each
+sub-stage before scoping.
+
+### Lighting parallelism
+**Parked until external signal:** real-server logs showing the
+lighting thread as the long pole on chunk load or chunk-pipeline
+init, not the edit-spike pattern that was already measured.
+
+Lighting was instrumented and measured 2026-05-05. Steady-state cost
+is near-zero idle, scales with column count not volume; peak observed
+was ~117 ms on a 1024-column sky-light decrease (full breakdown in
+`docs/PIANO_STATUS.md`). Edit spikes under heavy /fill or explosions
+are not the signal that would justify a port; they are linear in
+column count and the BFS itself is JIT-locked the same way density
+functions are.
+
+The signal that matters is different in shape: the init/pipeline
+long-pole pattern, where the lighting thread blocks chunk loads or
+chunk pipeline progress on a sustained server workload. That's a
+threading-model concern, not an algorithmic one, and the Rust BFS
+port that was investigated and shelved would not touch it.
+
+**Next step (when signal arrives):** confirm via JFR that lighting is
+the long pole on chunk load specifically, distinct from the edit-spike
+pattern already characterized. If the long-pole pattern holds, the
+work is on the threading model, not the BFS algorithm. That puts it
+adjacent to chunk-pipeline orchestration territory (see chunk
+generation pipeline parallelism above for the same architectural
+question).
+
+**Uncertainty:** changes to the lighting thread's threading model are
+adjacent to chunk-pipeline orchestration, which is the same scope
+expansion question raised under chunk-gen pipeline parallelism. The
+two might collapse into a single "do we own a scheduler" decision if
+both signals arrive together.
+
+### Chunk generation pipeline parallelism
+**Parked until external signal:** profiler data from a multi-core
+server showing single-threaded chunk gen as the bottleneck *after* all
+existing Ferrite wins are active (cramming, AC redstone, density
+function pipeline, surface rule batch, etc.).
+
+Running multiple chunk-gen stages concurrently requires touching the
+ChunkStep dependency system. That's owning the scheduler, which means
+owning the threading model, which means owning the compatibility
+surface. A significant architectural commitment, not a small port.
+
+**Next step (when signal arrives):** if a real workload shows
+chunk-gen latency dominating after every other Ferrite optimization
+is on, two paths are on the table. Recommend a pairing with a mod
+that already owns a chunk-gen scheduler, or build our own. Picking
+between them depends on what we already know by then about the
+workload, the compatibility surface, and whether owning a scheduler
+fits Ferrite's shape at that point in the project. Don't pre-decide.
+
+**Uncertainty:** this category is fundamentally a different mod
+shape than what Ferrite is today. Building it in-house would be a
+deliberate scope expansion, not a port. Listing it as a candidate
+keeps the door open without committing to it.
 
 ### Nether / End generation
 Surface rule dispatcher was profiled and designed for overworld only.
-Nether and End have different surface rule trees. End has
-`EndIslandDensityFunction` which is currently `OP_FALLBACK` in the
-compiler.
+Nether and End have different surface rule trees that the dispatcher
+has never been measured against.
 
-**Next step:** run `/ferrite surface stats` in Nether and End dimensions.
-Check if the compiled trees have high fallback rates. Fix if needed.
+`EndIslandDensityFunction` is wired end-to-end via `OP_END_ISLAND`
+(opcode `0x19`, see `rust/mod/src/density.rs:622`). The walker emits
+it, the interpreter handles it, and `LazyEndIsland` lazily constructs
+the SimplexNoise from the world seed on first use. End-island terrain
+math therefore goes through the Rust DF interpreter the same way
+overworld terrain does, not through a fallback path.
+
+**Next step:** run `/ferrite surface stats` in Nether and End
+dimensions. Check fallback rates on the *surface rule* side
+(dispatcher coverage), not on the density function side. Fix
+fallbacks if they show up.
 
 ### Structure generation
 Placement scoring was measured as ~75-150µs/chunk — too small to port.
