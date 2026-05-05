@@ -49,6 +49,26 @@ get this for free too: the registry hands the new tree to our walker,
 the walker compiles different bytecode, the kernel runs it. No
 recompile of the mod required.
 
+The constraint that everything must stay inside vanilla's call graph is
+what made the project legible to itself. Every candidate port had to
+survive the five questions in the section below before any code got
+written, and that filter is what turned cramming and AC redstone into
+measured wins instead of speculative ports. It is also what closed
+bulk-chunk-density and the physics dispatcher cheaply: one JFR session
+each, parity validator confirms the math is right, profiler confirms
+vanilla is already at the floor, port goes default-off and the work
+ends. The walls matter as much as the wins. Each closed thread is a
+permission slip for future-us to not relitigate density functions or
+entity collision when the temptation comes back. Wins came from places
+vanilla was naive at the algorithm layer (cramming's O(N^2) pairs,
+redstone's redundant cascade visits, hopper's empty prefix scans, BE
+tickers that do nothing). Walls came from places vanilla had already
+won at the JIT layer (DF tree with `CacheOnce` markers, entity
+collision's type-stability, anything HotSpot has inlined to single-
+digit nanoseconds steady-state). The constraint did not limit the
+project. It defined where the work was, and it told us when the work
+was done.
+
 ---
 
 ## What shipped and why
