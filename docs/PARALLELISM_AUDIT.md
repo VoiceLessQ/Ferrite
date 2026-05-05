@@ -6,7 +6,7 @@ A retrospective on a parallelism investigation that pivoted twice before produci
 
 - **Vanilla already runs the heavy noise-fill compute on a multi-threaded ForkJoinPool.** "Parallelize chunkgen noise" was already done by Mojang. We almost built scaffolding to do it again.
 - **The dispatcher tail (p999 = 100 ms) we measured is not noise-fill** — it's coordination overhead on a single-threaded `SimpleConsecutiveExecutor`, and the recoverable wallclock is much smaller than the headline number suggested.
-- **One agent-generated audit fabricated a thread-safety race** (`AquiferSampler` allegedly sharing state across chunks) that doesn't exist in source. Caught only by direct file reads.
+- **One first-pass audit fabricated a thread-safety race** (`AquiferSampler` allegedly sharing state across chunks) that doesn't exist in source. Caught only by direct file reads.
 - **The dispatcher latency probe is kept** as real measurement infrastructure. The "Path A: replace worker SCE with FJ pool" plan is reverted — premise was false.
 
 ## The pivot, in three steps
@@ -18,11 +18,11 @@ A retrospective on a parallelism investigation that pivoted twice before produci
 > - `ServerLightingProvider.pendingTasks` global queue + 1000-item batch
 > - `ChunkGenerationContext.chunksToSave` LongLinkedOpenHashSet, allegedly unguarded
 
-This came from a research agent's audit. **Three of those four claims were wrong or misframed:**
+This came from a first-pass audit. **Three of those four claims were wrong or misframed:**
 
 1. The dispatcher is a `PrioritizedConsecutiveExecutor` — single-threaded by *design*, not "queue contention." The 4 levels are priority ordering inside one thread, not parallelism. ([ChunkTaskScheduler.java:28](../1.21.11/common/net/minecraft/server/world/ChunkTaskScheduler.java#L28))
 2. `pendingTasks` is also single-threaded (the producer side runs through the same dispatcher). No lock contention. ([ServerLightingProvider.java:131-136](../1.21.11/common/net/minecraft/server/world/ServerLightingProvider.java#L131-L136))
-3. `chunksToSave` lives in `ServerChunkLoadingManager`, not `ChunkGenerationContext` (which is a 6-line immutable record with no fields like that). The agent confused two classes. ([ServerChunkLoadingManager.java:152](../1.21.11/common/net/minecraft/server/world/ServerChunkLoadingManager.java#L152))
+3. `chunksToSave` lives in `ServerChunkLoadingManager`, not `ChunkGenerationContext` (which is a 6-line immutable record with no fields like that). The audit confused two classes. ([ServerChunkLoadingManager.java:152](../1.21.11/common/net/minecraft/server/world/ServerChunkLoadingManager.java#L152))
 
 ### Step 2 — What we then planned
 
@@ -75,9 +75,9 @@ The dispatcher tail we measured was real, but it represents coordination overhea
 
 ## What we got wrong
 
-### Wrong-1: agent-generated audit (the AquiferSampler "race")
+### Wrong-1: first-pass audit (the AquiferSampler "race")
 
-An exploration agent claimed:
+The first-pass audit claimed:
 
 > AquiferSampler is **shared across chunks** via the aquifer cache (water level and block position grid). Two nearby chunks' sampler regions overlap by padding (...). When `apply()` mutates `blockPositions[ac]` or `waterLevels[i]` concurrently, data races occur.
 
@@ -87,7 +87,7 @@ This is wrong by direct source inspection:
 - [ChunkNoiseSampler.java:168](../1.21.11/common/net/minecraft/world/gen/chunk/ChunkNoiseSampler.java#L168) — `this.aquiferSampler = AquiferSampler.aquifer(...)` (constructed inside ctor)
 - [AquiferSampler.java:30](../1.21.11/common/net/minecraft/world/gen/chunk/AquiferSampler.java#L30) — `return new AquiferSampler.Impl(...)` (fresh per call)
 
-`AquiferSampler.Impl` is per-chunk-instantiated. Its `blockPositions` and `waterLevels` arrays are per-instance. Two chunks have two `Impl` objects with two different arrays. The agent confused **spatial overlap** (chunk A's sampler can read positions also covered by chunk B) with **memory sharing** (writes to the same array). They are not the same.
+`AquiferSampler.Impl` is per-chunk-instantiated. Its `blockPositions` and `waterLevels` arrays are per-instance. Two chunks have two `Impl` objects with two different arrays. The audit confused **spatial overlap** (chunk A's sampler can read positions also covered by chunk B) with **memory sharing** (writes to the same array). They are not the same.
 
 If we'd taken that audit at face value, the next step would have been "build a synchronization layer around AquiferSampler" — solving a non-problem, adding overhead, leaving the actual situation undocumented.
 
@@ -103,9 +103,9 @@ Mid-audit I floated "the dispatcher tail is ~28 % of wallclock during sustained 
 
 Lesson: **don't multiply tail-latency by event count to get wallclock.** Do an A/B (probe with vs without proposed fix) before claiming a number.
 
-## The agent superficiality pattern
+## The first-pass superficiality pattern
 
-Both audit agents in this investigation produced reports that:
+Both first-pass audits in this investigation produced reports that:
 
 - Looked authoritative (file:line references, structured verdicts, professional tone)
 - Stated conclusions confidently (`VERDICT: NO — UNSAFE RACES`)
@@ -113,19 +113,19 @@ Both audit agents in this investigation produced reports that:
 
 Specific failure modes observed:
 
-1. **Class-name confusion.** Confusing `ChunkGenerationContext` (an immutable record) with `ServerChunkLoadingManager` (the class with the actual mutable state). The agent's report cited "line 152" — that line exists in the manager, not the context, but the report attributed it to the context.
-2. **Conceptual-vs-physical confusion.** Equating spatial overlap of sampler regions with memory sharing of arrays. These are different things; one implies the other only if you assume a shared instance, which the agent did without checking.
+1. **Class-name confusion.** Confusing `ChunkGenerationContext` (an immutable record) with `ServerChunkLoadingManager` (the class with the actual mutable state). The first-pass report cited "line 152" — that line exists in the manager, not the context, but the report attributed it to the context.
+2. **Conceptual-vs-physical confusion.** Equating spatial overlap of sampler regions with memory sharing of arrays. These are different things; one implies the other only if you assume a shared instance, which the audit did without checking.
 3. **Verdict before proof.** Reports led with `VERDICT: ...` followed by reasoning, when the reasoning didn't actually support the verdict. The structure invites the reader to trust the verdict without re-deriving it.
 
-This isn't a complaint about agents being useless — they're great for breadth (`grep across N files in parallel`) and for first-pass enumeration. It's about not letting their output reach a decision without a direct-source verification step in between.
+This isn't a complaint about first-pass audits being useless — they're great for breadth (`grep across N files in parallel`) and for enumeration. It's about not letting their output reach a decision without a direct-source verification step in between.
 
 ### Operational rule for this codebase going forward
 
-**Any agent-produced audit that asserts a race condition, a missing field, or a "hidden bug" must be followed by a manual `Read` on the cited file before that claim influences a code change.** The cost of one Read is ~5 seconds. The cost of building scaffolding around a fabricated race is hours of code we throw away — or worse, hours we don't throw away because we ship it without realizing the premise was wrong.
+**Any first-pass audit that asserts a race condition, a missing field, or a "hidden bug" must be followed by a manual `Read` on the cited file before that claim influences a code change.** The cost of one Read is ~5 seconds. The cost of building scaffolding around a fabricated race is hours of code we throw away — or worse, hours we don't throw away because we ship it without realizing the premise was wrong.
 
 For this investigation specifically:
 
-- The agent's audit was disregarded the moment a single Read of `ChunkNoiseSampler.java` showed the per-chunk instantiation. ~30 seconds of human-in-the-loop verification saved a real wrong turn.
+- The first-pass audit was disregarded the moment a single Read of `ChunkNoiseSampler.java` showed the per-chunk instantiation. ~30 seconds of direct-source verification saved a real wrong turn.
 
 ## What's kept vs reverted
 
@@ -154,7 +154,7 @@ For this investigation specifically:
 
 1. **Probe before plan.** The dispatcher probe was the only thing in this arc that had no false positives — it just measured what was true. Build measurement before parallelism scaffolding, every time.
 2. **Read the call chain to the executor, not just the class.** Knowing a field's type is `SimpleConsecutiveExecutor` tells you what tasks routed *through that field* do. It tells you nothing about where other tasks (`populateNoise`, `populateBiomes`) submit, because they may bypass the field entirely.
-3. **Agent audits are first-pass enumeration, not decisions.** Verify any load-bearing claim with a direct Read before changing code based on it.
+3. **First-pass audits are enumeration, not decisions.** Verify any load-bearing claim with a direct Read before changing code based on it.
 4. **Don't multiply tail latency by event count to estimate wallclock recovery.** A/B with a probe-only fix first, or stay quiet about the number.
 5. **`getMainWorkerExecutor()` exists and is parallel.** When something is on a hot critical path and *should* be parallel for vanilla to be reasonable, check whether it already is. Mojang has been at this for a decade; "obvious" parallelizations are often already done.
 
@@ -185,7 +185,7 @@ These are the files we *would have* created if the disproved premises had stood.
 |---|---|---|
 | `FerriteParallelChunkgen.java` | Toggle + lazily-created parallel `Executor` to substitute for the worldgen `SimpleConsecutiveExecutor` | The SCE doesn't carry the heavy work; substituting it gains nothing. |
 | `FerriteParallelChunkgenMixin.java` | `@Inject` on `ChunkTaskScheduler.schedule` to enable concurrent in-flight entries | The "fan-out" inside `schedule()` already routes to a single-threaded SCE; concurrent entries don't unlock parallelism. |
-| `FerriteAquiferGuardMixin.java` (or similar) | `synchronized` wrapper around `AquiferSampler.Impl.apply` to fix the agent-claimed race | The race doesn't exist — `Impl` is per-chunk-instantiated. Adding synchronization would be pure overhead. |
+| `FerriteAquiferGuardMixin.java` (or similar) | `synchronized` wrapper around `AquiferSampler.Impl.apply` to fix the first-pass-claimed race | The race doesn't exist — `Impl` is per-chunk-instantiated. Adding synchronization would be pure overhead. |
 | `FerriteNoiseFillExecutorMixin.java` | Replace `Util.getMainWorkerExecutor().named("wgen_fill_noise")` with a custom executor at the `populateNoise` `supplyAsync` call | Vanilla is already on the FJ pool; substitution would give us a worse (or equivalent) parallel executor. |
 
 ### Adjacent files verified still accurate
@@ -286,6 +286,6 @@ The discarded output is:
 
 - An aborted parallelism scaffolding plan
 - A retracted "28 % wallclock recoverable" claim
-- One agent audit's fabricated race condition
+- One first-pass audit's fabricated race condition
 
 That ratio is acceptable for a speculative perf investigation, but it would have been better with the methodology rules above applied from the start. They're applied now.

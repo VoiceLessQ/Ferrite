@@ -29,9 +29,9 @@ implemented and parity-confirmed**.
 | `NoiseConfig` capture mixin (live-instance handle for parity validator) | ✅ shipped | [NoiseConfigCaptureMixin.java](../src/main/java/me/apika/apikaprobe/mixin/NoiseConfigCaptureMixin.java) |
 | Density function port (41/42 DFs bit-exact) | ✅ shipped | [rust/mod/src/density.rs](../rust/mod/src/density.rs) |
 
-If a future agent says "build WorldgenState skeleton" or "port
-PerlinNoiseSampler" — the agent is working from stale context. Stop and
-re-read this doc.
+If a future contributor proposes "build WorldgenState skeleton" or "port
+PerlinNoiseSampler", that proposal is working from stale context. Stop
+and re-read this doc.
 
 > **26.1.x branch update (2026-05-02):** the carry-over to MC 26.1.2
 > (mojmap, JDK 25) ports `FindTopSurface` and `EndIslandDensityFunction`

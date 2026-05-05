@@ -13,10 +13,10 @@ import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
  * StructureManager, ChunkAccess)CompletableFuture<ChunkAccess>} — 4-arg
  * async.  The chunk-gen pipeline became fully async-first.
  *
- * <p>Per CLAUDE.md, bulk-chunk-density and chunk-phase timing are both
- * default-off / closed threads.  Stubbed to keep the file in tree while
- * build moves forward; reintroduction needs a redesign against the new
- * async chunk-gen shape.
+ * <p>Bulk-chunk-density and chunk-phase timing are both default-off /
+ * closed threads (see JOURNEY "Things not to re-investigate"). Stubbed
+ * to keep the file in tree while the build moves forward; reintroduction
+ * needs a redesign against the new async chunk-gen shape.
  */
 @Mixin(NoiseBasedChunkGenerator.class)
 public abstract class ChunkPhaseMixin {

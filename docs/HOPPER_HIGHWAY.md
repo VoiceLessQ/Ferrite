@@ -271,5 +271,5 @@ For pure storage: highway helps. For sorters: turn it off.
 - Intake distribution that defeats `isFull()`. Causes extract
   upstream to spin on full destinations.
 
-If a future agent says "make hoppers move 5 items per fire" - agent
-is working from stale context. Stop and re-read this doc.
+If a future contributor proposes "make hoppers move 5 items per fire",
+that proposal is working from stale context. Stop and re-read this doc.

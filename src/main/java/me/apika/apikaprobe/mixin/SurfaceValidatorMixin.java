@@ -11,8 +11,9 @@ import net.minecraft.world.level.levelgen.SurfaceRules;
  * which has been removed from SurfaceRules in mojmap 26.1.2 — surface
  * building moved to ChunkGenerator and the dispatch shape is different.
  *
- * <p>Per CLAUDE.md, surface dispatcher work is a closed thread.  Stubbed
- * to keep the file in tree while build moves forward.
+ * <p>Surface dispatcher work is a closed thread (see JOURNEY "Things
+ * not to re-investigate" and PIANO_STATUS).  Stubbed to keep the file
+ * in tree while the build moves forward.
  */
 @Mixin(SurfaceRules.class)
 public abstract class SurfaceValidatorMixin {

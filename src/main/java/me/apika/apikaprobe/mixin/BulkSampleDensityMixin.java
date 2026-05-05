@@ -16,12 +16,13 @@ import net.minecraft.world.level.levelgen.NoiseChunk;
  * longer exists; the interpolation infrastructure inside NoiseChunk was
  * redesigned.  Mojang reshaped how interpolators are stored and fed.
  *
- * <p>Per CLAUDE.md, bulk-chunk-density is a CLOSED THREAD ("don't
- * re-open without a fundamentally new approach") so this mixin's feature
- * was already default-off on 1.21.11.  Stubbed here as an empty mixin to
- * keep the file in tree per the "infrastructure stays" directive while
- * the build moves forward.  A future Phase that re-opens the bulk-density
- * thread will need to rewrite this against the new NoiseChunk shape.
+ * <p>Bulk-chunk-density is a closed thread (see JOURNEY "Things not to
+ * re-investigate"; do not re-open without a fundamentally new approach),
+ * so this mixin's feature was already default-off on 1.21.11.  Stubbed
+ * here as an empty mixin to keep the file in tree (infrastructure stays)
+ * while the build moves forward.  A future Phase that re-opens the
+ * bulk-density thread will need to rewrite this against the new NoiseChunk
+ * shape.
  */
 @Mixin(NoiseChunk.class)
 public abstract class BulkSampleDensityMixin {
