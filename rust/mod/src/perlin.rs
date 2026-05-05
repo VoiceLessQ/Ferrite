@@ -1198,4 +1198,42 @@ mod tests {
             assert_eq!(n.noise(x, y, z), n.noise_with_yfudge(x, y, z, 0.0, 0.0));
         }
     }
+
+    // ----------------------------------------------------------------
+    // SimplexNoise parity fixtures (captured from vanilla 26.1.2 via
+    // `./gradlew captureSimplexNoiseFixtures`). The capturer lives in
+    // src/main/java/me/apika/apikaprobe/tools/SimplexNoiseFixtureCapture.java.
+    //
+    // Seeding mirrors EndIslandDensityFunction(0): LegacyRandomSource(0),
+    // consume_count(17292), then SimplexNoise::new(rng).
+    // ----------------------------------------------------------------
+
+    /// `(xin, yin, expected.to_bits())` — outputs of `get_value_2d` at
+    /// fixed inputs.
+    const FIXTURE_SIMPLEX_GET_VALUE_2D: [(f64, f64, u64); 5] = [
+        (f64::from_bits(0x3ff0000000000000), f64::from_bits(0x3ff0000000000000), 0xbfdcf68a1dc2e9c1),
+        (f64::from_bits(0x4059200000000000), f64::from_bits(0xc06909999999999a), 0xbfd2d76701ecc670),
+        (f64::from_bits(0xc0934a0000000000), f64::from_bits(0x40ba850000000000), 0xbfc2ca88b737341b),
+        (f64::from_bits(0x3fe0000000000000), f64::from_bits(0x3fe0000000000000), 0x0000000000000000),
+        (f64::from_bits(0x4028ae147ae147ae), f64::from_bits(0xc04c63d70a3d70a4), 0x3fd1f1bde472cd09),
+    ];
+
+    #[test]
+    fn parity_simplex_get_value_2d() {
+        let mut rng = crate::xoroshiro::LegacyRandomSource::new(0);
+        rng.consume_count(17292);
+        let noise = SimplexNoise::new(&mut rng);
+        for &(x, y, expected_bits) in FIXTURE_SIMPLEX_GET_VALUE_2D.iter() {
+            let got = noise.get_value_2d(x, y);
+            assert_eq!(
+                got.to_bits(),
+                expected_bits,
+                "get_value_2d({}, {}): got {:e}, want {:e}",
+                x,
+                y,
+                got,
+                f64::from_bits(expected_bits)
+            );
+        }
+    }
 }

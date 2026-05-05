@@ -144,6 +144,26 @@ tasks.withType(JavaCompile).configureEach {
 	it.options.compilerArgs.addAll(['-Xmaxerrs', '9999', '-Xmaxwarns', '0'])
 }
 
+// Parity-fixture capturers: read vanilla classes via the dev-environment
+// Loom classpath, print bit-exact reference values as Rust constants.
+// Outputs go to stdout for paste into the matching Rust test fixtures.
+// See LegacyRandomFixtureCapture.java / SimplexNoiseFixtureCapture.java.
+tasks.register('captureLegacyRandomFixtures', JavaExec) {
+	group = 'verification'
+	description = 'Print Rust fixture constants for xoroshiro::LegacyRandomSource parity tests'
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'me.apika.apikaprobe.tools.LegacyRandomFixtureCapture'
+	standardOutput = System.out
+}
+
+tasks.register('captureSimplexNoiseFixtures', JavaExec) {
+	group = 'verification'
+	description = 'Print Rust fixture constants for perlin::SimplexNoise parity tests'
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'me.apika.apikaprobe.tools.SimplexNoiseFixtureCapture'
+	standardOutput = System.out
+}
+
 java {
 	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
 	// if it is present.

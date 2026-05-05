@@ -628,4 +628,101 @@ mod tests {
             assert!((0.0..1.0).contains(&d));
         }
     }
+
+    // ----------------------------------------------------------------
+    // LegacyRandomSource parity fixtures (captured from vanilla 26.1.2
+    // via `./gradlew captureLegacyRandomFixtures`). The capturer lives
+    // in src/main/java/me/apika/apikaprobe/tools/LegacyRandomFixtureCapture.java.
+    // ----------------------------------------------------------------
+
+    /// First 5 raw `next(32)` outputs after `LegacyRandomSource(0)`.
+    const FIXTURE_SEED0_NEXT32: [i32; 5] = [
+        -1155484576,
+        -723955400,
+        1033096058,
+        -1690734402,
+        -1557280266,
+    ];
+
+    /// First 5 `next_double()` outputs after `LegacyRandomSource(0)`.
+    /// Captured as `f64::from_bits` to verify the float-widening of the
+    /// `1.110223e-16f` multiplier matches vanilla bit-for-bit.
+    const FIXTURE_SEED0_NEXTDOUBLE: [f64; 5] = [
+        f64::from_bits(0x3fe764168ea6ca89),
+        f64::from_bits(0x3fcec9e5b3672e14),
+        f64::from_bits(0x3fe465b93a78ef81),
+        f64::from_bits(0x3fe19d2e10efa128),
+        f64::from_bits(0x3fe31f174640953b),
+    ];
+
+    /// 256-entry permutation array after the full EndIsland seeding
+    /// sequence: `consume_count(17292)` + 3 `next_double()` +
+    /// 256 `next_int_bound(256-i)` Fisher-Yates swaps. Strongest
+    /// end-to-end check on the LCG path — exercises every method
+    /// including `next_int_bound` against every non-power-of-2 bound
+    /// from 256 down to 1.
+    #[rustfmt::skip]
+    const FIXTURE_SEED0_ENDISLAND_PERMUTATION: [i32; 256] = [
+          9, 165, 129, 139, 252, 242, 221,  76, 188, 103,  25, 205, 168, 148, 130, 254,
+        104,  79, 215, 189, 178,  88, 147, 245, 138, 232,  95, 135, 214, 166,  13, 160,
+        247,  31,  53,  28, 115, 213,  77, 156, 142, 106,  57, 112, 111, 217, 236,  71,
+         44,   0,  56, 105,  94,  87, 102,  45,  18,  85,  70, 199, 231, 253,  10,  52,
+         20, 184, 119, 176,  92,  99, 145, 193,  26,   6, 161, 203, 198, 113, 174, 108,
+         48, 173,  63,  59, 227,  81, 140,  40, 134, 137, 109,  21, 150, 196, 164, 143,
+        152,  54,  29, 228,  41,  16, 225, 131,  93, 154, 229, 144, 222, 237, 151, 230,
+        204, 208,  61, 100, 185, 218, 226, 181, 123, 220,   5, 191, 255, 197,  34, 172,
+         82,  90,  17, 238, 194, 180,  86, 243, 170, 234,  32, 171,  15,  38,  74,  66,
+         89, 122, 157, 162, 209, 211,  47, 153, 233,  49,  30,  64,  50, 110, 120, 149,
+        212,  14,   7,  55, 182, 133,  37, 124, 117, 177,  75, 250, 155,  24, 121, 216,
+        114,  46, 128, 210, 118, 201,  12,  80, 183, 251, 126,  96, 169,  22,  84, 240,
+          3,  36, 200,  42, 187, 132,  73,  58, 235,  97, 190,  11, 107, 206, 202, 163,
+        175, 248,  19, 159,  62,  65, 246,  60,   8,  67, 223,  69,   4, 192, 116, 167,
+         43, 244,  91, 146,  27,  83, 179, 136, 158,  68, 141, 239, 186, 101, 125,   1,
+        127,  51,  23, 195,  33, 249,  39,  35, 224,  72,  98, 219, 241, 207,   2,  78,
+    ];
+
+    #[test]
+    fn parity_legacy_seed0_first_5_next32() {
+        let mut r = LegacyRandomSource::new(0);
+        for (i, expected) in FIXTURE_SEED0_NEXT32.iter().enumerate() {
+            let got = r.next(32);
+            assert_eq!(got, *expected, "next(32) call #{}", i);
+        }
+    }
+
+    #[test]
+    fn parity_legacy_seed0_first_5_next_double() {
+        let mut r = LegacyRandomSource::new(0);
+        for (i, expected) in FIXTURE_SEED0_NEXTDOUBLE.iter().enumerate() {
+            let got = r.next_double();
+            assert_eq!(
+                got.to_bits(),
+                expected.to_bits(),
+                "next_double() #{}: got {:e}, want {:e}",
+                i,
+                got,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn parity_legacy_seed0_endisland_permutation() {
+        let mut r = LegacyRandomSource::new(0);
+        r.consume_count(17292);
+        // Mirror SimplexNoise constructor: 3 nextDoubles for xo/yo/zo.
+        r.next_double();
+        r.next_double();
+        r.next_double();
+        // Fisher-Yates shuffle of [0..256].
+        let mut p: [i32; 256] = std::array::from_fn(|i| i as i32);
+        for i in 0..256 {
+            let bound = (256 - i) as i32;
+            let offset = r.next_int_bound(bound);
+            p.swap(i, (offset + i as i32) as usize);
+        }
+        for (idx, expected) in FIXTURE_SEED0_ENDISLAND_PERMUTATION.iter().enumerate() {
+            assert_eq!(p[idx], *expected, "p[{}]", idx);
+        }
+    }
 }
