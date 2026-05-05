@@ -482,6 +482,31 @@ Listed so that future us, having forgotten why, does not re-open them:
   single-threaded for anything that touches world state. More cores
   do not help until we have a subsystem that can run off the tick
   thread, which cramming partially does but redstone never can.
+- **Owning the chunk-gen scheduler.** A multi-session scoping pass
+  measured this end-to-end. Source dive in `26.1.2/decompiled/`
+  produced the full stage-radius table, concurrency envelope, write
+  surface, and ticket-gate model. A latency probe
+  ([FerriteDispatcherProbeMixin](../src/main/java/me/apika/apikaprobe/mixin/FerriteDispatcherProbeMixin.java),
+  default-off) captured per-priority queue-wait plus per-task run
+  duration on the worldgen and light SCEs. Numbers from a 2-minute
+  fast-flight session: dispatcher pollTask p999=6.29ms, max=14.83ms;
+  worldgen task body p99=25.17ms, p999=50.33ms, max=81.75ms. Task
+  body is 4-10× the dispatcher tail. Heavy compute already escapes
+  the SCE via `Util.backgroundExecutor()` from inside `fillFromNoise`,
+  so the parallelism win there is realized regardless of who owns
+  the dispatcher. Beyond the throughput numbers, the deeper close is
+  on shape: a scheduler we owned would deliver real wins (adaptive
+  load shedding, player-aware prioritization, cancellation, vertical
+  chunk priority, tick-budget back-pressure), but every one of those
+  is control-flow work, not kernel work. Ferrite's pattern across
+  every shipped port is "find a flat-data boundary where vanilla is
+  algorithmically naive, swap in Rust math, retain vanilla's control
+  flow." A scheduler inverts that, owning control flow plus the
+  threading model plus the mod-compat surface. Even with the cleanest
+  framing, building one makes Ferrite a different project. The probe
+  stays in tree default-off for any future re-measurement; the
+  scoping notes live in `LOCAL_DESIGN`. Closed on shape, not on
+  numbers.
 - **Cross-referencing other Rust Minecraft ports.** Mojang's source
   is the single source of truth for every port in Ferrite's Track B
   roadmap. Pumpkin, Valence, FerrumC, and any future Rust MC project
