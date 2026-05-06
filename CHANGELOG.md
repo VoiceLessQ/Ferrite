@@ -18,6 +18,80 @@ marks pre-release research builds.
 
 User-facing toggles and parity validators do not change. Where an internal rewrite shifts behavior under a toggle, the toggle name stays the same and the CHANGELOG entry calls out exactly what changed.
 
+### Added
+
+- **Dispatcher latency probe + per-task wall-time scope.** Re-wired
+  against 26.1.2's `PriorityConsecutiveExecutor` after the 0.6.0
+  port broke the 1.21.11 target shape. Captures queue-wait per
+  priority lane (level-change, release, submit, pollTask) on the
+  `ChunkTaskDispatcher`'s internal SCE plus per-task run duration on
+  the worldgen and light SCEs via a `Util.runNamed` redirect inside
+  `AbstractConsecutiveExecutor.pollTask`. 5-second periodic logger
+  emits `[ferrite/dispatcher-probe]` lines through `MonitorLog`.
+  Default off; opt in with `-Pferrite.dispatcherProbe=true` on
+  runClient or `/ferrite probe dispatcher on` in chat.
+
+  Used to determine whether the dispatcher tail is the actual
+  chunkgen bottleneck under sustained load. Fast-flight measurement:
+  `dispatcher-p3-polltask` p999=6.29ms / max=14.83ms vs
+  `worldgen-task-duration` p99=25.17ms / p999=50.33ms / max=81.75ms.
+  Task body is 4-10x the dispatcher's worst tail, so the dispatcher
+  is not the bottleneck on this profile. Probe stays in tree for
+  re-measurement under different workloads.
+
+### Removed
+
+- `SurfaceValidator.onServerTick` and its supporting fields
+  (`lastReportTick`, `REPORT_INTERVAL_TICKS`). Method had zero
+  callers; the doc comment confirmed it was unwired. Existing
+  `statsLine()` covers the reporter cadence on existing log paths.
+
+### Documentation
+
+- New `docs/COMPATIBILITY.md`. Three-tier threading audit
+  (structurally safe / latent risk / unknown) with code-level
+  verification of every non-final static field on the worldgen and
+  entity-tick paths plus a Rust-side concurrency posture inventory
+  (zero `static mut`, zero plain `Cell`/`OnceCell`/`UnsafeCell`,
+  zero non-init `Mutex`/`RwLock`). Tier 2 enumerates the entity-tick
+  scratch buffers + 8 monitor-class accumulators that rely on
+  single-threaded entity ticking; tier 3 lists the four test gates
+  that close the unknowns once Ferrite is paired with another mod
+  in the wild.
+- New `docs/DOC_MAP.md`. One-page index of the public doc set
+  grouped into Start here / Forward-looking / Per-subsystem
+  writeups / Reference / Setup and release.
+- `docs/JOURNEY.md` "The frame" gains a paragraph on the
+  version-durability argument (DF tree as registry-driven
+  bytecode, kernel decoupled from MC version) plus a "constraint
+  was the design" closing paragraph. "Things not to re-investigate"
+  gains the chunk-gen scheduler entry — multi-session scoping
+  closed on shape, not numbers, with the dispatcher probe data
+  recorded as the empirical close. "26.1.x port" gains the
+  post-port revisit + 0.6.3 release session retrospective.
+- `docs/FUTURE_PLANS.md` parks three signal-gated candidates
+  (chunk IO / serialization, lighting parallelism, chunk-gen
+  pipeline parallelism) under "No instrumentation at all". Each
+  entry leads with the explicit external-signal gate before any
+  port work begins. Existing villager AI entry gains a 26.1.x
+  context note on the trade dispatch shift to the data-driven
+  `villager_trade` datapack format.
+- `CURSEFORGE_DESCRIPTION.md` first paragraph signals the
+  mojmap-native build (built against 26.1's deobfuscated source,
+  not recompiled from 1.21.11) for ops migrating from a
+  performance-mod stack on the 1.21.11 line.
+- Bare-text doc references converted to markdown links across 10
+  docs (JOURNEY, FUTURE_PLANS, COMPATIBILITY, PIANO_STATUS,
+  PROFILING, AQUIFER_PORT, CACHE_FILL_PLAN, SURFACE_RULE_STATUS,
+  SEED_DRIVEN_DISPATCH, VANILLA_WORLDGEN_REFERENCE,
+  REDSTONE_PORT_PLAN). Five mixin javadocs and three doc-file
+  comments rephrased; the substantive lessons are preserved with
+  the source attribution generalized.
+
+### Internal
+
+- `docs/LOCAL_DESIGN.md` is gitignored; internal scratch only.
+
 ## [0.6.3-alpha] — 2026-05-03
 
 ### Added
