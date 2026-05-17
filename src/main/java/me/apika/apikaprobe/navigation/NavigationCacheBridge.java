@@ -179,6 +179,7 @@ public final class NavigationCacheBridge {
 				switch (floorKind) {
 					case KIND_OPAQUE_FULL: case KIND_STAIRS:
 					case KIND_SLAB_TOP: case KIND_SLAB_BOTTOM: case KIND_CARPET:
+					case KIND_OTHER: case KIND_TRAPDOOR_CLOSED: case KIND_LEAVES:
 						return "WALKABLE";
 					case KIND_DOOR:   return "DOOR";
 					case KIND_WATER:  return "BLOCKED"; // land mob can't stand on water surface
@@ -197,17 +198,38 @@ public final class NavigationCacheBridge {
 			// return BLOCKED from getPathTypeFromState for land mobs.
 			case KIND_WATER:         return "BLOCKED";
 			case KIND_LAVA:          return "LAVA"; // lava has early-return before isPathfindable
-			case KIND_TRAPDOOR_OPEN:
-			case KIND_TRAPDOOR_CLOSED: return "TRAPDOOR";
+			case KIND_TRAPDOOR_OPEN:  return "TRAPDOOR";
+			case KIND_TRAPDOOR_CLOSED:
+				// Vanilla returns ON_TOP_OF_TRAPDOOR (→ WALKABLE) when the mob
+				// is standing on the closed trapdoor surface.
+				switch (floorKind) {
+					case KIND_OPAQUE_FULL: case KIND_STAIRS:
+					case KIND_SLAB_TOP: case KIND_SLAB_BOTTOM:
+						return "WALKABLE";
+					default: return "TRAPDOOR";
+				}
 			case KIND_SLAB_BOTTOM:
 			case KIND_SLAB_TOP:
 			case KIND_STAIRS:        return "BLOCKED";
 			case KIND_LADDER:
-			case KIND_CARPET:
 			case KIND_SCAFFOLDING:   return "OPEN";
-			// KIND_OTHER blocks are unclassified non-occluding blocks (flowers, rails,
-			// pressure plates, glass pane, etc.) — passable for land mobs → OPEN.
-			default:                 return "OPEN";
+			case KIND_CARPET:
+				// Carpet is a walkable surface when there's solid support below.
+				switch (floorKind) {
+					case KIND_OPAQUE_FULL: case KIND_STAIRS:
+					case KIND_SLAB_TOP: case KIND_SLAB_BOTTOM:
+						return "WALKABLE";
+					default: return "OPEN";
+				}
+			// KIND_OTHER: unclassified non-occluding blocks (flowers, rails, glass pane, etc.)
+			// They're passable, so walkable if the floor supports it.
+			default:
+				switch (floorKind) {
+					case KIND_OPAQUE_FULL: case KIND_STAIRS:
+					case KIND_SLAB_TOP: case KIND_SLAB_BOTTOM:
+						return "WALKABLE";
+					default: return "OPEN";
+				}
 		}
 	}
 

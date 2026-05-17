@@ -46,7 +46,7 @@ public abstract class PathFinderMixin {
 			if (ty < minSy) minSy = ty; if (ty > maxSy) maxSy = ty;
 			if (tz < minCz) minCz = tz; if (tz > maxCz) maxCz = tz;
 		}
-		minCx--; maxCx++; minCz--; maxCz++;
+		minCx--; maxCx++; minSy--; minCz--; maxCz++;
 
 		for (int cx = minCx; cx <= maxCx; cx++) {
 			for (int sy = minSy; sy <= maxSy; sy++) {
