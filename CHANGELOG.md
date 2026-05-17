@@ -39,6 +39,54 @@ User-facing toggles and parity validators do not change. Where an internal rewri
   is not the bottleneck on this profile. Probe stays in tree for
   re-measurement under different workloads.
 
+- **Walkability cache: Rust section store + parity gate (sessions 1-3).**
+  Block-kind cache for the pathfinding subsystem. Infrastructure-only;
+  the performance swap (session 4, replacing vanilla block lookups with
+  cache reads) is the follow-on work.
+
+  *Rust side* (`rust/mod/src/nav_cache_storage.rs`,
+  `nav_cache_jni.rs`, `nav_cache.rs`): 4096-cell sections stored as
+  `Vec<CellData>` in a `HashMap<SectionId, Vec<CellData>>` behind
+  `OnceLock<Mutex<...>>`. JNI surface: `navFillSection` (ByteBuffer
+  handoff), `navIsSectionCached`, `navGetCellKind`, `navOnBlockChanged`,
+  `navUpdateDoorState`. On block change the owning section is evicted so
+  the next path request re-snapshots it.
+
+  *Java side* (`NavigationCacheBridge`, `PathFinderMixin`,
+  `LevelSetBlockMixin`):
+
+  - `encodeBlockKind` classifies every `BlockState` into one of 18
+    categories (AIR, OPAQUE_FULL, DOOR, SLAB_BOTTOM/TOP, STAIRS, FENCE,
+    FENCE_GATE, WALL, TRAPDOOR_OPEN/CLOSED, LADDER, WATER, LAVA, LEAVES,
+    CARPET, SCAFFOLDING, OTHER). Fluid kind restricted to `LiquidBlock`
+    instances so waterlogged plants (seagrass, kelp) fall through to
+    KIND_OTHER instead of KIND_WATER. Big Dripleaf classified as
+    KIND_TRAPDOOR_CLOSED to match vanilla's `PathType.TRAPDOOR` return.
+  - `snapshotSection` fills a reused 16 KB `ByteBuffer.allocateDirect`
+    in `(ly<<8)|(lz<<4)|lx` order and hands it to `navFillSection`.
+  - `PathFinderMixin` HEAD: computes bounding box of entity position +
+    targets, expands by +/-1 chunk X/Z and -1 section Y, snapshots any
+    uncached section via `navIsSectionCached`. RETURN: runs the parity
+    gate for `GroundPathNavigation` mobs only (aquatic mobs use a
+    different node evaluator and are excluded).
+  - `LevelSetBlockMixin` routes `Level.setBlock` through
+    `NavigationCacheBridge.onBlockChanged`, which calls `navOnBlockChanged`
+    and evicts the owning section when the block kind changes.
+  - `predictCategory` maps (cellKind, floorKind) to a coarse category
+    (WALKABLE, BLOCKED, DOOR, FENCE, WATER, LAVA, LEAVES, OPEN,
+    TRAPDOOR). Floor-aware: KIND_OTHER, KIND_CARPET, and
+    KIND_TRAPDOOR_CLOSED cells predict WALKABLE when the floor is solid.
+    KIND_OTHER and KIND_TRAPDOOR_CLOSED floors are included in the
+    AIR-cell walkable set (snow layer, closed trapdoor, leaves all
+    support walking).
+
+  *Parity results* (villager + land-mob paths, 26.1.2 test world):
+  after all predictor fixes, 6 critical mismatches (we say BLOCKED
+  when vanilla says accessible, or vice versa) out of hundreds of
+  checked nodes per session. Remaining soft mismatches are OPEN vs
+  WALKABLE (both accessible; penalty PathType for hazard-adjacent nodes
+  or deep-landing structural limitation of the 2-block model).
+
 ### Removed
 
 - `SurfaceValidator.onServerTick` and its supporting fields
