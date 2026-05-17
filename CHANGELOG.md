@@ -9,14 +9,11 @@ marks pre-release research builds.
 
 ### Direction
 
-0.6.0-alpha closes the feature-add stretch that started at 0.4.0-alpha. The next stretch deepens existing code rather than broadening surface area. Concrete shapes that may shift:
+Next: session 4 of the walkability cache — replace vanilla's per-node
+`getBlockState` calls inside `PathFinder` with reads from the Rust
+section store. The parity gate from 0.6.4-alpha gates that swap.
 
-- The default-off Rust ports that lost their first measurement pass (`BulkChunkDensityFill`, physics dispatcher) need a different structural approach before they go default-on, not more tuning of the current shape.
-- The aquifer port at 99.895% parity has visible surface-grid artifacts that the existing grid abstraction cannot resolve; the rewrite path is per-column, not stride-tuned.
-- The surface dispatcher's 7 ms gap above vanilla is structural, not algorithmic; closing it requires bypassing a chunk API rather than optimizing inside one.
-- Pre-gen gains a heap-pressure-aware throttle (semaphore size adapts to observed mspt) so the daemon thread does not outrun the chunk-load pipeline on memory-constrained hosts.
-
-User-facing toggles and parity validators do not change. Where an internal rewrite shifts behavior under a toggle, the toggle name stays the same and the CHANGELOG entry calls out exactly what changed.
+## [0.6.4-alpha] — 2026-05-17
 
 ### Added
 
