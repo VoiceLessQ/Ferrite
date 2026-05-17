@@ -15,6 +15,7 @@ import net.minecraft.world.level.block.CarpetBlock;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.BigDripleafBlock;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.LiquidBlock;
@@ -76,6 +77,7 @@ public final class NavigationCacheBridge {
 		if (block instanceof FenceGateBlock) return KIND_FENCE_GATE;
 		if (block instanceof FenceBlock) return KIND_FENCE;
 		if (block instanceof WallBlock) return KIND_WALL;
+		if (block instanceof BigDripleafBlock) return KIND_TRAPDOOR_CLOSED; // vanilla returns TRAPDOOR for it
 		if (block instanceof LadderBlock) return KIND_LADDER;
 		if (block instanceof LeavesBlock) return KIND_LEAVES;
 		if (block instanceof CarpetBlock) return KIND_CARPET;
@@ -179,7 +181,7 @@ public final class NavigationCacheBridge {
 					case KIND_SLAB_TOP: case KIND_SLAB_BOTTOM: case KIND_CARPET:
 						return "WALKABLE";
 					case KIND_DOOR:   return "DOOR";
-					case KIND_WATER:  return "OPEN"; // AIR above water surface
+					case KIND_WATER:  return "BLOCKED"; // land mob can't stand on water surface
 					case KIND_LAVA:   return "OPEN"; // AIR above lava
 					case KIND_FENCE: case KIND_FENCE_GATE: case KIND_WALL:
 						return "FENCE";
@@ -203,7 +205,9 @@ public final class NavigationCacheBridge {
 			case KIND_LADDER:
 			case KIND_CARPET:
 			case KIND_SCAFFOLDING:   return "OPEN";
-			default:                 return "BLOCKED";
+			// KIND_OTHER blocks are unclassified non-occluding blocks (flowers, rails,
+			// pressure plates, glass pane, etc.) — passable for land mobs → OPEN.
+			default:                 return "OPEN";
 		}
 	}
 

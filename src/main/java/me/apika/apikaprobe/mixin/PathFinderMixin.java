@@ -13,6 +13,7 @@ import me.apika.apikaprobe.navigation.NavigationCacheBridge;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathFinder;
@@ -68,6 +69,8 @@ public abstract class PathFinderMixin {
 		CallbackInfoReturnable<Path> cir
 	) {
 		NavigationMonitor.onFindPathEnd(entity, cir.getReturnValue());
-		NavigationCacheBridge.checkPathParity(cir.getReturnValue());
+		if (entity.getNavigation() instanceof GroundPathNavigation) {
+			NavigationCacheBridge.checkPathParity(cir.getReturnValue());
+		}
 	}
 }
