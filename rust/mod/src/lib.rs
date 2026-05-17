@@ -49,6 +49,15 @@ pub mod redstone_queues;
 mod redstone_queues_jni;
 pub use redstone_queues_jni::Java_me_apika_apikaprobe_RustBridge_benchRedstoneQueue;
 
+pub mod nav_cache_storage;
+pub mod nav_cache;
+mod nav_cache_jni;
+pub use nav_cache_jni::Java_me_apika_apikaprobe_RustBridge_navOnBlockChanged;
+pub use nav_cache_jni::Java_me_apika_apikaprobe_RustBridge_navUpdateDoorState;
+pub use nav_cache_jni::Java_me_apika_apikaprobe_RustBridge_navFillSection;
+pub use nav_cache_jni::Java_me_apika_apikaprobe_RustBridge_navIsSectionCached;
+pub use nav_cache_jni::Java_me_apika_apikaprobe_RustBridge_navGetCellKind;
+
 pub use engine::Java_me_apika_apikaprobe_RustBridge_initEngine;
 pub use terrain::Java_me_apika_apikaprobe_RustBridge_computeChunkTerrain;
 pub use physics_jni::Java_me_apika_apikaprobe_RustBridge_computeEntityPhysics;

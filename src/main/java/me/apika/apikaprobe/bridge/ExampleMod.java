@@ -41,6 +41,7 @@ import me.apika.apikaprobe.monitor.HopperPerSlotMonitor;
 import me.apika.apikaprobe.monitor.ItemFrameMonitor;
 import me.apika.apikaprobe.monitor.LookControlMonitor;
 import me.apika.apikaprobe.monitor.MoveControlMonitor;
+import me.apika.apikaprobe.monitor.NavigationMonitor;
 import me.apika.apikaprobe.monitor.TargetScanMonitor;
 import me.apika.apikaprobe.monitor.TpsMonitor;
 import me.apika.apikaprobe.monitor.WorldTickMonitor;
@@ -78,6 +79,7 @@ public class ExampleMod implements ModInitializer {
 		GoalSelectorMonitor.register();
 		MoveControlMonitor.register();
 		LookControlMonitor.register();
+		NavigationMonitor.register();
 		HopperMonitor.register();
 		HopperSlotMonitor.register();
 		HopperHintMonitor.register();

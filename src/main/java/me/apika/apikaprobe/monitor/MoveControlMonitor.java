@@ -4,11 +4,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 public final class MoveControlMonitor {
-	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 
 	private static final ThreadLocal<Long> TICK_START = ThreadLocal.withInitial(() -> 0L);
@@ -17,8 +13,8 @@ public final class MoveControlMonitor {
 	private static long thisTickNs    = 0L;
 
 	private static final AtomicLong TOTAL_CALLS = new AtomicLong();
-	private static final AtomicLong TOTAL_NS    = new AtomicLong();
 	private static final AtomicLong TICK_COUNT  = new AtomicLong();
+	private static final LatencyHistogram TICK_COST = new LatencyHistogram();
 
 	private static volatile long lastReportNs = System.nanoTime();
 
@@ -43,7 +39,7 @@ public final class MoveControlMonitor {
 	private static void onServerTickEnd() {
 		if (thisTickCalls > 0L) {
 			TOTAL_CALLS.addAndGet(thisTickCalls);
-			TOTAL_NS.addAndGet(thisTickNs);
+			TICK_COST.record(thisTickNs);
 		}
 		thisTickCalls = 0L;
 		thisTickNs    = 0L;
@@ -55,22 +51,19 @@ public final class MoveControlMonitor {
 		long now = System.nanoTime();
 		if (now - lastReportNs < REPORT_INTERVAL_NS) return;
 
-		long ticks   = TICK_COUNT.getAndSet(0L);
-		long calls   = TOTAL_CALLS.getAndSet(0L);
-		long totalNs = TOTAL_NS.getAndSet(0L);
+		long ticks = TICK_COUNT.getAndSet(0L);
+		long calls = TOTAL_CALLS.getAndSet(0L);
+		LatencyHistogram.Snapshot snap = TICK_COST.drain();
 		lastReportNs = now;
 
 		if (ticks == 0L || calls == 0L) return;
 
-		double callsPerTick   = (double) calls / ticks;
-		double totalMsPerTick = totalNs / 1_000_000.0 / ticks;
-		double avgUsPerCall   = totalNs / 1_000.0 / calls;
+		double callsPerTick = (double) calls / ticks;
 
 		MonitorLog.info(
-			"[move-control] calls={}/tick total={}ms avg={}us/call  n={} ticks",
+			"[move-control] calls={}/tick  cost: {}  ticks={}",
 			String.format("%.1f", callsPerTick),
-			String.format("%.3f", totalMsPerTick),
-			String.format("%.2f", avgUsPerCall),
+			snap.formatLine(),
 			ticks
 		);
 	}

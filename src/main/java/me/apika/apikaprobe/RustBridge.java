@@ -187,6 +187,49 @@ public class RustBridge {
       int n);
 
   /**
+   * Navigation-cache event: a server-side block change occurred at
+   * {@code (x, y, z)}. {@code oldKind}/{@code newKind} are the encoded
+   * pathfinding-relevant block kind for the old and new states (see
+   * {@link me.apika.apikaprobe.navigation.NavigationCacheBridge} for
+   * the discriminator constants). {@code newOpen} carries the OPEN
+   * property when {@code newKind == KIND_DOOR} (0=closed, 1=open),
+   * {@code -1} otherwise. Rust runs the four-branch dispatch on the
+   * (oldKind == DOOR, newKind == DOOR) tuple. Fire-and-forget; cheap
+   * enough to call on every server-side setBlock.
+   */
+  public static native void navOnBlockChanged(
+      int x,
+      int y,
+      int z,
+      byte oldKind,
+      byte newKind,
+      int newOpen);
+
+  /**
+   * Navigation-cache event: door state at {@code (sectionId, cellIdx)}
+   * changed to {@code isOpen}. Independent of the section invalidation
+   * path so door churn does not thrash the cache. Currently exposed for
+   * future direct callers; the section-block-change path
+   * ({@link #navOnBlockChanged}) covers door updates implicitly.
+   */
+  public static native void navUpdateDoorState(
+      long sectionId,
+      int cellIdx,
+      boolean isOpen);
+
+  /** Fill one 16×16×16 section. {@code cellData} is a direct ByteBuffer
+   *  of 4096 × 4 bytes: [block_kind, hazard_kind, movement_cost, top_face_y]. */
+  public static native void navFillSection(
+      int chunkX, int sectionY, int chunkZ,
+      java.nio.ByteBuffer cellData);
+
+  /** True if the section is already in the Rust cache. */
+  public static native boolean navIsSectionCached(int chunkX, int sectionY, int chunkZ);
+
+  /** block_kind for the cached cell at (x,y,z), or -1 if uncached. */
+  public static native byte navGetCellKind(int x, int y, int z);
+
+  /**
    * Begin a fresh worldgen-state build on the Rust side. Derives the
    * root positional random factory from {@code seed} the same way
    * vanilla's {@code RandomState} (yarn {@code RandomState}) does:

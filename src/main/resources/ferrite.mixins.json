@@ -23,6 +23,8 @@
 		"CrammingMixin",
 		"BlockCollisionMixin",
 		"NavigatorTickMixin",
+		"PathFinderMixin",
+		"LevelSetBlockMixin",
 		"EntityMoveMixin",
 		"TravelMixin",
 		"GravityMixin",
