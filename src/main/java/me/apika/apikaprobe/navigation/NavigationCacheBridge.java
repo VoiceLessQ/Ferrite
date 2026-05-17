@@ -17,6 +17,7 @@ import net.minecraft.world.level.block.FenceBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.ScaffoldingBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
@@ -90,8 +91,8 @@ public final class NavigationCacheBridge {
 		}
 		if (block instanceof StairBlock) return KIND_STAIRS;
 
-		FluidState fluid = state.getFluidState();
-		if (!fluid.isEmpty()) {
+		if (block instanceof LiquidBlock) {
+			FluidState fluid = state.getFluidState();
 			if (fluid.is(Fluids.WATER) || fluid.is(Fluids.FLOWING_WATER)) return KIND_WATER;
 			if (fluid.is(Fluids.LAVA) || fluid.is(Fluids.FLOWING_LAVA)) return KIND_LAVA;
 		}
