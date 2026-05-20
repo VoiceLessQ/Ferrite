@@ -11,7 +11,7 @@
 //! are excluded from kind so the kind-diff filter (session 2 step 2)
 //! can drop those events.
 
-#![allow(dead_code)] // Some kinds aren't read until session 3's evaluator lands.
+#![allow(dead_code)] // Kind constants mirror the Java side; most aren't used in Rust directly.
 
 use crate::nav_cache_storage::SectionId;
 
@@ -49,36 +49,14 @@ pub fn on_block_changed(x: i32, y: i32, z: i32, old_kind: u8, new_kind: u8, new_
             }
             let section = SectionId::from_block_pos(x, y, z);
             crate::nav_cache_storage::evict_section(section);
-            eprintln!(
-                "[ferrite][nav-cache] invalidate section=({},{},{}) at ({}, {}, {}) old_kind={} new_kind={}",
-                section.chunk_x, section.section_y, section.chunk_z,
-                x, y, z, old_kind, new_kind
-            );
         }
-        (false, true) => {
-            eprintln!(
-                "[ferrite][nav-cache] door placed at ({}, {}, {}) open={}",
-                x, y, z, new_open
-            );
-        }
-        (true, false) => {
-            eprintln!(
-                "[ferrite][nav-cache] door removed at ({}, {}, {})",
-                x, y, z
-            );
-        }
-        (true, true) => {
-            eprintln!(
-                "[ferrite][nav-cache] door state change at ({}, {}, {}) open={}",
-                x, y, z, new_open
-            );
-        }
+        (false, true) => {}
+        (true, false) => {}
+        (true, true) => {}
     }
 }
 
-pub fn update_door_state(section_id: i64, cell_idx: i32, is_open: bool) {
-    eprintln!(
-        "[ferrite][nav-cache] update_door_state section={} cell={} open={}",
-        section_id, cell_idx, is_open
-    );
+pub fn update_door_state(_section_id: i64, _cell_idx: i32, _is_open: bool) {
+    // Door-state tracking reserved for future use; section eviction on
+    // door kind changes is handled via on_block_changed.
 }
