@@ -24,6 +24,7 @@
 		"BlockCollisionMixin",
 		"NavigatorTickMixin",
 		"PathFinderMixin",
+		"WalkNodeEvaluatorMixin",
 		"LevelSetBlockMixin",
 		"EntityMoveMixin",
 		"TravelMixin",

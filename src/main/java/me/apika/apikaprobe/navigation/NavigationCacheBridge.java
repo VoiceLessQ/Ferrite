@@ -27,8 +27,11 @@ import net.minecraft.world.level.block.WallBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.level.pathfinder.PathType;
 
 /**
  * Facade over the navigation-cache JNI surface. Translates BlockState
@@ -99,13 +102,93 @@ public final class NavigationCacheBridge {
 			if (fluid.is(Fluids.LAVA) || fluid.is(Fluids.FLOWING_LAVA)) return KIND_LAVA;
 		}
 
-		// canOcclude is the cheap proxy for "opaque solid full block" without
-		// world context. Not perfectly accurate (some opaque non-full blocks
-		// slip through) but adequate for first-cut. Refine when the villager
-		// evaluator integration in session 3 reveals specific misses.
+		// These canOcclude() blocks must NOT map to KIND_OPAQUE_FULL because vanilla
+		// returns something other than BLOCKED for them (FIRE, STICKY_HONEY, POWDER_SNOW).
+		// Redirect them to KIND_OTHER so kindToPathType falls through to vanilla.
+		if (state.is(Blocks.MAGMA_BLOCK))        return KIND_OTHER;
+		if (state.is(Blocks.HONEY_BLOCK))         return KIND_OTHER;
+		if (state.is(Blocks.POWDER_SNOW))         return KIND_OTHER;
+		if (CampfireBlock.isLitCampfire(state))   return KIND_OTHER;
+		if (state.is(Blocks.LAVA_CAULDRON))       return KIND_OTHER;
+
+		// canOcclude is the cheap proxy for "opaque solid full block".
 		if (state.canOcclude()) return KIND_OPAQUE_FULL;
 
 		return KIND_OTHER;
+	}
+
+	// ── Java-side section kind cache (direct-mapped, no JNI per read) ─────────
+	//
+	// Mirrors the Rust section store for fast per-position kind lookups on the
+	// server tick thread. 512 slots covers typical mob cluster sizes with low
+	// collision rate. Valid keys always have bit 63 = 0 (only 63 bits used),
+	// so Long.MIN_VALUE is a safe sentinel for "empty slot".
+
+	private static final int  JAVA_SLOTS = 512;
+	private static final int  JAVA_MASK  = JAVA_SLOTS - 1;
+	private static final long EMPTY_KEY  = Long.MIN_VALUE;
+	private static final long[]   JAVA_KEYS  = new long[JAVA_SLOTS];
+	private static final byte[][] JAVA_KINDS = new byte[JAVA_SLOTS][];
+
+	static { java.util.Arrays.fill(JAVA_KEYS, EMPTY_KEY); }
+
+	private static long sectionKey(int cx, int sy, int cz) {
+		// Pack cx, sy, cz into bits 0-62 (21 bits each). Result is always >= 0.
+		return ((long)(cx & 0x1FFFFF))
+		     | (((long)(sy & 0x1FFFFF)) << 21)
+		     | (((long)(cz & 0x1FFFFF)) << 42);
+	}
+
+	private static int sectionSlot(long key) {
+		return (int)(key ^ (key >>> 16) ^ (key >>> 32)) & JAVA_MASK;
+	}
+
+	/** Returns cached block kind for (x, y, z), or -1 if not cached. */
+	public static byte kindAt(int x, int y, int z) {
+		long key = sectionKey(x >> 4, y >> 4, z >> 4);
+		int slot = sectionSlot(key);
+		if (JAVA_KEYS[slot] != key) return -1;
+		return JAVA_KINDS[slot][((y & 15) << 8) | ((z & 15) << 4) | (x & 15)];
+	}
+
+	private static void storeJavaSection(int cx, int sy, int cz, byte[] kinds) {
+		long key = sectionKey(cx, sy, cz);
+		int slot = sectionSlot(key);
+		JAVA_KINDS[slot] = kinds;  // store data before key (write ordering)
+		JAVA_KEYS[slot]  = key;
+	}
+
+	private static void evictJavaSection(int cx, int sy, int cz) {
+		long key = sectionKey(cx, sy, cz);
+		int slot = sectionSlot(key);
+		if (JAVA_KEYS[slot] == key) JAVA_KEYS[slot] = EMPTY_KEY;
+	}
+
+	/**
+	 * Maps a kind byte to PathType for unambiguous cases.
+	 * Returns null for KIND_DOOR, KIND_FENCE_GATE, and KIND_OTHER, which
+	 * require reading actual block state (open/closed, block-specific rules).
+	 * Callers must fall through to vanilla for a null result.
+	 */
+	public static PathType kindToPathType(byte kind) {
+		switch (kind) {
+			case KIND_AIR:
+			case KIND_LADDER:
+			case KIND_SCAFFOLDING:
+			case KIND_CARPET:      return PathType.OPEN;
+			case KIND_OPAQUE_FULL:
+			case KIND_SLAB_BOTTOM:
+			case KIND_SLAB_TOP:
+			case KIND_STAIRS:      return PathType.BLOCKED;
+			case KIND_WATER:       return PathType.WATER; // LiquidBlock.isPathfindable(LAND)=true in 26.1.2
+			case KIND_FENCE:
+			case KIND_WALL:        return PathType.FENCE;
+			case KIND_TRAPDOOR_OPEN:
+			case KIND_TRAPDOOR_CLOSED: return PathType.TRAPDOOR;
+			case KIND_LAVA:        return PathType.LAVA;
+			case KIND_LEAVES:      return PathType.LEAVES;
+			default:               return null; // KIND_DOOR, KIND_FENCE_GATE, KIND_OTHER
+		}
 	}
 
 	public static void onBlockChanged(BlockPos pos, BlockState oldState, BlockState newState) {
@@ -122,6 +205,9 @@ public final class NavigationCacheBridge {
 			oldKind, newKind,
 			newOpen
 		);
+		if (oldKind != newKind) {
+			evictJavaSection(pos.getX() >> 4, pos.getY() >> 4, pos.getZ() >> 4);
+		}
 	}
 
 	public static void updateDoorState(long sectionId, int cellIdx, boolean isOpen) {
@@ -136,21 +222,24 @@ public final class NavigationCacheBridge {
 		ByteBuffer.allocateDirect(4096 * 4).order(ByteOrder.LITTLE_ENDIAN);
 
 	/** Walk every cell in the 16×16×16 section, encode block kind, hand off
-	 *  to Rust. Idempotent — call before path requests; eviction on block
-	 *  change (via onBlockChanged) ensures stale sections are refilled. */
+	 *  to Rust and store in the Java-side kind cache. Idempotent — eviction
+	 *  on block change (via onBlockChanged) ensures stale sections are refilled. */
 	public static void snapshotSection(int chunkX, int sectionY, int chunkZ, BlockGetter level) {
 		if (!RustBridge.NATIVE_AVAILABLE) return;
 		SNAPSHOT_BUF.clear();
+		byte[] kinds = new byte[4096];
 		BlockPos.MutableBlockPos mpos = new BlockPos.MutableBlockPos();
 		int baseX = chunkX << 4;
 		int baseY = sectionY << 4;
 		int baseZ = chunkZ << 4;
-		// Cell index order matches Rust: (ly<<8)|(lz<<4)|lx
+		// Cell index order: (ly<<8)|(lz<<4)|lx — matches Rust and kindAt.
+		int idx = 0;
 		for (int ly = 0; ly < 16; ly++) {
 			for (int lz = 0; lz < 16; lz++) {
 				for (int lx = 0; lx < 16; lx++) {
 					byte kind = encodeBlockKind(
 						level.getBlockState(mpos.set(baseX + lx, baseY + ly, baseZ + lz)));
+					kinds[idx++] = kind;
 					SNAPSHOT_BUF.put(kind);
 					SNAPSHOT_BUF.put((byte) 0); // hazard_kind
 					SNAPSHOT_BUF.put((byte) 0); // movement_cost
@@ -160,6 +249,7 @@ public final class NavigationCacheBridge {
 		}
 		SNAPSHOT_BUF.flip();
 		RustBridge.navFillSection(chunkX, sectionY, chunkZ, SNAPSHOT_BUF);
+		storeJavaSection(chunkX, sectionY, chunkZ, kinds);
 	}
 
 	// ── Parity comparison ─────────────────────────────────────────────────────
@@ -182,7 +272,7 @@ public final class NavigationCacheBridge {
 					case KIND_OTHER: case KIND_TRAPDOOR_CLOSED: case KIND_LEAVES:
 						return "WALKABLE";
 					case KIND_DOOR:   return "DOOR";
-					case KIND_WATER:  return "BLOCKED"; // land mob can't stand on water surface
+					case KIND_WATER:  return "OPEN";  // water floor → getPathTypeFromState=WATER → switch WATER→OPEN
 					case KIND_LAVA:   return "OPEN"; // AIR above lava
 					case KIND_FENCE: case KIND_FENCE_GATE: case KIND_WALL:
 						return "FENCE";
@@ -194,9 +284,9 @@ public final class NavigationCacheBridge {
 			case KIND_FENCE_GATE:
 			case KIND_WALL:          return "FENCE";
 			case KIND_LEAVES:        return "LEAVES";
-			// LiquidBlock.isPathfindable(LAND) = false, so pure water blocks
-			// return BLOCKED from getPathTypeFromState for land mobs.
-			case KIND_WATER:         return "BLOCKED";
+			// LiquidBlock.isPathfindable(LAND) = true in 26.1.2; water blocks
+			// return PathType.WATER from getPathTypeFromState.
+			case KIND_WATER:         return "WATER";
 			case KIND_LAVA:          return "LAVA"; // lava has early-return before isPathfindable
 			case KIND_TRAPDOOR_OPEN:  return "TRAPDOOR";
 			case KIND_TRAPDOOR_CLOSED:
@@ -227,6 +317,7 @@ public final class NavigationCacheBridge {
 				switch (floorKind) {
 					case KIND_OPAQUE_FULL: case KIND_STAIRS:
 					case KIND_SLAB_TOP: case KIND_SLAB_BOTTOM:
+					case KIND_LEAVES:
 						return "WALKABLE";
 					default: return "OPEN";
 				}
