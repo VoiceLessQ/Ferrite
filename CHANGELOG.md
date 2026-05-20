@@ -17,125 +17,31 @@ section store. The parity gate from 0.6.4-alpha gates that swap.
 
 ### Added
 
-- **Dispatcher latency probe + per-task wall-time scope.** Re-wired
-  against 26.1.2's `PriorityConsecutiveExecutor` after the 0.6.0
-  port broke the 1.21.11 target shape. Captures queue-wait per
-  priority lane (level-change, release, submit, pollTask) on the
-  `ChunkTaskDispatcher`'s internal SCE plus per-task run duration on
-  the worldgen and light SCEs via a `Util.runNamed` redirect inside
-  `AbstractConsecutiveExecutor.pollTask`. 5-second periodic logger
-  emits `[ferrite/dispatcher-probe]` lines through `MonitorLog`.
-  Default off; opt in with `-Pferrite.dispatcherProbe=true` on
-  runClient or `/ferrite probe dispatcher on` in chat.
+- **Dispatcher latency probe** (`/ferrite probe dispatcher on`, default off).
+  Captures queue-wait per priority lane and per-task wall time on the
+  worldgen and light executors. Measurement on fast-flight load: task body
+  is 4-10x the dispatcher's worst tail, so the dispatcher is not the
+  bottleneck. Probe stays in tree for re-measurement under other workloads.
 
-  Used to determine whether the dispatcher tail is the actual
-  chunkgen bottleneck under sustained load. Fast-flight measurement:
-  `dispatcher-p3-polltask` p999=6.29ms / max=14.83ms vs
-  `worldgen-task-duration` p99=25.17ms / p999=50.33ms / max=81.75ms.
-  Task body is 4-10x the dispatcher's worst tail, so the dispatcher
-  is not the bottleneck on this profile. Probe stays in tree for
-  re-measurement under different workloads.
-
-- **Walkability cache: Rust section store + parity gate (sessions 1-3).**
-  Block-kind cache for the pathfinding subsystem. Infrastructure-only;
-  the performance swap (session 4, replacing vanilla block lookups with
-  cache reads) is the follow-on work.
-
-  *Rust side* (`rust/mod/src/nav_cache_storage.rs`,
-  `nav_cache_jni.rs`, `nav_cache.rs`): 4096-cell sections stored as
-  `Vec<CellData>` in a `HashMap<SectionId, Vec<CellData>>` behind
-  `OnceLock<Mutex<...>>`. JNI surface: `navFillSection` (ByteBuffer
-  handoff), `navIsSectionCached`, `navGetCellKind`, `navOnBlockChanged`,
-  `navUpdateDoorState`. On block change the owning section is evicted so
-  the next path request re-snapshots it.
-
-  *Java side* (`NavigationCacheBridge`, `PathFinderMixin`,
-  `LevelSetBlockMixin`):
-
-  - `encodeBlockKind` classifies every `BlockState` into one of 18
-    categories (AIR, OPAQUE_FULL, DOOR, SLAB_BOTTOM/TOP, STAIRS, FENCE,
-    FENCE_GATE, WALL, TRAPDOOR_OPEN/CLOSED, LADDER, WATER, LAVA, LEAVES,
-    CARPET, SCAFFOLDING, OTHER). Fluid kind restricted to `LiquidBlock`
-    instances so waterlogged plants (seagrass, kelp) fall through to
-    KIND_OTHER instead of KIND_WATER. Big Dripleaf classified as
-    KIND_TRAPDOOR_CLOSED to match vanilla's `PathType.TRAPDOOR` return.
-  - `snapshotSection` fills a reused 16 KB `ByteBuffer.allocateDirect`
-    in `(ly<<8)|(lz<<4)|lx` order and hands it to `navFillSection`.
-  - `PathFinderMixin` HEAD: computes bounding box of entity position +
-    targets, expands by +/-1 chunk X/Z and -1 section Y, snapshots any
-    uncached section via `navIsSectionCached`. RETURN: runs the parity
-    gate for `GroundPathNavigation` mobs only (aquatic mobs use a
-    different node evaluator and are excluded).
-  - `LevelSetBlockMixin` routes `Level.setBlock` through
-    `NavigationCacheBridge.onBlockChanged`, which calls `navOnBlockChanged`
-    and evicts the owning section when the block kind changes.
-  - `predictCategory` maps (cellKind, floorKind) to a coarse category
-    (WALKABLE, BLOCKED, DOOR, FENCE, WATER, LAVA, LEAVES, OPEN,
-    TRAPDOOR). Floor-aware: KIND_OTHER, KIND_CARPET, and
-    KIND_TRAPDOOR_CLOSED cells predict WALKABLE when the floor is solid.
-    KIND_OTHER and KIND_TRAPDOOR_CLOSED floors are included in the
-    AIR-cell walkable set (snow layer, closed trapdoor, leaves all
-    support walking).
-
-  *Parity results* (villager + land-mob paths, 26.1.2 test world):
-  after all predictor fixes, 6 critical mismatches (we say BLOCKED
-  when vanilla says accessible, or vice versa) out of hundreds of
-  checked nodes per session. Remaining soft mismatches are OPEN vs
-  WALKABLE (both accessible; penalty PathType for hazard-adjacent nodes
-  or deep-landing structural limitation of the 2-block model).
+- **Walkability cache infrastructure (sessions 1-3).** Block-kind cache for
+  the pathfinding subsystem: Rust section store (4096-cell flat arrays, evict
+  on block change), JNI surface, Java bridge with 18-category block classifier,
+  lazy section fill on path requests, and a parity gate that validates cache
+  predictions against vanilla's node evaluator. Parity result: 6 critical
+  mismatches out of hundreds of nodes checked per session (all structural
+  2-block-model limits). The performance swap (session 4) is the follow-on.
 
 ### Removed
 
-- `SurfaceValidator.onServerTick` and its supporting fields
-  (`lastReportTick`, `REPORT_INTERVAL_TICKS`). Method had zero
-  callers; the doc comment confirmed it was unwired. Existing
-  `statsLine()` covers the reporter cadence on existing log paths.
-
-### Documentation
-
-- New `docs/COMPATIBILITY.md`. Three-tier threading audit
-  (structurally safe / latent risk / unknown) with code-level
-  verification of every non-final static field on the worldgen and
-  entity-tick paths plus a Rust-side concurrency posture inventory
-  (zero `static mut`, zero plain `Cell`/`OnceCell`/`UnsafeCell`,
-  zero non-init `Mutex`/`RwLock`). Tier 2 enumerates the entity-tick
-  scratch buffers + 8 monitor-class accumulators that rely on
-  single-threaded entity ticking; tier 3 lists the four test gates
-  that close the unknowns once Ferrite is paired with another mod
-  in the wild.
-- New `docs/DOC_MAP.md`. One-page index of the public doc set
-  grouped into Start here / Forward-looking / Per-subsystem
-  writeups / Reference / Setup and release.
-- `docs/JOURNEY.md` "The frame" gains a paragraph on the
-  version-durability argument (DF tree as registry-driven
-  bytecode, kernel decoupled from MC version) plus a "constraint
-  was the design" closing paragraph. "Things not to re-investigate"
-  gains the chunk-gen scheduler entry — multi-session scoping
-  closed on shape, not numbers, with the dispatcher probe data
-  recorded as the empirical close. "26.1.x port" gains the
-  post-port revisit + 0.6.3 release session retrospective.
-- `docs/FUTURE_PLANS.md` parks three signal-gated candidates
-  (chunk IO / serialization, lighting parallelism, chunk-gen
-  pipeline parallelism) under "No instrumentation at all". Each
-  entry leads with the explicit external-signal gate before any
-  port work begins. Existing villager AI entry gains a 26.1.x
-  context note on the trade dispatch shift to the data-driven
-  `villager_trade` datapack format.
-- `CURSEFORGE_DESCRIPTION.md` first paragraph signals the
-  mojmap-native build (built against 26.1's deobfuscated source,
-  not recompiled from 1.21.11) for ops migrating from a
-  performance-mod stack on the 1.21.11 line.
-- Bare-text doc references converted to markdown links across 10
-  docs (JOURNEY, FUTURE_PLANS, COMPATIBILITY, PIANO_STATUS,
-  PROFILING, AQUIFER_PORT, CACHE_FILL_PLAN, SURFACE_RULE_STATUS,
-  SEED_DRIVEN_DISPATCH, VANILLA_WORLDGEN_REFERENCE,
-  REDSTONE_PORT_PLAN). Five mixin javadocs and three doc-file
-  comments rephrased; the substantive lessons are preserved with
-  the source attribution generalized.
+- Dead `SurfaceValidator.onServerTick` method and its fields (zero callers).
 
 ### Internal
 
-- `docs/LOCAL_DESIGN.md` is gitignored; internal scratch only.
+- Threading audit (`docs/COMPATIBILITY.md`): three-tier safety classification
+  of every non-final static field on worldgen and entity-tick paths, plus
+  Rust-side concurrency posture (zero unsafe statics, zero plain cells).
+- Doc index (`docs/DOC_MAP.md`) and various doc updates across JOURNEY,
+  FUTURE_PLANS, and per-subsystem writeups.
 
 ## [0.6.3-alpha] — 2026-05-03
 
