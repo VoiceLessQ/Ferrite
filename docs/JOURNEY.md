@@ -835,3 +835,170 @@ The whole session was the opposite shape from a typical port arc.
 No new Rust code, one targeted test commit, five small-but-honest
 cleanup commits, one release. That is also the work, when the
 work is verifying what shipped.
+
+## Walkability cache: the pathfinding hotpath
+
+### Framing the target
+
+The question that opened this arc was simple: when a mob is
+pathfinding, where does the time go? The answer from a brief
+source read: `WalkNodeEvaluator.getPathTypeFromState(BlockGetter, BlockPos)`.
+That static method is called by `PathTypeCache.getOrCompute` on every
+cache miss. `PathTypeCache` is a 4096-slot direct-mapped cache keyed on
+block position, so in a crowded area with many mobs covering distinct
+positions, the miss rate is high. Each miss resolves to a `getBlockState`
+call (chunk array read through the level-access chain) followed by a
+50-line classification chain touching block properties, tags, and method
+calls. Hundreds of nodes per path, many paths per tick, many ticks.
+
+The five-question gate passed cleanly. Vanilla's steady-state cost per
+call is not in the low-nanosecond range that kills a port (no HotSpot
+memoization equivalent to `CacheOnce`). The classification logic is
+pure-math against block properties with no world callbacks. JNI
+overhead is affordable if we snapshot sections at fill time rather
+than paying per-node. Parity is oracle-testable by comparing our
+predicted `PathType` against `PathTypeCache`'s actual output. No
+concurrent-chunkgen mod overlap.
+
+### Sessions 1-3: infrastructure
+
+Commit `37729e2` landed the full infrastructure stack in one shot, then
+three follow-on commits (`8338427`, `d7905ad`, `09b5814`) hardened the
+parity gate.
+
+The Java side: `NavigationCacheBridge.java` holds an 18-category block
+classifier (`encodeBlockKind`) that maps every `BlockState` to one of:
+AIR, OPAQUE_FULL, SLAB_BOTTOM, SLAB_TOP, STAIRS, FENCE, WALL, DOOR,
+FENCE_GATE, TRAPDOOR_OPEN, TRAPDOOR_CLOSED, LADDER, SCAFFOLDING,
+CARPET, WATER, LAVA, LEAVES, OTHER. The classifier runs once per block
+change, not per pathfinding query.
+
+The Rust side: `rust/mod/src/nav_cache.rs` and
+`rust/mod/src/nav_cache_storage.rs` store one `Vec<CellData>` (4096
+bytes, flat array) per section, keyed by `SectionId`. The store evicts
+on block change via the existing `LevelSetBlockMixin` dispatch path.
+JNI surface: `navSnapshotSection` (fill a section from Java's
+`BlockState` scan), `navOnBlockChanged` (single-cell eviction),
+`navGetCellKind` (per-position lookup for the parity gate).
+
+The parity gate: `checkPathParity` in `NavigationCacheBridge` runs
+after every `PathFinder.findPath` call and compares our predicted
+`PathType` category against `PathTypeCache`'s actual result.
+`predictCategory(byte cellKind, byte floorKind)` encodes the
+2-block-model logic: what kind of block is in the cell, and what kind
+of block directly below provides or denies a floor. The gate logs any
+mismatch with kind values and cell coordinates so regressions surface
+immediately.
+
+The parity gate required three fix passes before it stabilized:
+- `8338427` restricted fluid kind to `LiquidBlock` only (flowing
+  instances keyed differently in the registry, causing phantom WATER
+  entries for non-liquid blocks).
+- `d7905ad` fixed the aquatic filter (sea-grass, kelp, coral) that was
+  falling into KIND_OPAQUE_FULL, corrected KIND_OTHER handling for
+  blocks that have no unambiguous single category, fixed the water-floor
+  case (standing on a water block's surface), and fixed dripleaf
+  (small dripleaf has no collision but vanilla's classifier still
+  returns WALKABLE via shape inspection).
+- `09b5814` made the predictor floor-aware and restricted snapshot
+  fill to the Y range actually requested by the path, avoiding
+  snapshot work on sections that will never be queried.
+
+Stable parity result: 6 structural mismatches per session, all
+`predictCategory` limitations documented below.
+
+### Session 4: the payoff
+
+The infrastructure read: looks complete. But `navGetCellKind` crosses
+the JNI boundary per call, at roughly 100 ns. Vanilla's
+`getBlockState` + classification chain is roughly 50-100 ns too.
+Replacing one 100 ns call with another 100 ns call is not a win.
+
+The solution was a Java-side mirror of the section kind data.
+`NavigationCacheBridge` gained a second direct-mapped cache alongside
+the Rust store: 512 slots, `long[] JAVA_KEYS` and `byte[][] JAVA_KINDS`,
+EMPTY_KEY = `Long.MIN_VALUE`. `kindAt(int x, int y, int z)` is a
+pure Java method: key check, array index, byte read. No JNI, no
+allocation, roughly 5-10 ns per call. The Java-side cache is filled in
+`snapshotSection` alongside the Rust store and evicted in
+`onBlockChanged` when `oldKind != newKind` (door state changes do not
+need Java eviction because `kindToPathType(KIND_DOOR)` returns null,
+falling through to vanilla regardless).
+
+`kindToPathType(byte kind)` maps 14 of the 18 kinds unambiguously:
+AIR/LADDER/SCAFFOLDING/CARPET to OPEN, OPAQUE_FULL/SLAB/STAIRS to
+BLOCKED, FENCE/WALL to FENCE, TRAPDOOR to TRAPDOOR, WATER to WATER,
+LAVA to LAVA, LEAVES to LEAVES. DOOR, FENCE_GATE, and OTHER return
+null, falling through to vanilla's full classification.
+
+The mixin: `WalkNodeEvaluatorMixin` injects at HEAD of the static
+`getPathTypeFromState(BlockGetter, BlockPos)` method with
+`cancellable = true`. If `kindAt` returns -1 (section not snapshotted)
+or `kindToPathType` returns null (ambiguous kind), the handler returns
+early and vanilla's path executes unchanged. Commit `fe44366`.
+
+Five blocks were redirected to KIND_OTHER before the `canOcclude()`
+check in `encodeBlockKind`: MAGMA_BLOCK, HONEY_BLOCK, POWDER_SNOW,
+lit campfires, and LAVA_CAULDRON. Without those exceptions,
+`canOcclude() == true` on those blocks would classify them as
+KIND_OPAQUE_FULL, making `kindToPathType` return BLOCKED for blocks
+that vanilla classifies as hazards (DAMAGE_OTHER, POWDER_SNOW,
+DAMAGE_FIRE) rather than BLOCKED.
+
+### Empirical water correction
+
+The first test run showed `predicted=BLOCKED vanilla=WATER` for
+KIND_WATER cells at five nodes in a path near water. The session 3
+design had assumed `LiquidBlock.isPathfindable(LAND) = false` based
+on general knowledge of how water interacts with land pathfinding.
+
+Reading `26.1.2/decompiled/net/minecraft/world/level/block/LiquidBlock.java`
+directly: `isPathfindable(LAND)` returns `true` in 26.1.x.
+`getPathTypeFromState` calls `isPathfindable(LAND)` and returns
+`PathType.WATER` when true. Fix: `kindToPathType(KIND_WATER)` changed
+from BLOCKED to WATER, `predictCategory` cell-KIND_WATER case changed
+to "WATER", floor-KIND_WATER case changed to "OPEN" (standing on
+water surface gets OPEN from the floor lookup, not WATER).
+
+Lesson, durable: block API behavior changes across MC versions. Do
+not assume what `isPathfindable`, `isValidSpawn`, or similar returns.
+Read the decompiled source for the version you are actually on.
+
+### Structural parity limits
+
+After the water fix, two families of persistent mismatches remained,
+both pre-existing structural limits of the 2-block model:
+
+**Deep-landing (18 OPEN→WALKABLE mismatches).** Vanilla's
+`getPathTypeFromState` does not just look at the target block. For
+certain non-solid blocks, it traces downward to find the actual
+surface and classifies the block the entity would stand on. Our model
+sees only the cell block and the immediately adjacent floor block.
+Replicating vanilla's trace would require reading more blocks per
+prediction, erasing the speed advantage.
+
+**Neighbor-hazard (29 WALKABLE→OTHER mismatches).** Vanilla's higher
+layers call `checkNeighbourBlocks`, which scans 26 surrounding
+positions for cacti, fire, and lava and overrides the cell's type to
+DAMAGE_CACTUS, DAMAGE_FIRE, or LAVA. The `getPathTypeFromState`
+boundary we are patching is below that scan; our mixin fires before
+the neighbor check runs. Replicating it would require reading 26
+additional blocks per predicted node, which is worse than vanilla.
+
+Both limits are documented in `LOCAL_DESIGN.md`. Neither is a
+regression; both existed before session 4 and both produce false
+negatives (we return OPEN when vanilla returns BLOCKED or OTHER),
+meaning the mob takes a path that vanilla would reject as dangerous.
+The frequency is low (under 50 mismatches across all paths checked
+in a session) and the failure mode is a mob walking toward a cactus
+rather than a mob getting stuck, which is the safer direction to
+fail.
+
+### State after sessions 1-4
+
+The cache infrastructure is complete and default-on (the parity gate
+is behind a runtime flag, the `WalkNodeEvaluatorMixin` is always
+active for snapshotted sections). The open question is the actual
+tick-time delta: how much does the mixin reduce server tick time with
+100+ mobs pathfinding in a flat area? That measurement has not been
+taken yet. Session 5 begins with a JFR run.
