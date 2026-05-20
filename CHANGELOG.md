@@ -7,11 +7,34 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Added
+
+- **Walkability cache session 4.** `WalkNodeEvaluatorMixin` intercepts
+  `WalkNodeEvaluator.getPathTypeFromState(BlockGetter, BlockPos)` at HEAD.
+  For sections already snapshotted, returns `PathType` directly from a
+  Java-side direct-mapped section cache (512 slots, ~5-10 ns per lookup)
+  instead of calling `level.getBlockState` followed by the 50-line
+  classification chain.  The Java-side cache is filled in `snapshotSection`
+  alongside the Rust store and evicted on block-kind changes.
+
+  `kindToPathType` maps the unambiguous kinds: AIR/LADDER/SCAFFOLDING/CARPET
+  to OPEN; OPAQUE_FULL/SLAB/STAIRS to BLOCKED; FENCE/WALL to FENCE;
+  TRAPDOOR to TRAPDOOR; WATER to WATER; LAVA to LAVA; LEAVES to LEAVES.
+  DOOR, FENCE_GATE, and OTHER fall through to vanilla (state-dependent).
+
+  `encodeBlockKind` now redirects MAGMA_BLOCK, HONEY_BLOCK, POWDER_SNOW,
+  lit campfires, and LAVA_CAULDRON to KIND_OTHER to prevent false BLOCKED
+  returns for those blocks.
+
+  Parity correction: `LiquidBlock.isPathfindable(LAND)` is `true` in 26.1.x
+  (water blocks return `PathType.WATER`, not BLOCKED).  Updated
+  `kindToPathType` and `predictCategory` accordingly.
+
 ### Direction
 
-Next: session 4 of the walkability cache — replace vanilla's per-node
-`getBlockState` calls inside `PathFinder` with reads from the Rust
-section store. The parity gate from 0.6.4-alpha gates that swap.
+Next: measure the actual tick-time delta with the mixin active vs disabled
+(JFR or tick-time profiling with 100+ mobs in a flat area).  If the gain is
+confirmed, session 5 scopes the next optimization candidate.
 
 ## [0.6.4-alpha] — 2026-05-17
 
