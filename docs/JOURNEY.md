@@ -1002,3 +1002,75 @@ active for snapshotted sections). The open question is the actual
 tick-time delta: how much does the mixin reduce server tick time with
 100+ mobs pathfinding in a flat area? That measurement has not been
 taken yet. Session 5 begins with a JFR run.
+
+### Coupling hazards - what breaks silently
+
+The nav-cache has more coupling surface than the earlier ports. The
+cramming and redstone kernels are stateless per-call: hand data in,
+get results back, nothing persists between calls. The nav-cache keeps
+live state on both sides of the JNI boundary simultaneously. That
+introduces failure modes that produce no compile error and no runtime
+exception - just wrong behavior under specific world conditions.
+
+Five things that look like safe cleanup targets but are load-bearing:
+
+**Kind constant table.** The 18 discriminants (KIND_AIR through
+KIND_OTHER) are defined identically in Java and Rust. One renumbering
+or insertion on either side without matching the other produces silent
+misclassification for every block at or after the changed value.
+No compile error. The parity gate catches it, but only if run.
+
+**Cell buffer layout.** `snapshotSection` packs 4 bytes per cell in
+a specific order. The Rust side unpacks them by position, not by name.
+Reordering the fields on the Java side without touching the Rust
+`CellData` struct swaps which byte lands in which field. The section
+fills without error; the cache returns wrong kinds.
+
+**Section index formula.** `(ly<<8)|(lz<<4)|lx` appears in three
+places: the Java fill loop, `kindAt`, and Rust's `cell_index`. All
+three must agree. Changing one without the others produces wrong
+lookups - the cache is populated but reads the wrong cell for every
+position.
+
+**OnceLock worldgen bootstrap timing.** The entire noise, biome, and
+density stack initializes once from the world seed at load time via
+`OnceLock`. Moving the bootstrap earlier, adding an async path, or
+calling it before the seed is available produces either a panic or
+a zeroed-seed worldgen that generates wrong terrain silently.
+
+**Eviction contract.** Java and Rust must evict sections under the
+same conditions. `onBlockChanged` evicts the Java-side direct-mapped
+cache; `navOnBlockChanged` evicts the Rust HashMap. Both are gated on
+`oldKind != newKind`. Adding a new block-change path that fires one
+without the other lets the two caches diverge - the Java side serves
+stale kinds for positions that Rust correctly evicted, or vice versa.
+
+None of these are hypothetical. Each one is a real failure mode that
+produces plausible-looking wrong behavior: mobs pathfinding through
+recently-placed walls, wrong terrain at specific coordinates, hazard
+blocks misclassified as walkable. The parity validators and oracle
+gates are the only thing that catches them before they ship.
+
+### Forward: what session 5 measures
+
+Before session 5 scopes any further optimization, two measurements
+are needed. The first is the timing delta under ideal conditions: a
+flat area with 100+ hostile mobs and minimal block updates, comparing
+pathfinding tick cost with the cache active versus disabled. The
+second is the same measurement under block-update pressure: an active
+redstone or piston array adjacent to the mob area, high eviction rate,
+worst-case for the kind-diff filter.
+
+The second scenario is the one that determines whether this ships
+stays default-on. A piston array near pathfinding mobs is exactly
+the workload that could flip the cache from a win to a regression if
+the eviction rate outpaces the fill rate. The timing comparison under
+ideal conditions confirms the win exists; the adversarial scenario
+confirms it holds under production-realistic server conditions.
+
+Session 5 also adds a hit-rate counter so the measurement is not just
+"timing went up or down" but "here is how many calls were served from
+cache versus fell through to vanilla." Without that, a timing
+improvement could be noise. With it, the session produces a number
+that can be cited in the release notes alongside the cramming and
+redstone wins.
