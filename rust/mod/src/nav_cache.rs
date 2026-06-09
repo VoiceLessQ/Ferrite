@@ -1,9 +1,16 @@
 //! Navigation cache event dispatch.
 //!
 //! Java fires block-change events into Rust on every server-side
-//! setBlock. The 4-branch dispatch on (old_kind == DOOR, new_kind == DOOR)
-//! routes door state through the door_state map and other changes
-//! through the section invalidation path.
+//! setBlock. Any kind-crossing change evicts the section. Door
+//! open/close toggles arrive as DOOR -> DOOR (kind unchanged) and are
+//! dropped: the cache never answers DOOR cells (kindToPathType returns
+//! null on the Java side), so door churn cannot thrash the cache.
+//!
+//! Eviction here MUST stay symmetric with the Java-side kind cache
+//! (NavigationCacheBridge.onBlockChanged evicts its slot whenever
+//! oldKind != newKind). If the two stores disagree about whether a
+//! section is live, the snapshot gate in PathFinderMixin stops
+//! refilling and the section goes permanently cold.
 //!
 //! Block-kind discriminants MUST stay in sync with
 //! [`NavigationCacheBridge`] on the Java side. Properties that do not
@@ -34,26 +41,16 @@ pub const KIND_CARPET: u8 = 15;
 pub const KIND_SCAFFOLDING: u8 = 16;
 pub const KIND_OTHER: u8 = 17;
 
-pub fn on_block_changed(x: i32, y: i32, z: i32, old_kind: u8, new_kind: u8, new_open: i32) {
-    let was_door = old_kind == KIND_DOOR;
-    let is_door = new_kind == KIND_DOOR;
-
-    match (was_door, is_door) {
-        (false, false) => {
-            // Kind-diff filter: drops cosmetic transitions (redstone POWER,
-            // WATERLOGGED on shaped blocks, etc.) that don't cross the kind
-            // boundary. Real cache-relevant changes (AIR <-> solid, water
-            // flow into walkable space, slab type changes) do cross it.
-            if old_kind == new_kind {
-                return;
-            }
-            let section = SectionId::from_block_pos(x, y, z);
-            crate::nav_cache_storage::evict_section(section);
-        }
-        (false, true) => {}
-        (true, false) => {}
-        (true, true) => {}
+pub fn on_block_changed(x: i32, y: i32, z: i32, old_kind: u8, new_kind: u8, _new_open: i32) {
+    // Kind-diff filter: drops cosmetic transitions (redstone POWER,
+    // WATERLOGGED on shaped blocks, door open/close) that don't cross
+    // the kind boundary. Everything else, including door place/remove,
+    // evicts the section - matching the Java-side slot eviction exactly.
+    if old_kind == new_kind {
+        return;
     }
+    let section = SectionId::from_block_pos(x, y, z);
+    crate::nav_cache_storage::evict_section(section);
 }
 
 pub fn update_door_state(_section_id: i64, _cell_idx: i32, _is_open: bool) {

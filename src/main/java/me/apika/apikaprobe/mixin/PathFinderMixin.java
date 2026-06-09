@@ -15,6 +15,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.level.PathNavigationRegion;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathFinder;
 
@@ -32,7 +33,7 @@ public abstract class PathFinderMixin {
 	) {
 		NavigationMonitor.onFindPathBegin();
 
-		if (!RustBridge.NATIVE_AVAILABLE) return;
+		if (!NavigationCacheBridge.WALK_CACHE_ENABLED || !RustBridge.NATIVE_AVAILABLE) return;
 
 		// Lazy fill: snapshot all sections in the bounding box of
 		// (entity position, targets), expanded by ±1 chunk in X/Z.
@@ -48,10 +49,36 @@ public abstract class PathFinderMixin {
 		}
 		minCx--; maxCx++; minSy--; maxSy++; minCz--; maxCz++;
 
+		// Clamp to chunks the region actually backs. Outside its array (and
+		// for getChunkNow misses inside it) PathNavigationRegion serves
+		// EmptyLevelChunk = all AIR; snapshotting those would cache permanent
+		// wrong-AIR sections that outlive this region.
+		PathNavigationRegionAccessor region = (PathNavigationRegionAccessor) level;
+		ChunkAccess[][] chunks = region.ferrite$chunks();
+		int regionMinCx = region.ferrite$centerX();
+		int regionMinCz = region.ferrite$centerZ();
+		int regionMaxCx = regionMinCx + chunks.length - 1;
+		int regionMaxCz = regionMinCz + (chunks.length > 0 ? chunks[0].length : 0) - 1;
+		if (minCx < regionMinCx) minCx = regionMinCx;
+		if (maxCx > regionMaxCx) maxCx = regionMaxCx;
+		if (minCz < regionMinCz) minCz = regionMinCz;
+		if (maxCz > regionMaxCz) maxCz = regionMaxCz;
+
+		// Clamp Y to real world sections; outside build height is air by
+		// definition and not worth a 16 KB section.
+		int minWorldSy = level.getMinY() >> 4;
+		int maxWorldSy = (level.getMinY() + level.getHeight() - 1) >> 4;
+		if (minSy < minWorldSy) minSy = minWorldSy;
+		if (maxSy > maxWorldSy) maxSy = maxWorldSy;
+
 		for (int cx = minCx; cx <= maxCx; cx++) {
-			for (int sy = minSy; sy <= maxSy; sy++) {
-				for (int cz = minCz; cz <= maxCz; cz++) {
-					if (!RustBridge.navIsSectionCached(cx, sy, cz)) {
+			for (int cz = minCz; cz <= maxCz; cz++) {
+				// getChunkNow miss: region would serve EmptyLevelChunk here.
+				if (chunks[cx - regionMinCx][cz - regionMinCz] == null) continue;
+				for (int sy = minSy; sy <= maxSy; sy++) {
+					// Gate on the Java kind cache - the store the hot path
+					// reads. See NavigationCacheBridge.hasJavaSection.
+					if (!NavigationCacheBridge.hasJavaSection(cx, sy, cz)) {
 						NavigationCacheBridge.snapshotSection(cx, sy, cz, level);
 					}
 				}

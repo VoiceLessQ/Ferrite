@@ -49,6 +49,24 @@ import net.minecraft.world.level.pathfinder.PathType;
 public final class NavigationCacheBridge {
 	private NavigationCacheBridge() {}
 
+	/**
+	 * Master switch for the walkability cache. {@code -Dferrite.nav.cache=false}
+	 * disables the WalkNodeEvaluator intercept, section snapshots, and
+	 * block-change event dispatch, giving a clean vanilla baseline for A/B
+	 * measurement. Default on (session 4 shipped it active).
+	 */
+	public static final boolean WALK_CACHE_ENABLED =
+		Boolean.parseBoolean(System.getProperty("ferrite.nav.cache", "true"));
+
+	/**
+	 * Parity validator gate. {@code -Dferrite.nav.parity=true} re-enables
+	 * {@link #checkPathParity} per findPath. Default off: validation was
+	 * completed in session 4 and the per-node JNI + string work is pure
+	 * overhead on the production path.
+	 */
+	public static final boolean PARITY_ENABLED =
+		Boolean.parseBoolean(System.getProperty("ferrite.nav.parity", "false"));
+
 	public static final byte KIND_AIR             = 0;
 	public static final byte KIND_OPAQUE_FULL     = 1;  // stone/dirt/wood — opaque, full collision
 	public static final byte KIND_DOOR            = 2;  // open/closed handled via door_state map, not kind
@@ -151,6 +169,48 @@ public final class NavigationCacheBridge {
 		return JAVA_KINDS[slot][((y & 15) << 8) | ((z & 15) << 4) | (x & 15)];
 	}
 
+	// Hit/miss counters. Plain longs, not atomics: lookups, snapshots, and
+	// the drain (NavigationMonitor's END_SERVER_TICK report) all run on the
+	// server thread, same as NavigationMonitor.thisTickPathNs.
+	private static long cacheHits, cacheAmbiguous, cacheMisses, cacheSnapshots;
+
+	/**
+	 * Single entry point for the WalkNodeEvaluator intercept. Returns the
+	 * cached PathType, or null to fall through to vanilla (section uncached,
+	 * or kind is DOOR/FENCE_GATE/OTHER). Counts the three outcomes for the
+	 * [nav-cache] report line.
+	 */
+	public static PathType cachedPathTypeAt(int x, int y, int z) {
+		byte kind = kindAt(x, y, z);
+		if (kind == -1) { cacheMisses++; return null; }
+		PathType pt = kindToPathType(kind);
+		if (pt == null) { cacheAmbiguous++; return null; }
+		cacheHits++;
+		return pt;
+	}
+
+	/** Drains counters for the 5s report: {hits, ambiguous, misses, snapshots}. */
+	public static long[] drainCacheCounters() {
+		long[] out = { cacheHits, cacheAmbiguous, cacheMisses, cacheSnapshots };
+		cacheHits = 0L; cacheAmbiguous = 0L; cacheMisses = 0L; cacheSnapshots = 0L;
+		return out;
+	}
+
+	/**
+	 * True if the Java-side kind cache currently holds this section. This is
+	 * the snapshot gate used by PathFinderMixin: the Java cache is the store
+	 * the hot path reads, so it is the store whose absence must trigger a
+	 * refill. Gating on the Rust store instead caused permanent cold sections
+	 * whenever a slot collision or door-transition eviction emptied the Java
+	 * slot while Rust still reported cached. Cost of this choice: two
+	 * sections colliding on one slot re-snapshot alternately; acceptable
+	 * versus a section that never serves again.
+	 */
+	public static boolean hasJavaSection(int cx, int sy, int cz) {
+		long key = sectionKey(cx, sy, cz);
+		return JAVA_KEYS[sectionSlot(key)] == key;
+	}
+
 	private static void storeJavaSection(int cx, int sy, int cz, byte[] kinds) {
 		long key = sectionKey(cx, sy, cz);
 		int slot = sectionSlot(key);
@@ -192,7 +252,7 @@ public final class NavigationCacheBridge {
 	}
 
 	public static void onBlockChanged(BlockPos pos, BlockState oldState, BlockState newState) {
-		if (!RustBridge.NATIVE_AVAILABLE) return;
+		if (!WALK_CACHE_ENABLED || !RustBridge.NATIVE_AVAILABLE) return;
 
 		byte oldKind = encodeBlockKind(oldState);
 		byte newKind = encodeBlockKind(newState);
@@ -225,7 +285,7 @@ public final class NavigationCacheBridge {
 	 *  to Rust and store in the Java-side kind cache. Idempotent — eviction
 	 *  on block change (via onBlockChanged) ensures stale sections are refilled. */
 	public static void snapshotSection(int chunkX, int sectionY, int chunkZ, BlockGetter level) {
-		if (!RustBridge.NATIVE_AVAILABLE) return;
+		if (!WALK_CACHE_ENABLED || !RustBridge.NATIVE_AVAILABLE) return;
 		SNAPSHOT_BUF.clear();
 		byte[] kinds = new byte[4096];
 		BlockPos.MutableBlockPos mpos = new BlockPos.MutableBlockPos();
@@ -250,6 +310,7 @@ public final class NavigationCacheBridge {
 		SNAPSHOT_BUF.flip();
 		RustBridge.navFillSection(chunkX, sectionY, chunkZ, SNAPSHOT_BUF);
 		storeJavaSection(chunkX, sectionY, chunkZ, kinds);
+		cacheSnapshots++;
 	}
 
 	// ── Parity comparison ─────────────────────────────────────────────────────
@@ -344,7 +405,7 @@ public final class NavigationCacheBridge {
 	 *  against the PathType vanilla assigned. Logs a summary line via
 	 *  MonitorLog. Call after vanilla findPath returns. */
 	public static void checkPathParity(Path path) {
-		if (!RustBridge.NATIVE_AVAILABLE || path == null) return;
+		if (!PARITY_ENABLED || !RustBridge.NATIVE_AVAILABLE || path == null) return;
 		int total = path.getNodeCount();
 		int ok = 0, fail = 0, uncached = 0;
 		for (int i = 0; i < total; i++) {

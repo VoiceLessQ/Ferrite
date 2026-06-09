@@ -24,10 +24,8 @@ public abstract class WalkNodeEvaluatorMixin {
 		BlockGetter level, BlockPos pos,
 		CallbackInfoReturnable<PathType> cir
 	) {
-		byte kind = NavigationCacheBridge.kindAt(pos.getX(), pos.getY(), pos.getZ());
-		if (kind == -1) return;
-		PathType pt = NavigationCacheBridge.kindToPathType(kind);
-		if (pt == null) return;
-		cir.setReturnValue(pt);
+		if (!NavigationCacheBridge.WALK_CACHE_ENABLED) return;
+		PathType pt = NavigationCacheBridge.cachedPathTypeAt(pos.getX(), pos.getY(), pos.getZ());
+		if (pt != null) cir.setReturnValue(pt);
 	}
 }

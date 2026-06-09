@@ -8,6 +8,8 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
 import org.jspecify.annotations.Nullable;
 
+import me.apika.apikaprobe.navigation.NavigationCacheBridge;
+
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.npc.villager.AbstractVillager;
@@ -121,6 +123,21 @@ public final class NavigationMonitor {
 
 		if (!tickSnap.isEmpty()) {
 			MonitorLog.info("[nav-tick] tick-cost: {}  ticks={}", tickSnap.formatLine(), ticks);
+		}
+
+		// Walkability cache hit rate: hit = served from cache, ambiguous =
+		// cached but DOOR/FENCE_GATE/OTHER (vanilla fallback), miss = section
+		// not in the Java kind cache. Snapshots counts section refills; high
+		// snapshots with low hit rate points at slot collisions.
+		long[] cc = NavigationCacheBridge.drainCacheCounters();
+		long lookups = cc[0] + cc[1] + cc[2];
+		if (lookups > 0L) {
+			MonitorLog.info(
+				"[nav-cache] lookups={} hit={} ({}) ambiguous={} miss={} snapshots={}",
+				lookups, cc[0],
+				String.format("%.1f%%", 100.0 * cc[0] / lookups),
+				cc[1], cc[2], cc[3]
+			);
 		}
 
 		for (Category cat : Category.values()) {
