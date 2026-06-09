@@ -30,11 +30,47 @@ marks pre-release research builds.
   (water blocks return `PathType.WATER`, not BLOCKED).  Updated
   `kindToPathType` and `predictCategory` accordingly.
 
+- **Walkability cache session 5: A/B flags and hit-rate counters.**
+  `-Dferrite.nav.cache` (default true) gates the whole cache for clean
+  vanilla-baseline measurement runs; `-Dferrite.nav.parity` (default false)
+  gates the parity validator, which had been running per-node JNI and string
+  work on every ground-mob findPath after validation was already complete.
+  Hit/ambiguous/miss/snapshot counters in `NavigationCacheBridge` feed a
+  `[nav-cache]` line in the 5 s monitor report, so measurement runs report
+  hit rate alongside timing deltas.
+
+### Fixed
+
+- **Nav-cache snapshot gate desync.** The section-snapshot gate in
+  `PathFinderMixin` checked the Rust store while the hot path reads the
+  Java 512-slot kind cache. A slot collision or door eviction emptied the
+  Java slot while Rust still reported cached, so the section never refilled
+  and went permanently cold. The gate now checks the Java cache
+  (`hasJavaSection`), which also drops the per-section JNI call from the
+  pre-fill loop.
+
+- **Asymmetric door eviction.** Placing or removing a door evicted the Java
+  cache slot but not the Rust section store (empty match arms in
+  `nav_cache.rs`). Eviction is now symmetric: any kind-crossing change
+  evicts both stores; door open/close (DOOR to DOOR) is still filtered.
+
+- **Snapshot box could cache wrong-AIR sections.** The pre-fill bounding box
+  extended past the chunks `PathNavigationRegion` actually backs, where the
+  region serves `EmptyLevelChunk` (all AIR). Those sections were cached as
+  permanently wrong AIR data invisible to the parity gate, which only checks
+  in-region path nodes. The box is now clamped to region-backed chunks (new
+  `PathNavigationRegionAccessor`) and world build height, and null
+  `getChunkNow` entries are skipped.
+
 ### Direction
 
-Next: measure the actual tick-time delta with the mixin active vs disabled
-(JFR or tick-time profiling with 100+ mobs in a flat area).  If the gain is
-confirmed, session 5 scopes the next optimization candidate.
+First live data from the new counters: hit rate 1-17% with snapshots
+sustained at ~4400 per 5 s window, often exceeding lookups. Each findPath
+pre-fills its whole bounding box and the boxes thrash the 512-slot
+direct-mapped cache, so most fills are evicted before serving a lookup.
+Session 6 fixes the fill strategy (lazy per-section snapshot on miss, or a
+larger/associative cache) before the planned A/B measurement scenarios run;
+measuring the current build would measure the artifact.
 
 ## [0.6.4-alpha] — 2026-05-17
 
