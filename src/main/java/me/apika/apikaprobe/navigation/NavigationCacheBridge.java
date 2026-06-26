@@ -50,13 +50,14 @@ public final class NavigationCacheBridge {
 	private NavigationCacheBridge() {}
 
 	/**
-	 * Master switch for the walkability cache. {@code -Dferrite.nav.cache=false}
-	 * disables the WalkNodeEvaluator intercept, section snapshots, and
-	 * block-change event dispatch, giving a clean vanilla baseline for A/B
-	 * measurement. Default on (session 4 shipped it active).
+	 * Master switch for the walkability cache. {@code -Dferrite.nav.cache=true}
+	 * enables the WalkNodeEvaluator intercept, section snapshots, and
+	 * block-change event dispatch. Default off pending the session 6 fill-strategy
+	 * fix: session 5 measured the pre-fill box thrashing the 512-slot cache
+	 * (hit rate 1-17%, net regression), so the default path stays vanilla.
 	 */
 	public static final boolean WALK_CACHE_ENABLED =
-		Boolean.parseBoolean(System.getProperty("ferrite.nav.cache", "true"));
+		Boolean.parseBoolean(System.getProperty("ferrite.nav.cache", "false"));
 
 	/**
 	 * Parity validator gate. {@code -Dferrite.nav.parity=true} re-enables

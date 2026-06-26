@@ -7,6 +7,17 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.6.5-alpha] - 2026-06-26
+
+### Changed
+
+- **Walkability cache default off.** `-Dferrite.nav.cache` now defaults to
+  `false`. Session 5's first live counters showed the pre-fill box thrashing
+  the 512-slot direct-mapped cache (hit rate 1-17%, ~4400 snapshots per 5 s,
+  net regression in casual play). The default path stays vanilla until the
+  session 6 fill-strategy fix lands; set `-Dferrite.nav.cache=true` to opt in
+  for measurement.
+
 ### Added
 
 - **Walkability cache session 4.** `WalkNodeEvaluatorMixin` intercepts
