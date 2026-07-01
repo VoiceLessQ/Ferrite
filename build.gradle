@@ -52,6 +52,15 @@ loom {
 			if (project.findProperty("ferrite.dispatcherProbe")?.toString() == "true") {
 				vmArg "-Dferrite.dispatcherProbe=true"
 			}
+			// Walkability cache A/B arm: -Pferrite.navCache=true opts in
+			// (default off since 0.6.5); -Pferrite.navParity=true adds the
+			// per-path parity validator on top.
+			if (project.findProperty("ferrite.navCache")?.toString() == "true") {
+				vmArg "-Dferrite.nav.cache=true"
+			}
+			if (project.findProperty("ferrite.navParity")?.toString() == "true") {
+				vmArg "-Dferrite.nav.parity=true"
+			}
 		}
 	}
 }

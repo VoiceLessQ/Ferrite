@@ -4,10 +4,13 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 import me.apika.apikaprobe.RustBridge;
+import me.apika.apikaprobe.mixin.PathNavigationRegionAccessor;
 import me.apika.apikaprobe.monitor.MonitorLog;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.PathNavigationRegion;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
@@ -136,18 +139,21 @@ public final class NavigationCacheBridge {
 		return KIND_OTHER;
 	}
 
-	// ── Java-side section kind cache (direct-mapped, no JNI per read) ─────────
+	// ── Java-side section kind cache (2-way set-associative, no JNI per read) ─
 	//
 	// Mirrors the Rust section store for fast per-position kind lookups on the
-	// server tick thread. 512 slots covers typical mob cluster sizes with low
-	// collision rate. Valid keys always have bit 63 = 0 (only 63 bits used),
-	// so Long.MIN_VALUE is a safe sentinel for "empty slot".
+	// server tick thread. 2048 sets x 2 ways = 4096 sections (16 MB worst case
+	// of kinds arrays). Session 6's lazy fill made collisions expensive: each
+	// ping-pong re-snapshot costs 4096 block reads inside findPath, so two hot
+	// sections sharing a set must coexist. Valid keys always have bit 63 = 0
+	// (only 63 bits used), so Long.MIN_VALUE is a safe sentinel for "empty".
 
-	private static final int  JAVA_SLOTS = 512;
-	private static final int  JAVA_MASK  = JAVA_SLOTS - 1;
-	private static final long EMPTY_KEY  = Long.MIN_VALUE;
-	private static final long[]   JAVA_KEYS  = new long[JAVA_SLOTS];
-	private static final byte[][] JAVA_KINDS = new byte[JAVA_SLOTS][];
+	private static final int  JAVA_SETS     = 2048;
+	private static final int  JAVA_SET_MASK = JAVA_SETS - 1;
+	private static final long EMPTY_KEY     = Long.MIN_VALUE;
+	private static final long[]    JAVA_KEYS  = new long[JAVA_SETS * 2];
+	private static final byte[][]  JAVA_KINDS = new byte[JAVA_SETS * 2][];
+	private static final boolean[] JAVA_LRU   = new boolean[JAVA_SETS]; // true = way 0 used last
 
 	static { java.util.Arrays.fill(JAVA_KEYS, EMPTY_KEY); }
 
@@ -158,16 +164,19 @@ public final class NavigationCacheBridge {
 		     | (((long)(cz & 0x1FFFFF)) << 42);
 	}
 
-	private static int sectionSlot(long key) {
-		return (int)(key ^ (key >>> 16) ^ (key >>> 32)) & JAVA_MASK;
+	private static int sectionSet(long key) {
+		return (int)(key ^ (key >>> 16) ^ (key >>> 32)) & JAVA_SET_MASK;
 	}
 
 	/** Returns cached block kind for (x, y, z), or -1 if not cached. */
 	public static byte kindAt(int x, int y, int z) {
 		long key = sectionKey(x >> 4, y >> 4, z >> 4);
-		int slot = sectionSlot(key);
-		if (JAVA_KEYS[slot] != key) return -1;
-		return JAVA_KINDS[slot][((y & 15) << 8) | ((z & 15) << 4) | (x & 15)];
+		int set = sectionSet(key);
+		int base = set << 1;
+		int cell = ((y & 15) << 8) | ((z & 15) << 4) | (x & 15);
+		if (JAVA_KEYS[base] == key)     { JAVA_LRU[set] = true;  return JAVA_KINDS[base][cell]; }
+		if (JAVA_KEYS[base + 1] == key) { JAVA_LRU[set] = false; return JAVA_KINDS[base + 1][cell]; }
+		return -1;
 	}
 
 	// Hit/miss counters. Plain longs, not atomics: lookups, snapshots, and
@@ -177,17 +186,49 @@ public final class NavigationCacheBridge {
 
 	/**
 	 * Single entry point for the WalkNodeEvaluator intercept. Returns the
-	 * cached PathType, or null to fall through to vanilla (section uncached,
-	 * or kind is DOOR/FENCE_GATE/OTHER). Counts the three outcomes for the
-	 * [nav-cache] report line.
+	 * cached PathType, or null to fall through to vanilla (section not
+	 * fillable, or kind is DOOR/FENCE_GATE/OTHER). On a cold section, fills
+	 * it lazily from the caller's BlockGetter when that getter is a
+	 * PathNavigationRegion backing the chunk (session 6: replaces the
+	 * pre-fill box that thrashed the 512-slot cache). A miss now means
+	 * "context not fillable" (non-region getter, unbacked chunk, outside
+	 * build height); fill cost shows up in the snapshots counter.
 	 */
-	public static PathType cachedPathTypeAt(int x, int y, int z) {
+	public static PathType cachedPathTypeAt(BlockGetter level, int x, int y, int z) {
 		byte kind = kindAt(x, y, z);
-		if (kind == -1) { cacheMisses++; return null; }
+		if (kind == -1) {
+			if (!lazySnapshot(level, x, y, z)) { cacheMisses++; return null; }
+			kind = kindAt(x, y, z);
+			if (kind == -1) { cacheMisses++; return null; } // fill raced an eviction
+		}
 		PathType pt = kindToPathType(kind);
 		if (pt == null) { cacheAmbiguous++; return null; }
 		cacheHits++;
 		return pt;
+	}
+
+	/**
+	 * Snapshot the section containing (x, y, z) if the getter can back it
+	 * with real chunk data. Only PathNavigationRegion qualifies: its chunk
+	 * array is checked so EmptyLevelChunk fill-ins (out-of-range or
+	 * getChunkNow misses) never cache permanent wrong-AIR sections, same
+	 * hazard the session 5 pre-fill clamp guarded against.
+	 */
+	private static boolean lazySnapshot(BlockGetter level, int x, int y, int z) {
+		if (!RustBridge.NATIVE_AVAILABLE) return false;
+		if (!(level instanceof PathNavigationRegion region)) return false;
+		int minY = region.getMinY();
+		if (y < minY || y >= minY + region.getHeight()) return false;
+		PathNavigationRegionAccessor acc = (PathNavigationRegionAccessor) region;
+		ChunkAccess[][] chunks = acc.ferrite$chunks();
+		int cx = x >> 4, sy = y >> 4, cz = z >> 4;
+		int ix = cx - acc.ferrite$centerX();
+		int iz = cz - acc.ferrite$centerZ();
+		if (ix < 0 || ix >= chunks.length) return false;
+		if (iz < 0 || iz >= chunks[ix].length) return false;
+		if (chunks[ix][iz] == null) return false;
+		snapshotSection(cx, sy, cz, region);
+		return true;
 	}
 
 	/** Drains counters for the 5s report: {hits, ambiguous, misses, snapshots}. */
@@ -197,32 +238,24 @@ public final class NavigationCacheBridge {
 		return out;
 	}
 
-	/**
-	 * True if the Java-side kind cache currently holds this section. This is
-	 * the snapshot gate used by PathFinderMixin: the Java cache is the store
-	 * the hot path reads, so it is the store whose absence must trigger a
-	 * refill. Gating on the Rust store instead caused permanent cold sections
-	 * whenever a slot collision or door-transition eviction emptied the Java
-	 * slot while Rust still reported cached. Cost of this choice: two
-	 * sections colliding on one slot re-snapshot alternately; acceptable
-	 * versus a section that never serves again.
-	 */
-	public static boolean hasJavaSection(int cx, int sy, int cz) {
-		long key = sectionKey(cx, sy, cz);
-		return JAVA_KEYS[sectionSlot(key)] == key;
-	}
-
 	private static void storeJavaSection(int cx, int sy, int cz, byte[] kinds) {
 		long key = sectionKey(cx, sy, cz);
-		int slot = sectionSlot(key);
-		JAVA_KINDS[slot] = kinds;  // store data before key (write ordering)
-		JAVA_KEYS[slot]  = key;
+		int set = sectionSet(key);
+		int base = set << 1;
+		int way;
+		if (JAVA_KEYS[base] == key || JAVA_KEYS[base] == EMPTY_KEY) way = 0;
+		else if (JAVA_KEYS[base + 1] == key || JAVA_KEYS[base + 1] == EMPTY_KEY) way = 1;
+		else way = JAVA_LRU[set] ? 1 : 0;  // both ways live: evict the LRU one
+		JAVA_KINDS[base + way] = kinds;  // store data before key (write ordering)
+		JAVA_KEYS[base + way]  = key;
+		JAVA_LRU[set] = way == 0;
 	}
 
 	private static void evictJavaSection(int cx, int sy, int cz) {
 		long key = sectionKey(cx, sy, cz);
-		int slot = sectionSlot(key);
-		if (JAVA_KEYS[slot] == key) JAVA_KEYS[slot] = EMPTY_KEY;
+		int base = sectionSet(key) << 1;
+		if (JAVA_KEYS[base] == key)          JAVA_KEYS[base] = EMPTY_KEY;
+		else if (JAVA_KEYS[base + 1] == key) JAVA_KEYS[base + 1] = EMPTY_KEY;
 	}
 
 	/**
