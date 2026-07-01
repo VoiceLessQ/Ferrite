@@ -7,6 +7,40 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Changed
+
+- **Walkability cache: fill strategy fixed, then shelved after A/B.**
+  Session 5's pre-fill box thrashed the 512-slot cache (hit rate 1-17%,
+  ~4400 snapshots per 5 s). Session 6 replaced it with a lazy snapshot on
+  first miss, restricted to sections the PathNavigationRegion actually
+  backs, and grew the kind cache to 2-way set-associative (2048 sets x 2
+  ways, LRU). That fixed the cache itself: hit rate 71-94%, snapshots
+  24-57 per 5 s. An A/B with 294 chasing zombies then hit 84-87% and
+  still moved nav tick cost at most ~5%, inside noise, because vanilla already
+  fronts `getPathTypeFromState` with a per-position `PathTypeCache` and
+  our intercept only ever serves vanilla's misses. Shelved: code stays in
+  tree, default off, post-mortem in JOURNEY. Opt in with
+  `-Dferrite.nav.cache=true`, or `-Pferrite.navCache=true` /
+  `-Pferrite.navParity=true` on runClient.
+
+### Known issues
+
+- **~90 cosmetic clippy warnings remain** (needless `.clone()` on Copy
+  types, `From` vs `Into`, index-only loops, elidable lifetimes). No errors
+  left; cleanup pending.
+
+### Fixed
+
+- **Unsafe JNI buffer helpers hardened.** `get_i32_slice_mut`
+  (surface_jni.rs) and `get_byte_slice_mut` (redstone_queues_jni.rs)
+  returned `&mut [_]` from a shared `&JByteBuffer`, so nothing stopped a
+  caller from holding two aliased mutable slices over one direct buffer.
+  Never a live bug (each is called once per JNI call), but the invariant
+  was unwritten. Both are now `unsafe fn` with a `# Safety` contract
+  (no-alias, capacity, alignment) and SAFETY notes at each call site. The
+  two `clippy::mut_from_ref` errors are gone, and build.yml now runs
+  clippy on the linux job so deny-level lints fail CI.
+
 ## [0.6.5-alpha] - 2026-06-26
 
 ### Changed

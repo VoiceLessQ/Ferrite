@@ -458,6 +458,19 @@ aggressive defaults on features users cannot easily debug themselves.
 
 Listed so that future us, having forgotten why, does not re-open them:
 
+- **Walkability cache (pathfinding PathType).** Six sessions, closed
+  2026-07-01 by A/B at 294 chasing zombies. The session 6 build was
+  healthy (84-87% hit rate, zero snapshot churn after lazy fill plus
+  a 2-way associative 4096-slot cache) and still moved nav tick cost
+  ~5% at best, inside noise. Root cause: vanilla 26.1.x already
+  fronts `getPathTypeFromState` with its own per-position
+  `PathTypeCache` (4096 entries, invalidated per block change), so
+  our intercept only ever sees vanilla's misses, and HotSpot compiles
+  the classification chain those misses hit to near-nothing. Same JIT
+  wall as density and collisions, with a vanilla structural cache in
+  front this time. Infrastructure stays in tree, default-off
+  (`-Dferrite.nav.cache`). Re-entry requires a target vanilla does
+  NOT already cache.
 - **Entity tick goal selectors.** `goalSelector.tick()` and
   `targetSelector.tick()` account for roughly 1.87ms at 254 hostile mobs
   and look like the biggest remaining prize inside `movement_self`. They
