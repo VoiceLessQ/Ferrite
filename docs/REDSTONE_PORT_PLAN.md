@@ -126,8 +126,8 @@ All built and shipped in the session that produced this plan:
 - **`[redstone-oracle]` BFS correctness checker** — uses vanilla's own
   `calculateWirePowerAt` to shadow-compute expected power levels and
   logs `node-mismatches` against actual. Proven 0-mismatches on static
-  networks; 0.7% "timing noise" on dynamic networks is expected and
-  not a bug.
+  networks; the "timing noise" on dynamic networks is a documented
+  false-positive window, see "Oracle false-positive window" below.
 - **`[redstone-rust]` dispatcher counter** — confirms whether the
   Rust path is firing (useful if session 3 happens).
 - **`/ferrite redstone rust on|off|status`** — runtime A/B toggle.
@@ -135,6 +135,38 @@ All built and shipped in the session that produced this plan:
 For session 2 we'll want a parallel `/ferrite redstone ac on|off|status`
 toggle so we can A/B the AC path against vanilla or experimental
 mid-session without restarts.
+
+## Oracle false-positive window - 2026-07-01
+
+`[redstone-oracle] MISMATCH` warnings near container-comparator
+machinery are a sampling artifact, not a port bug. Diagnosed on a
+92-hopper sorted mob farm that produced 290 warnings in one session
+while `rust-bfs: activations=0`, i.e. the Rust path never ran and
+"predicted" came from vanilla's own DefaultRedstoneWireEvaluator.
+
+Mechanism: the oracle samples at the outermost
+`RedStoneWireBlock.update` RETURN and assumes the connected wire
+network is settled there. That holds for pure wire cascades. It
+breaks next to comparators (and repeaters): their output changes via
+a scheduled tick, so there is a window where a wire's stored POWER
+has not caught up to power recomputed from current neighbor state.
+
+How to recognize it in a log:
+
+- Mismatches appear only in windows where machinery is active
+  (sorters moving items); idle windows report node-mismatches=0.
+- Large positive deltas (+12, +14): a comparator output just turned
+  on, the wire still reads 0, its update is pending.
+- Small negative deltas (-1, -2): a signal drop mid-propagation.
+- Ratio stays in the low single-digit percent of node-checks.
+
+A mismatch that does NOT fit this shape (static network, no
+scheduled-tick components nearby, or ratio far above a few percent)
+is a real finding and worth a session. Possible future hardening:
+skip BFS sampling when the traversal touches a wire adjacent to a
+comparator or repeater, so the WARN line only fires on
+settled-network divergence. Not done; log-reading discipline has
+been enough so far.
 
 ---
 
