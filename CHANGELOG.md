@@ -23,6 +23,15 @@ marks pre-release research builds.
   `-Dferrite.nav.cache=true`, or `-Pferrite.navCache=true` /
   `-Pferrite.navParity=true` on runClient.
 
+### Added
+
+- **`[chunk-save]` monitor.** Times `SerializableChunkData.copyOf` (server
+  thread) and `write` (background encode) separately, one line per 5 s
+  window when saves happened. First measurements settled the chunk-save
+  port candidate: the palette bit-pack already runs on the background
+  executor in 26.1.x, and the tick thread pays only 0.3-0.5 ms/tick of
+  copyOf under sustained flight. Candidate closed; monitor stays.
+
 ### Fixed
 
 - **Workspace is clippy-clean.** All ~120 warnings cleared across the four

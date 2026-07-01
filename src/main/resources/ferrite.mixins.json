@@ -27,6 +27,7 @@
 		"PathNavigationRegionAccessor",
 		"WalkNodeEvaluatorMixin",
 		"LevelSetBlockMixin",
+		"SerializableChunkDataMixin",
 		"EntityMoveMixin",
 		"TravelMixin",
 		"GravityMixin",

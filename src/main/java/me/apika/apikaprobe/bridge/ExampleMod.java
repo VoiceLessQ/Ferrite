@@ -22,6 +22,7 @@ import me.apika.apikaprobe.worldgen.TerrainBulkHandoff;
 import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
 import me.apika.apikaprobe.monitor.AquiferMonitor;
 import me.apika.apikaprobe.monitor.ChunkGenMonitor;
+import me.apika.apikaprobe.monitor.ChunkSaveMonitor;
 import me.apika.apikaprobe.monitor.EntityTickMonitor;
 import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
 import me.apika.apikaprobe.monitor.LightTimingMonitor;
@@ -62,6 +63,7 @@ public class ExampleMod implements ModInitializer {
 		AquiferMonitor.register();
 		TerrainBulkHandoff.register();
 		ChunkGenMonitor.register();
+		ChunkSaveMonitor.register();
 		SurfacePhaseMonitor.register();
 		// ServerTickPhaseMonitor must register BEFORE WorldTickMonitor so its
 		// END_SERVER_TICK handler fires first and reads

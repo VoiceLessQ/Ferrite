@@ -458,6 +458,19 @@ aggressive defaults on features users cannot easily debug themselves.
 
 Listed so that future us, having forgotten why, does not re-open them:
 
+- **Chunk save / serialize (palette bit-pack).** Measured 2026-07-01
+  with the `[chunk-save]` monitor under top-speed flight (742-993
+  saves per 5 s): the NBT encode + palette bit-pack (`write`) runs on
+  `Util.backgroundExecutor()` in 26.1.x, avg 0.4-0.8 ms/chunk,
+  off-thread. The only tick-thread piece is
+  `SerializableChunkData.copyOf` at 0.3-0.5 ms/tick total under that
+  worst-case pressure, and it is array copies plus block-entity NBT
+  capture, not kernel math. Load-side decode also runs on the chunk
+  pipeline workers. Vanilla moved the portable compute off the tick
+  thread; there is nothing tick-time left to win. Monitor stays in
+  tree. Occasional single-chunk copyOf spikes (14-26 ms max) exist;
+  if tick hitches ever become a complaint, that is the lead, but the
+  fix shape would be Java-side capture batching, not Rust.
 - **Hopper item-entity scans.** Measured 2026-07-01 on a 92-hopper
   sorted mob farm: 45-48 scans/tick, 8-40 microseconds per tick total,
   itemsFound ~0. Half the hoppers never scan (sorter hoppers have
