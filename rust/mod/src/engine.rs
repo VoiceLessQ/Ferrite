@@ -19,6 +19,8 @@ fn pick_thread_count(cores: usize) -> usize {
     }
 }
 
+// Unused since the Rayon strip; kept as the accessor future kernels use.
+#[allow(dead_code)]
 pub fn engine() -> &'static EngineConfig {
     ENGINE
         .get()

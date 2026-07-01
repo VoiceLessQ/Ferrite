@@ -112,7 +112,6 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_initAquifer<'local>(
     // Nearest-grid-cell surface estimator with out-of-range fallback.
     let fallback = surface_height_estimate;
     let surface_estimator: Box<dyn Fn(i32, i32) -> i32 + Send + Sync> = {
-        let grid = grid;
         let side_x = side_x as i32;
         let side_z = side_z as i32;
         Box::new(move |bx: i32, bz: i32| -> i32 {

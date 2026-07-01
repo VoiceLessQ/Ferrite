@@ -42,7 +42,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_navFillSection<'local
 ) {
     let Some(ptr) = env.get_direct_buffer_address(&cell_data).ok() else { return };
     let Some(cap) = env.get_direct_buffer_capacity(&cell_data).ok() else { return };
-    let raw = unsafe { slice::from_raw_parts(ptr, cap as usize) };
+    let raw = unsafe { slice::from_raw_parts(ptr, cap) };
     let id = SectionId { chunk_x, section_y, chunk_z };
     nav_cache_storage::fill_section(id, raw);
 }

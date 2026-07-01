@@ -370,7 +370,7 @@ pub struct LegacyRandomSource {
     seed: i64,
 }
 
-const LEGACY_MULTIPLIER: i64 = 0x5DEEC_E66D_i64;
+const LEGACY_MULTIPLIER: i64 = 0x5_DEEC_E66D_i64;
 const LEGACY_INCREMENT: i64 = 0xB_i64;
 const LEGACY_MASK: i64 = (1_i64 << 48) - 1;
 

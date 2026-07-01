@@ -202,18 +202,17 @@ impl BindFieldMethod {
         let params;
         let params_open = parenthesized!(params in input);
 
-        let is_static;
-        if params.peek(Token![self]) {
+        let is_static = if params.peek(Token![self]) {
             params.parse::<Token![self]>()?;
 
             if !params.is_empty() {
                 params.parse::<Token![,]>()?;
             }
 
-            is_static = false;
+            false
         } else {
-            is_static = true;
-        }
+            true
+        };
 
         let params = params.parse_terminated(
             |param| Ok((param.parse()?, param.parse()?, param.parse()?)),

@@ -206,6 +206,12 @@ pub struct LazyEndIsland {
     cache: std::sync::Arc<std::sync::OnceLock<crate::perlin::SimplexNoise>>,
 }
 
+impl Default for LazyEndIsland {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LazyEndIsland {
     pub fn new() -> Self {
         Self { cache: std::sync::Arc::new(std::sync::OnceLock::new()) }
@@ -1198,7 +1204,7 @@ impl DensityFunction {
                 }
             }
             DensityFunction::ShiftA { noise_name } => {
-                if state.noises.get(noise_name).is_some() {
+                if state.noises.contains_key(noise_name) {
                     for i in 0..n {
                         out[i] = sample_shift(state, noise_name,
                             xs[i] as f64, 0.0, zs[i] as f64);
@@ -1208,7 +1214,7 @@ impl DensityFunction {
                 }
             }
             DensityFunction::ShiftB { noise_name } => {
-                if state.noises.get(noise_name).is_some() {
+                if state.noises.contains_key(noise_name) {
                     for i in 0..n {
                         out[i] = sample_shift(state, noise_name,
                             zs[i] as f64, xs[i] as f64, 0.0);

@@ -1,3 +1,13 @@
+// Style lints that fight the verbatim vanilla ports: index loops mirror
+// vanilla array walks, negated float comparisons keep vanilla NaN
+// semantics, JNI entry points take what Java sends, and doc lists copy
+// vanilla comment layout. Correctness lints stay on.
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::neg_cmp_op_on_partial_ord)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::doc_lazy_continuation)]
+#![allow(clippy::manual_clamp)]
+
 mod engine;
 mod terrain;
 pub mod physics;

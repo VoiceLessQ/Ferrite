@@ -73,11 +73,14 @@ const RAND_BOUND_Z: i32 = 10;
 
 /// `field_31457` — aquifer cell X-size in blocks. Cells tile the world
 /// every 16 blocks horizontally. (Cell index = block_coord >> 4.)
+/// Kept for vanilla-diff documentation; the shift is hardcoded below.
+#[allow(dead_code)]
 const CELL_SIZE_X: i32 = 16;
 /// `field_31458` — aquifer cell Y-size in blocks. Cells tile every 12
 /// blocks vertically. (Cell index = floorDiv(block_coord, 12).)
 const CELL_SIZE_Y: i32 = 12;
-/// `field_31459` — aquifer cell Z-size in blocks.
+/// `field_31459` — aquifer cell Z-size in blocks. Kept like CELL_SIZE_X.
+#[allow(dead_code)]
 const CELL_SIZE_Z: i32 = 16;
 
 /// Default sea-level offset from `DimensionType.field_35479`. This is
@@ -361,8 +364,9 @@ pub struct AquiferImpl {
     start_y: i32,
     start_z: i32,
     size_x: i32,
-    /// Vertical cell count (`(end_y - start_y + 1)`). Stored to compute
-    /// the linear `index()`.
+    /// Vertical cell count (`(end_y - start_y + 1)`). Mirrors the vanilla
+    /// field; index() no longer reads it.
+    #[allow(dead_code)]
     size_y: i32,
     size_z: i32,
     /// `field_61452` — Y-cap above which fluid lookups short-circuit to
@@ -419,7 +423,7 @@ impl AquiferImpl {
         surface_height_estimate: i32,
     ) -> Self {
         // Vanilla constructor lines 126-145 — verbatim port.
-        let start_x = get_local_x(chunk_min_block_x + -5) + 0;
+        let start_x = get_local_x(chunk_min_block_x + -5);
         let end_x_cell = get_local_x(chunk_max_block_x + -5) + 1;
         let size_x = end_x_cell - start_x + 1;
 
@@ -427,7 +431,7 @@ impl AquiferImpl {
         let end_y_cell = get_local_y(min_y + height + 1) + 1;
         let size_y = end_y_cell - start_y + 1;
 
-        let start_z = get_local_z(chunk_min_block_z + -5) + 0;
+        let start_z = get_local_z(chunk_min_block_z + -5);
         let end_z_cell = get_local_z(chunk_max_block_z + -5) + 1;
         let size_z = end_z_cell - start_z + 1;
 

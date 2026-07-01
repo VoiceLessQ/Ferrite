@@ -60,9 +60,9 @@ impl From<jobject> for Instance {
     }
 }
 
-impl Into<jobject> for Instance {
-    fn into(self) -> jobject {
-        self.0
+impl From<Instance> for jobject {
+    fn from(value: Instance) -> Self {
+        value.0
     }
 }
 
@@ -72,9 +72,9 @@ impl From<JObject<'_>> for Instance {
     }
 }
 
-impl<'local> Into<JObject<'local>> for Instance {
-    fn into(self) -> JObject<'local> {
-        unsafe { JObject::<'_>::from_raw(self.0) }
+impl<'local> From<Instance> for JObject<'local> {
+    fn from(value: Instance) -> Self {
+        unsafe { JObject::<'_>::from_raw(value.0) }
     }
 }
 

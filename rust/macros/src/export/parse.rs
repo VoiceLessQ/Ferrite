@@ -5,6 +5,8 @@ use syn::punctuated::Punctuated;
 use syn::{Ident, Token};
 
 pub struct ExportPackage {
+    // Parsed but only str is read today; kept to mirror BindPackage.
+    #[allow(dead_code)]
     pub tokens: Punctuated<Ident, Token![.]>,
     pub str: String,
 }

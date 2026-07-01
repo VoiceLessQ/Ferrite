@@ -52,7 +52,7 @@ fn bind_def_enum(
         return quote! {};
     }
 
-    let is_itself = !enum_of.is_some();
+    let is_itself = enum_of.is_none();
     let enum_of = enum_of.map_or_else(|| syn::parse_quote!(#class), |(_, ty)| ty);
 
     let decl_variants = variants.iter().map(|v| &v.ident).collect_vec();
@@ -263,6 +263,7 @@ fn bind_def_class(
     let instance_impl = generate_instance_field_common(
         &class,
         quote_spanned! {class.span() => self.raw},
+        quote_spanned! {class.span() => value.raw},
         quote_spanned! {class.span() => Self {
             raw,
             #(#other_fields),*
@@ -372,7 +373,7 @@ pub fn create_signature(class: &str, package: &BindPackage) -> String {
 }
 
 pub fn generate_signature(
-    attrs: &Vec<Attribute>,
+    attrs: &[Attribute],
     class: &Ident,
     package: &BindPackage,
 ) -> proc_macro2::TokenStream {
@@ -479,6 +480,7 @@ fn prepare_method(method: &BindFieldMethod) -> MethodInfo {
 fn generate_instance_field_common(
     struct_name: &Ident,
     self_ident: proc_macro2::TokenStream,
+    value_ident: proc_macro2::TokenStream,
     from_raw: proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     quote_spanned! { self_ident.span() =>
@@ -496,9 +498,9 @@ fn generate_instance_field_common(
             }
         }
 
-        impl Into<::rosttasse::prelude::Instance> for #struct_name {
-            fn into(self) -> ::rosttasse::prelude::Instance {
-                #self_ident
+        impl From<#struct_name> for ::rosttasse::prelude::Instance {
+            fn from(value: #struct_name) -> Self {
+                #value_ident
             }
         }
 
@@ -524,7 +526,7 @@ fn generate_instance_field_common(
 
         impl ::rosttasse::prelude::JavaClass for #struct_name {
             fn get_raw(&self) -> ::rosttasse::prelude::Instance {
-                #self_ident.clone()
+                #self_ident
             }
 
             fn from_raw(raw: ::rosttasse::prelude::Instance) -> Self {

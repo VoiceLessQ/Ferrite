@@ -26,7 +26,7 @@ pub struct ClassSerializer {
     buffer: Vec<u8>,
 }
 
-impl<'a> ser::Serializer for &'a mut ClassSerializer {
+impl ser::Serializer for &mut ClassSerializer {
     type Ok = ();
 
     type Error = Error;
@@ -147,7 +147,7 @@ impl<'a> ser::Serializer for &'a mut ClassSerializer {
     }
 }
 
-impl<'a> ser::SerializeSeq for &'a mut ClassSerializer {
+impl ser::SerializeSeq for &mut ClassSerializer {
     type Ok = ();
     type Error = Error;
 
@@ -162,7 +162,7 @@ impl<'a> ser::SerializeSeq for &'a mut ClassSerializer {
         Ok(())
     }
 }
-impl<'a> ser::SerializeTuple for &'a mut ClassSerializer {
+impl ser::SerializeTuple for &mut ClassSerializer {
     type Ok = ();
     type Error = Error;
 
@@ -178,7 +178,7 @@ impl<'a> ser::SerializeTuple for &'a mut ClassSerializer {
     }
 }
 
-impl<'a> ser::SerializeTupleStruct for &'a mut ClassSerializer {
+impl ser::SerializeTupleStruct for &mut ClassSerializer {
     type Ok = ();
     type Error = Error;
 
@@ -194,7 +194,7 @@ impl<'a> ser::SerializeTupleStruct for &'a mut ClassSerializer {
     }
 }
 
-impl<'a> ser::SerializeTupleVariant for &'a mut ClassSerializer {
+impl ser::SerializeTupleVariant for &mut ClassSerializer {
     type Ok = ();
     type Error = Error;
 
@@ -210,7 +210,7 @@ impl<'a> ser::SerializeTupleVariant for &'a mut ClassSerializer {
     }
 }
 
-impl<'a> ser::SerializeMap for &'a mut ClassSerializer {
+impl ser::SerializeMap for &mut ClassSerializer {
     type Ok = ();
     type Error = Error;
 
@@ -233,7 +233,7 @@ impl<'a> ser::SerializeMap for &'a mut ClassSerializer {
     }
 }
 
-impl<'a> ser::SerializeStruct for &'a mut ClassSerializer {
+impl ser::SerializeStruct for &mut ClassSerializer {
     type Ok = ();
     type Error = Error;
 
@@ -249,7 +249,7 @@ impl<'a> ser::SerializeStruct for &'a mut ClassSerializer {
     }
 }
 
-impl<'a> ser::SerializeStructVariant for &'a mut ClassSerializer {
+impl ser::SerializeStructVariant for &mut ClassSerializer {
     type Ok = ();
     type Error = Error;
 

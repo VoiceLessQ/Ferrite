@@ -58,8 +58,6 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_computeChunkTerrain<'
 
     let cell_width = cell_width as usize;
     let cell_height = cell_height as usize;
-    let min_y = min_y as i32;
-    let sea_level = sea_level as i32;
 
     let cells_x = CHUNK_X / cell_width;
     let cells_z = CHUNK_Z / cell_width;

@@ -284,7 +284,7 @@ pub fn collect_colliders_from_snapshot(
                 // Defensive bounds check: a malformed snapshot (palette
                 // offsets pointing past aabb_table) would otherwise read
                 // garbage or panic deep inside the loop.
-                let need = end.checked_mul(6).unwrap_or(usize::MAX);
+                let need = end.saturating_mul(6);
                 if need > snap.aabb_table.len() {
                     return false; // fallback to vanilla
                 }

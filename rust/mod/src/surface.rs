@@ -114,7 +114,6 @@ pub fn evaluate(tree: &CompiledTree, ctx: &ColumnContext) -> Option<u32> {
                 let then_off = read_u32_le(bc, ip) as usize;
                 ip += 4;
                 let else_off = read_u32_le(bc, ip) as usize;
-                ip += 4;
                 ip = if cond { then_off } else { else_off };
             }
             OP_SEQUENCE_NEXT => {

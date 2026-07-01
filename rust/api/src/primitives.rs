@@ -138,9 +138,9 @@ impl From<Instance> for Function {
     }
 }
 
-impl Into<Instance> for Function {
-    fn into(self) -> Instance {
-        self.0
+impl From<Function> for Instance {
+    fn from(value: Function) -> Self {
+        value.0
     }
 }
 
@@ -195,9 +195,9 @@ impl From<Instance> for JClass {
     }
 }
 
-impl Into<Instance> for JClass {
-    fn into(self) -> Instance {
-        self.0
+impl From<JClass> for Instance {
+    fn from(value: JClass) -> Self {
+        value.0
     }
 }
 
@@ -207,9 +207,9 @@ impl<'local> From<JniJClass<'local>> for JClass {
     }
 }
 
-impl<'local> Into<JniJClass<'local>> for JClass {
-    fn into(self) -> JniJClass<'local> {
-        self.into_class()
+impl<'local> From<JClass> for JniJClass<'local> {
+    fn from(value: JClass) -> Self {
+        value.into_class()
     }
 }
 
@@ -237,7 +237,7 @@ impl JClass {
         env.find_class(Self::CLASS).unwrap().into()
     }
 
-    pub fn from_class<'local>(class: JniJClass) -> JClass {
+    pub fn from_class(class: JniJClass) -> JClass {
         Instance::from(class.into_raw()).into()
     }
 

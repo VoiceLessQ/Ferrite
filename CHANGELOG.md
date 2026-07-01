@@ -23,13 +23,17 @@ marks pre-release research builds.
   `-Dferrite.nav.cache=true`, or `-Pferrite.navCache=true` /
   `-Pferrite.navParity=true` on runClient.
 
-### Known issues
-
-- **~90 cosmetic clippy warnings remain** (needless `.clone()` on Copy
-  types, `From` vs `Into`, index-only loops, elidable lifetimes). No errors
-  left; cleanup pending.
-
 ### Fixed
+
+- **Workspace is clippy-clean.** All ~120 warnings cleared across the four
+  crates: `bind!` codegen now emits `From` impls without the Copy
+  `.clone()`, the api layer's `Into` impls flipped to `From`, slice params
+  replace `&Vec`, and dead verbatim-port items carry explicit allows.
+  Style lints that fight the vanilla ports (index loops, negated float
+  comparisons that keep vanilla NaN semantics, JNI argument counts) are
+  allowed at crate level in rust-mod with a justification comment.
+  Workspace resolver pinned to 2; the macros crate declares
+  `proc-macro = true` instead of `crate-type`.
 
 - **Unsafe JNI buffer helpers hardened.** `get_i32_slice_mut`
   (surface_jni.rs) and `get_byte_slice_mut` (redstone_queues_jni.rs)

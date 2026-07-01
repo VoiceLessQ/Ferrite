@@ -37,7 +37,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_initWorldgenState<'lo
     _class: JClass<'local>,
     seed: jlong,
 ) -> jboolean {
-    match init_worldgen_init(seed as i64) {
+    match init_worldgen_init(seed) {
         Ok(()) => TRUE,
         Err(_) => FALSE,
     }
@@ -78,7 +78,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_registerNoiseParamete
         f64_slice.to_vec()
     };
 
-    let params = NoiseParameters::new(first_octave as i32, amplitudes);
+    let params = NoiseParameters::new(first_octave, amplitudes);
     match register_noise(name, params) {
         Ok(()) => TRUE,
         Err(_) => FALSE,
@@ -124,9 +124,8 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_rootSeedsForSeed<'loc
     seed: jlong,
 ) -> rosttasse::jni::sys::jlongArray {
     use crate::xoroshiro::XoroshiroRandomSource;
-    let mut r = XoroshiroRandomSource::from_legacy_seed(seed as i64);
+    let mut r = XoroshiroRandomSource::from_legacy_seed(seed);
     let factory = r.fork_positional();
-    let mut env = env;
     match env.new_long_array(2) {
         Ok(arr) => {
             let buf = [factory.seed_lo, factory.seed_hi];
@@ -297,10 +296,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_queryBiomeAtTarget<'l
     weirdness: jlong,
 ) -> jint {
     let target = TargetPoint::new(temperature, humidity, continentalness, erosion, depth, weirdness);
-    match worldgen_state().and_then(|s| s.find_biome(target)) {
-        Some(id) => id,
-        None => -1,
-    }
+    worldgen_state().and_then(|s| s.find_biome(target)).unwrap_or(-1)
 }
 
 /// Register one named density function into the in-progress build.
@@ -378,7 +374,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_densityFunctionCount<
 /// Returns null if the name isn't registered.
 #[no_mangle]
 pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_dumpDensityFunction<'local>(
-    mut env: JNIEnv<'local>,
+    env: JNIEnv<'local>,
     _class: JClass<'local>,
     name_buf: JByteBuffer<'local>,
     name_len: jint,
