@@ -458,6 +458,14 @@ aggressive defaults on features users cannot easily debug themselves.
 
 Listed so that future us, having forgotten why, does not re-open them:
 
+- **Hopper item-entity scans.** Measured 2026-07-01 on a 92-hopper
+  sorted mob farm: 45-48 scans/tick, 8-40 microseconds per tick total,
+  itemsFound ~0. Half the hoppers never scan (sorter hoppers have
+  containers above and take the transfer path); the scans that do run
+  are empty AABB queries costing 0.2-0.9 us each. Fails gate 1 by
+  three orders of magnitude. The hot hopper path in real builds is
+  container transfer, already served by the extract hint. Re-entry
+  only if a JFR ever shows getEntitiesOfClass hot in a hopper bucket.
 - **Walkability cache (pathfinding PathType).** Six sessions, closed
   2026-07-01 by A/B at 294 chasing zombies. The session 6 build was
   healthy (84-87% hit rate, zero snapshot churn after lazy fill plus
