@@ -39,7 +39,9 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_benchRedstoneQueue<'l
         Some(s) => s,
         None => return,
     };
-    let results_bytes = match get_byte_slice_mut(&env, &results_buf, count * 4) {
+    // SAFETY: only reference taken over results_buf; pairs_buf is a
+    // different buffer read through a shared slice.
+    let results_bytes = match unsafe { get_byte_slice_mut(&env, &results_buf, count * 4) } {
         Some(s) => s,
         None => return,
     };
@@ -81,7 +83,13 @@ fn get_byte_slice<'a, 'env>(
     Some(unsafe { slice::from_raw_parts(ptr, len) })
 }
 
-fn get_byte_slice_mut<'a, 'env>(
+/// # Safety
+/// `buf` must be a direct ByteBuffer and no other reference into `buf` may
+/// be alive for the returned slice's lifetime. Capacity is checked here.
+/// The one caller takes this slice over `results_buf` only, while the input
+/// buffer is read through a separate shared slice; no alias.
+#[allow(clippy::mut_from_ref)]
+unsafe fn get_byte_slice_mut<'a, 'env>(
     env: &JNIEnv<'env>,
     buf: &'a JByteBuffer<'env>,
     len: usize,

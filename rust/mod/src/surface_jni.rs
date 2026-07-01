@@ -245,7 +245,8 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRuleBa
         }
     };
 
-    let results = match get_i32_slice_mut(&env, &results_buf, n) {
+    // SAFETY: only reference taken over results_buf in this call.
+    let results = match unsafe { get_i32_slice_mut(&env, &results_buf, n) } {
         Some(s) => s, None => return,
     };
 
@@ -285,7 +286,8 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRuleBa
 }
 
 fn fill_results_null<'env>(env: &JNIEnv<'env>, buf: &JByteBuffer<'env>, count: usize) {
-    if let Some(results) = get_i32_slice_mut(env, buf, count) {
+    // SAFETY: only reference taken over buf in this call.
+    if let Some(results) = unsafe { get_i32_slice_mut(env, buf, count) } {
         for r in results.iter_mut() {
             *r = RESULT_NULL;
         }
@@ -297,7 +299,14 @@ fn get_i32_slice<'a, 'env>(env: &JNIEnv<'env>, buf: &'a JByteBuffer<'env>, count
     Some(unsafe { slice::from_raw_parts(bytes.as_ptr() as *const jint, count) })
 }
 
-fn get_i32_slice_mut<'a, 'env>(env: &JNIEnv<'env>, buf: &'a JByteBuffer<'env>, count: usize) -> Option<&'a mut [jint]> {
+/// # Safety
+/// `buf` must be a direct ByteBuffer (JVM-allocated, so 4-byte aligned for
+/// jint) and no other reference into `buf` may be alive for the returned
+/// slice's lifetime. Capacity is checked here. Every JNI entry point in this
+/// file takes at most one slice over `results_buf` per call, which upholds
+/// the no-alias rule; a second call on the same buffer would be UB.
+#[allow(clippy::mut_from_ref)]
+unsafe fn get_i32_slice_mut<'a, 'env>(env: &JNIEnv<'env>, buf: &'a JByteBuffer<'env>, count: usize) -> Option<&'a mut [jint]> {
     let len = count * 4;
     let ptr = env.get_direct_buffer_address(buf).ok()?;
     let cap = env.get_direct_buffer_capacity(buf).ok()?;
