@@ -40,8 +40,9 @@ import java.util.UUID;
  * </ol>
  *
  * <p>Boss bar updates are throttled to every 5th chunk (plus completion)
- * to keep packet volume reasonable at ~80 chunks/sec; without throttling
- * each player sees ~80 update packets/second through pre-gen.
+ * to keep packet volume reasonable at the measured ~115 chunks/sec
+ * (26.1.2, inflight 200); without throttling each player would see that
+ * many update packets per second through pre-gen.
  */
 public final class PregenLifecycle {
 	private PregenLifecycle() {}
