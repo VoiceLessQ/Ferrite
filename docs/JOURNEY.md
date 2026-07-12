@@ -454,6 +454,34 @@ aggressive defaults on features users cannot easily debug themselves.
 
 ---
 
+## The boundary tax, measured (2026-07-12)
+
+`/ferrite ffm bench` runs the same three ops over JNI and over
+java.lang.foreign against rust_mod, inside the live game JVM
+(`FfmBoundaryBench`, C ABI twins in `rust/mod/src/ffm_bench.rs`).
+In-game numbers on this machine, JDK 25:
+
+| Op | JNI | FFM |
+|---|---|---|
+| no-arg call | 4.1 ns | 5.5 ns |
+| sum 4 KB ints | 162 ns | 124 ns |
+| fill 512 KB doubles | 70.0 us | 31.3 us (shared segment) |
+
+Three conclusions worth keeping:
+
+1. The per-call boundary was never the problem. A bare JNI call is
+   ~4 ns on modern HotSpot; FFM is slightly slower per call. Every
+   port that died, died to data marshalling or to vanilla having
+   already won, not to call overhead.
+2. FFM's real win is bulk transfer into shared native memory, ~2.2x
+   on the 512 KB fill, because the copy disappears. But the moment
+   vanilla needs the result back in a Java array or palette, the
+   copy returns. This does not resurrect bulk-density (the ~50-56 ms
+   JNI fill would drop to maybe ~30 ms against a +25-50 ms deficit).
+3. If an owned-state design ever happens (Rust as the authoritative
+   store, Java reads through MemorySegment), FFM is the boundary to
+   build on: no copy at all when the mirror is the storage.
+
 ## Things not to re-investigate
 
 Listed so that future us, having forgotten why, does not re-open them:

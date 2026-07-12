@@ -74,3 +74,8 @@ pub use physics_jni::Java_me_apika_apikaprobe_RustBridge_computeEntityPhysics;
 pub use cramming_jni::Java_me_apika_apikaprobe_RustBridge_computeCramming;
 pub use redstone_jni::Java_me_apika_apikaprobe_RustBridge_computeRedstoneBfs;
 pub use redstone_ac_jni::Java_me_apika_apikaprobe_RustBridge_computeRedstoneAc;
+
+mod ffm_bench;
+pub use ffm_bench::Java_me_apika_apikaprobe_RustBridge_ffmBenchNoop;
+pub use ffm_bench::Java_me_apika_apikaprobe_RustBridge_ffmBenchSum;
+pub use ffm_bench::Java_me_apika_apikaprobe_RustBridge_ffmBenchFill;

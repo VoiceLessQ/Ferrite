@@ -18,8 +18,16 @@ public class RustBridge {
 
   public static final boolean NATIVE_AVAILABLE;
 
+  // Absolute path of the extracted native, for java.lang.foreign lookups
+  // against the same dll the JNI natives are bound to.
+  private static String nativePath;
+
   static {
     NATIVE_AVAILABLE = loadNativeLibrary();
+  }
+
+  public static String nativePath() {
+    return nativePath;
   }
 
   private RustBridge() {}
@@ -57,6 +65,7 @@ public class RustBridge {
       Files.copy(in, tempFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
       System.load(tempFile.getAbsolutePath());
+      nativePath = tempFile.getAbsolutePath();
       ExampleMod.LOGGER.info("Loaded rust_mod from {}", tempFile.getAbsolutePath());
       return true;
     } catch (UnsatisfiedLinkError | IOException e) {
@@ -68,6 +77,14 @@ public class RustBridge {
   }
 
   public static native int initEngine();
+
+  // Boundary-tax bench natives; C ABI twins live in ffm_bench.rs and are
+  // reached via java.lang.foreign in FfmBoundaryBench.
+  public static native void ffmBenchNoop();
+
+  public static native long ffmBenchSum(int[] arr);
+
+  public static native void ffmBenchFill(double[] arr, double seed);
 
   public static native void computeChunkTerrain(
       java.nio.ByteBuffer cornerDensities,

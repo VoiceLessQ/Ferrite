@@ -108,6 +108,8 @@ public final class FerriteCommand {
 						.then(Commands.literal("bfs-min")
 								.then(Commands.argument("n", IntegerArgumentType.integer(1, 4096))
 										.executes(FerriteCommand::setBfsMin))))
+				.then(Commands.literal("ffm")
+						.then(Commands.literal("bench").executes(FerriteCommand::ffmBench)))
 				.then(Commands.literal("worldgen")
 						.then(Commands.literal("status").executes(FerriteCommand::worldgenStatus))
 						.then(Commands.literal("sample")
@@ -438,6 +440,23 @@ public final class FerriteCommand {
 		sendFeedback(ctx, msg, false);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int ffmBench(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		sendFeedback(ctx, "[ffm-bench] running JNI vs java.lang.foreign boundary bench (takes a few seconds)", false);
+		try {
+			for (me.apika.apikaprobe.bench.FfmBoundaryBench.Line line
+					: me.apika.apikaprobe.bench.FfmBoundaryBench.run()) {
+				sendFeedback(ctx, line.format(), false);
+				ExampleMod.LOGGER.info(line.format());
+			}
+		} catch (Throwable t) {
+			String msg = "[ffm-bench] failed: " + t;
+			sendFeedback(ctx, msg, false);
+			ExampleMod.LOGGER.error(msg, t);
+			return 0;
+		}
+		return 1;
 	}
 
 	private static int redstoneBench(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
