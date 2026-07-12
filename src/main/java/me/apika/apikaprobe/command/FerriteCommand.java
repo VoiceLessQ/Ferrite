@@ -195,7 +195,10 @@ public final class FerriteCommand {
 												.then(Commands.argument("radius", IntegerArgumentType.integer(1, 50))
 														.executes(FerriteCommand::pregenStartAt)))))
 						.then(Commands.literal("cancel").executes(FerriteCommand::pregenCancel))
-						.then(Commands.literal("status").executes(FerriteCommand::pregenStatus)))
+						.then(Commands.literal("status").executes(FerriteCommand::pregenStatus))
+						.then(Commands.literal("inflight")
+								.then(Commands.argument("n", IntegerArgumentType.integer(1, 1000))
+										.executes(FerriteCommand::pregenInflight))))
 				.then(Commands.literal("noise")
 						.then(Commands.literal("rust")
 								.then(Commands.literal("on").executes(FerriteCommand::noiseRustOn))
@@ -1438,6 +1441,13 @@ public final class FerriteCommand {
 		}
 		sendFeedback(ctx, "[pregen] no active pre-gen", false);
 		return 0;
+	}
+
+	private static int pregenInflight(CommandContext<CommandSourceStack> ctx) {
+		int n = IntegerArgumentType.getInteger(ctx, "n");
+		PregenDriver.maxInflight = n;
+		sendFeedback(ctx, "[pregen] inflight cap set to " + n + " (applies to the next run)", false);
+		return 1;
 	}
 
 	private static int pregenStatus(CommandContext<CommandSourceStack> ctx) {

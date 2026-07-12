@@ -29,7 +29,10 @@ import java.util.concurrent.atomic.AtomicReference;
  * lifecycle uses this to persist a resume snapshot.
  */
 public final class PregenDriver {
-	private static final int MAX_INFLIGHT = 50;
+	// Runtime-tunable via /ferrite pregen inflight <n>. Measured 2026-07-12
+	// on 26.1.2, four 3721-chunk virgin runs: cap 50 = 90-96 chunks/s,
+	// cap 200 = 114-118/s, cap 400 = no further gain. TPS 20 held at all.
+	public static volatile int maxInflight = 200;
 	public static final int CHECKPOINT_INTERVAL = 100;
 
 	private static final AtomicReference<PregenDriver> ACTIVE = new AtomicReference<>();
@@ -42,7 +45,10 @@ public final class PregenDriver {
 	private final PregenCheckpointer checkpointer;
 	private final ConcentricChunkIterator iterator;
 	private final int total;
-	private final Semaphore inflight = new Semaphore(MAX_INFLIGHT);
+	// Snapshot at construction so the end-of-run drain acquires exactly
+	// what this run's semaphore was built with, even if the tunable moves.
+	private final int inflightCap = maxInflight;
+	private final Semaphore inflight = new Semaphore(inflightCap);
 	private final SlidingWindowRate rate = new SlidingWindowRate();
 	private final AtomicInteger done = new AtomicInteger();
 	private final CompletableFuture<Void> completion = new CompletableFuture<>();
@@ -139,7 +145,7 @@ public final class PregenDriver {
 					}
 				}
 			}
-			inflight.acquireUninterruptibly(MAX_INFLIGHT);
+			inflight.acquireUninterruptibly(inflightCap);
 			if (cancelled) {
 				if (checkpointer != null) {
 					checkpointer.onCheckpoint(iterator.snapshot());

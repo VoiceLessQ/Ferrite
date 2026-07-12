@@ -454,6 +454,20 @@ aggressive defaults on features users cannot easily debug themselves.
 
 ---
 
+## Pregen inflight cap: 50 was binding (2026-07-12)
+
+The pregen driver's inherited inflight cap of 50 (with a comment
+claiming no gain beyond it) was measured wrong on 26.1.2. Four
+3721-chunk virgin-terrain runs, same world, alternating caps via the
+new `/ferrite pregen inflight <n>`: cap 50 ran 90-96 chunks/s (twice,
+different areas), cap 200 ran 114-118/s, cap 400 added nothing.
+Default is now 200; ~25% more pregen throughput, TPS 20.00 held in
+all four runs. Also observed: already-generated chunks pass through
+the driver at effectively disk-load speed, so a skip-existing
+optimization is not worth building; and pregen at ~115 chunks/s
+outruns flight-driven generation (~60/s) because it pays no
+render/network tax per chunk.
+
 ## The boundary tax, measured (2026-07-12)
 
 `/ferrite ffm bench` runs the same three ops over JNI and over
