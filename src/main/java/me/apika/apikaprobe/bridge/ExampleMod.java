@@ -40,6 +40,7 @@ import me.apika.apikaprobe.monitor.HopperSlotMonitor;
 import me.apika.apikaprobe.monitor.HopperHintMonitor;
 import me.apika.apikaprobe.monitor.HopperPerSlotMonitor;
 import me.apika.apikaprobe.monitor.ItemFrameMonitor;
+import me.apika.apikaprobe.monitor.LightUpdateMonitor;
 import me.apika.apikaprobe.monitor.LookControlMonitor;
 import me.apika.apikaprobe.monitor.MobSpawnMonitor;
 import me.apika.apikaprobe.monitor.MoveControlMonitor;
@@ -66,6 +67,7 @@ public class ExampleMod implements ModInitializer {
 		ChunkGenMonitor.register();
 		ChunkSaveMonitor.register();
 		MobSpawnMonitor.register();
+		LightUpdateMonitor.register();
 		SurfacePhaseMonitor.register();
 		// ServerTickPhaseMonitor must register BEFORE WorldTickMonitor so its
 		// END_SERVER_TICK handler fires first and reads

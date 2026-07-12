@@ -29,6 +29,7 @@
 		"LevelSetBlockMixin",
 		"SerializableChunkDataMixin",
 		"NaturalSpawnerTimingMixin",
+		"ThreadedLevelLightEngineMixin",
 		"NaturalSpawnerSpawnStateMixin",
 		"EntityMoveMixin",
 		"TravelMixin",

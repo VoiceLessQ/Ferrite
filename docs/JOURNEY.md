@@ -458,6 +458,29 @@ aggressive defaults on features users cannot easily debug themselves.
 
 Listed so that future us, having forgotten why, does not re-open them:
 
+- **Lighting engine (tick-time, re-test of the old shelving).**
+  Measured 2026-07-12 with the `[light]` monitor after a fresh
+  26.1.2 source dive. The old "palette pointer chasing" shelving
+  note turned out not to be the operative fact; the operative fact
+  is that vanilla moved lighting off the tick thread entirely.
+  `ThreadedLevelLightEngine.runLightUpdates` throws if called on
+  the server thread; updates run on a `ConsecutiveExecutor` in
+  batches of 1000, and the tick thread pays only task enqueues.
+  Measured across idle, sustained flight, torch spam, and glowstone
+  spam: light thread at 2-102 ms per 5 s window (0.06-2% duty),
+  worst single pass 14.9 ms, backlog peak 358 of the 1000 batch
+  cap, always drained within one window. Nothing tick-time to win;
+  a Rust kernel would race a thread that is 98% idle. The
+  propagation inner loop does still read block states per neighbor
+  (BlockLightEngine.propagateIncrease), so a flat opacity/emission
+  mirror is conceivable, but it would speed up a thread with no
+  queue to speak of. Player-visible light lag is client render
+  (mesh rebuilds on light change), out of a server mod's lane.
+  Lucis-style engine replacement was considered and rejected on
+  shape: it wins by replacing the architecture, which breaks the
+  compose-with-everything scope. Monitor stays in tree. Re-entry
+  only if a real server shows the light executor's backlog pinned
+  at the batch cap across consecutive windows.
 - **Mob spawning candidate sampling.** Measured 2026-07-12 with the
   `[mob-spawn]` monitor, two worlds: fresh "New World" idle at spawn
   and a flat world with 230 mobs (cap saturated, spawns=0). The
