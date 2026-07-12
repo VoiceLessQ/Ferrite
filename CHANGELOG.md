@@ -12,10 +12,11 @@ marks pre-release research builds.
 - **Chunkforce predicts flight direction.** With `/ferrite chunkforce
   on`, the force-gen ring center now leads a moving player by up to 12
   chunks along their velocity instead of spending half the budget on
-  terrain behind them. Flight test on 26.1.2: 24,581 chunks forced in
-  ~2.5 minutes at ~160 chunks/s with TPS 20.00 held; the generation
-  front stays out of sight at top creative-fly speed. Stationary
-  players keep the old radial behavior.
+  terrain behind them. Flight test on 26.1.2 (view distance 16,
+  simulation distance 12): 24,581 chunks forced in ~2.5 minutes at
+  ~160 chunks/s with TPS 20.00 held; the generation front stays out
+  of sight at top creative-fly speed. Stationary players keep the old
+  radial behavior.
 - **Pregen inflight cap raised 50 to 200 (+25% throughput).** Four
   3721-chunk virgin-terrain runs measured cap 50 at 90-96 chunks/s and
   cap 200 at 114-118 chunks/s; 400 added nothing. Tunable at runtime
