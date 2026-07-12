@@ -37,6 +37,11 @@ loom {
 			def heapMax = project.findProperty("ferrite.heap") ?: "3G"
 			vmArg "-Xmx${heapMax}"
 			vmArg "-Xms512M"
+			// Opt-in low-pause GC for memory-heavy mod sessions (DH warns
+			// that G1 stutters): -Pferrite.zgc adds generational ZGC.
+			if (project.hasProperty("ferrite.zgc")) {
+				vmArg "-XX:+UseZGC"
+			}
 			// Opt-in autovalidate: -Pferrite.autovalidate=<n> on the gradle CLI
 			// also injects --quickPlaySingleplayer to skip the title screen.
 			if (project.hasProperty("ferrite.autovalidate")) {
