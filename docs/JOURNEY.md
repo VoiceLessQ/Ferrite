@@ -458,7 +458,22 @@ aggressive defaults on features users cannot easily debug themselves.
 
 Listed so that future us, having forgotten why, does not re-open them:
 
-- **Lighting engine (tick-time, re-test of the old shelving).**
+- **Chunkgen rustification (26.1.2 re-measure of the settled
+  closure).** JFR profile 2026-07-12, 90 s of top-speed flight on
+  26.1.2, settings=profile, 13.5K samples. Worker-Main pool 72.7%
+  of CPU, render thread 20.8%, server tick thread 5.5% (TPS 20
+  throughout). Inside the workers the profile is flat: hottest
+  single method is PalettedContainer.get at 9.6% (palette reads,
+  JVM pointer chasing, un-portable), density/noise family ~15%
+  summed, biome lookup ~6.8%, surface rules ~4%, aquifer ~1.8%.
+  The Rust-addressable math surface totals ~28% of worker CPU and
+  is exactly the stack already ported bit-exact and measured
+  losing to JIT per-call on 1.21.11. The closure previously rested
+  on 1.21.11 numbers only; it now has 26.1.2-native confirmation.
+  Chunkgen light stages measure 17-22 ms/chunk by pipeline latency
+  but ~1 ms/chunk actual light-thread CPU (queue wait dominates;
+  backlog peaks ~880 of the 1000 batch cap under heavy generation,
+  thread still >90% idle). Same verdict, current evidence.
   Measured 2026-07-12 with the `[light]` monitor after a fresh
   26.1.2 source dive. The old "palette pointer chasing" shelving
   note turned out not to be the operative fact; the operative fact
