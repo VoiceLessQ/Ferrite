@@ -458,6 +458,27 @@ aggressive defaults on features users cannot easily debug themselves.
 
 Listed so that future us, having forgotten why, does not re-open them:
 
+- **Mob spawning candidate sampling.** Measured 2026-07-12 with the
+  `[mob-spawn]` monitor, two worlds: fresh "New World" idle at spawn
+  and a flat world with 230 mobs (cap saturated, spawns=0). The
+  census (`NaturalSpawner.createState`, once per tick) costs 0.08
+  ms/tick fresh and 0.03 ms/tick at 230 mobs; it is bounded by entity
+  count and never got hot. That census was the only portable slice,
+  and the source dive had already shrunk it: `PotentialCalculator`
+  only accumulates charges for mobs with a biome spawn cost, which
+  vanilla uses in soul sand valley and warped forest, so in the
+  overworld the "math" is a scan over an empty list. The attempt side
+  (`spawnCategoryForChunk`) did measure hot-ish, ~0.93 ms/tick at
+  ~1010 calls/tick on the saturated flat world, but each call is a
+  2.3 us early-out built from world reads (nearest player, biome,
+  block state, collision), the exact shape that killed fluid ticks
+  and villager Brain on paper. Prediction on record was "dies at
+  gate 1" and it did. Monitor stays in tree. The one lead left is
+  Java-side, not Rust: vanilla pays that ~1 ms/tick attempting into
+  a saturated cap with zero spawns, so a cheaper pre-filter on
+  categories already at local cap could exist; that is a gate in the
+  BE-ticker family, a separate proposal if tick budget ever demands
+  it.
 - **Chunk save / serialize (palette bit-pack).** Measured 2026-07-01
   with the `[chunk-save]` monitor under top-speed flight (742-993
   saves per 5 s): the NBT encode + palette bit-pack (`write`) runs on

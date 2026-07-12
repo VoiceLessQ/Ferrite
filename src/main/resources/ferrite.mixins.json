@@ -28,6 +28,8 @@
 		"WalkNodeEvaluatorMixin",
 		"LevelSetBlockMixin",
 		"SerializableChunkDataMixin",
+		"NaturalSpawnerTimingMixin",
+		"NaturalSpawnerSpawnStateMixin",
 		"EntityMoveMixin",
 		"TravelMixin",
 		"GravityMixin",
