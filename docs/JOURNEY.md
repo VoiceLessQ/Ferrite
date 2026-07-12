@@ -472,8 +472,9 @@ Listed so that future us, having forgotten why, does not re-open them:
   ~1010 calls/tick on the saturated flat world, but each call is a
   2.3 us early-out built from world reads (nearest player, biome,
   block state, collision), the exact shape that killed fluid ticks
-  and villager Brain on paper. A night-flight run with heavy live
-  spawning (37-74 spawns per 5 s) came in at ~0.25 ms/tick combined,
+  and villager Brain on paper. A night flight over a regular
+  overworld world, heavy live spawning (37-74 spawns per 5 s), came
+  in at ~0.25 ms/tick combined,
   cheaper than the saturated case: successful attempts exit early,
   a full cap grinds every call for nothing. Prediction on record was
   "dies at gate 1" and it did. Monitor stays in tree. The one lead left is
