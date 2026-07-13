@@ -57,6 +57,12 @@ Breakdown of the 4.7ms entity tick: travel ~1.63ms, goal selectors + controls ~1
 | effective TPS          | ~4                  | ~5.6                 | **+40%**              |
 | oracle mismatches      | n/a                 | 0 / 149,669 checked  | bit-for-bit correct   |
 
+Re-tested on MC 26.1.2 with a heavier lag machine (full burst, view
+distance 16, simulation 12): the vanilla path held 1.4-1.8 TPS at up to
+716 ms per tick; enabling AC mid-choke recovered to a flat 20.00 TPS in
+about 40 seconds, with roughly 13x fewer cascades and 6x cheaper gate
+updates on the same build.
+
 Two user-visible effects combine:
 - Contraptions animate about 4x faster at equivalent server load. Each wire cascade now collapses into a single network settle (~84% less wire time per gate tick), so the same per-tick budget processes more gate ticks.
 - Server TPS climbs about 40% on CPU-bound hardware. When the server is saturated (as in this 4-core baseline), wire savings convert directly into more completed ticks per second. On unconstrained hardware with headroom, TPS stays flat but the gate-throughput win persists.

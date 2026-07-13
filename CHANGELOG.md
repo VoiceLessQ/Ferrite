@@ -7,7 +7,27 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Five latent redstone defects found in a full review of the AC
+  port.** An exception mid-cascade left stale graph state that poisoned
+  every later cascade in that world; removed wires reached the Rust BFS
+  kernel as phantom power-15 sources through a sign-truncation bug (this
+  path is default-on); an out-of-range power value could abort the whole
+  JVM via a release-mode panic across the JNI boundary (now hard-clamped
+  on both sides); the parity oracle produced guaranteed false positives
+  on experimental-redstone worlds (now skipped); and a single exception
+  permanently disabled the oracle and phase counters through stuck
+  thread-locals (they self-heal every tick now). None of these changed
+  measured performance; all validators stay bit-exact.
+
 ### Changed
+
+- **AC redstone survived its first real lag machine on 26.1.2.** The
+  vanilla path held 1.4-1.8 TPS (up to 716 ms per tick); enabling
+  `/ferrite redstone ac on` mid-choke recovered to a flat 20.00 TPS in
+  about 40 seconds, ~13x fewer cascades and ~6x cheaper gate updates on
+  the same build. README benchmark section carries the numbers.
 
 - **Chunkforce predicts flight direction.** With `/ferrite chunkforce
   on`, the force-gen ring center now leads a moving player by up to 12
