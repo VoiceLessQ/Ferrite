@@ -454,6 +454,31 @@ aggressive defaults on features users cannot easily debug themselves.
 
 ---
 
+## AC redstone vs a real lag machine (2026-07-12)
+
+First test of the AC port against a purpose-built lag machine
+(schematic paste, flat world, view distance 16, simulation 12,
+single player, oracle sampling active in both arms). Vanilla wire
+path: 1.4-1.8 TPS, mspt 550-716 ms with a 1.47 s worst tick,
+2.6-2.8M wire cascades per 5 s window, gate updates avg 0.38 ms.
+Flipping `/ferrite redstone ac on` mid-choke recovered 1.4 to 3.9
+to 8.6 to 20.00 TPS in about 40 s of backlog chewing, then flat
+6 ms mspt with the machine still running (gate ticks per window
+tripled because the server could finally keep up). Under AC the
+same machine produced ~200k cascades per window at 0.065 ms per
+gate update: roughly 13x fewer cascade operations and 6x cheaper
+gates. Notably rust-bfs activations stayed 0 throughout; this win
+is the AC graph algorithm alone, the Rust BFS layer never met its
+activation threshold on this machine's network sizes.
+
+Second finding, on the oracle: a machine this dense pushes the
+sampling comparator far outside its design envelope (~10k node
+mismatches per window, deltas mostly +-1/+-2, uniform across
+positions). That is the documented mid-cascade sampling artifact at
+scale, not a correctness signal, but the WARN spam itself becomes
+measurable overhead. If lag-machine benchmarking becomes routine,
+the oracle needs a rate-limited or summarized mismatch log.
+
 ## Pregen inflight cap: 50 was binding (2026-07-12)
 
 The pregen driver's inherited inflight cap of 50 (with a comment
