@@ -633,6 +633,15 @@ leaf attribution said 20% of server thread, the outer-call monitor
 says ~10% average; the difference is per-section inner-loop frames
 and the clustered spike windows.
 
+The superlinearity check landed the same hour: 1000+ zombies packed
+on a flat world. Queries/tick fell to ~1172 (idle zombies scan
+less), but per-query cost rose 5x to 9.5-9.6 us because every box
+now holds hundreds of candidates, putting spatial queries at
+11.1-11.3 ms/tick, 38% of a 29.7 ms monster tick, with the server
+brushing the 50 ms budget. The cost driver is candidate-set width,
+exactly what an index collapses, and it grows fastest in the packed
+scenarios where servers actually die.
+
 ## Things not to re-investigate
 
 Listed so that future us, having forgotten why, does not re-open them:
