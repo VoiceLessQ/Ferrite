@@ -110,6 +110,13 @@ public final class RedstonePhaseMonitor {
 	public static void register() {
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
 			TICKS_IN_WINDOW.incrementAndGet();
+			// Self-heal the paired HEAD/RETURN counters: an exception inside
+			// a cascade or gate tick skips the RETURN inject and would leave
+			// depth/GATE_ACTIVE stuck for the rest of the session. This runs
+			// on the server thread, whose ThreadLocals carry all wire state.
+			WIRE_DEPTH.get()[0] = 0;
+			GATE_ACTIVE.get()[0] = false;
+			me.apika.apikaprobe.redstone.RedstoneOracle.resetPerTick();
 			maybeReport();
 		});
 	}

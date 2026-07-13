@@ -618,8 +618,16 @@ public class WireHandler {
 			powerNetwork();
 		} catch (Throwable t) {
 			// Leave the handler in a consistent state on exception;
-			// otherwise subsequent cascades will be locked out.
+			// otherwise subsequent cascades will be locked out. The throw
+			// skips tryUpdate's normal cleanup, so everything a cascade
+			// accumulates must be dropped here: stale Node objects cache
+			// block states, and leftover queue entries would be polled by
+			// the next cascade's powerNetwork.
 			updating = false;
+			updates.clear();
+			search.clear();
+			nodes.clear();
+			nodeCount = 0;
 			throw t;
 		} finally {
 			if (cascadeWires > 0) {
@@ -680,11 +688,15 @@ public class WireHandler {
 			for (int k = slot; k < RedstoneHandoff.NEIGHBOR_SLOTS; k++) {
 				rustNeighbors[k] = RedstoneHandoff.NO_NEIGHBOR;
 			}
+			// externalPower stays at its -1 sentinel for removed/shouldBreak
+			// wires (findExternalPower early-returns); the & 0x0F pack in
+			// writeNode would turn that into 15, a phantom full-strength
+			// source. Clamp to 0 before serialization.
 			RedstoneHandoff.writeNode(
 					i,
 					w.pos.getX(), w.pos.getY(), w.pos.getZ(),
 					w.currentPower,
-					w.externalPower,
+					Math.max(0, w.externalPower),
 					RedstoneHandoff.FLAG_IS_WIRE,
 					rustNeighbors);
 		}

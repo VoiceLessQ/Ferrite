@@ -199,8 +199,12 @@ pub fn compute_wire_power_ac(
                             virtual_power[i] = 0;
                             queue.offer(i as u32, 0);
                         } else if node.external_power > 0 {
-                            virtual_power[i] = node.external_power as i16;
-                            queue.offer(i as u32, node.external_power);
+                            // Clamp at ingestion: external_power arrives raw
+                            // from the Java ByteBuffer and must not exceed 15
+                            // (queue bucket range, vanilla signal max).
+                            let ext = node.external_power.min(15);
+                            virtual_power[i] = ext as i16;
+                            queue.offer(i as u32, ext);
                         } else {
                             virtual_power[i] = 0;
                             queue.offer(i as u32, 0);

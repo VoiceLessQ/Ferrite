@@ -14,7 +14,8 @@
 //! 0..=15), FIFO within each bucket. Same shape as Java's `tails`
 //! index array. O(N + B) where B=16 is constant.
 //!
-//! Bench-only — not wired into the validator or any cascade path.
+//! Originally bench-only; since the AC kernel landed this queue is the
+//! live drain-order structure for `redstone_ac::compute_wire_power_ac`.
 
 use std::collections::VecDeque;
 
@@ -49,7 +50,9 @@ impl PriorityQueue {
 
     pub fn offer(&mut self, id: u32, priority: u8) {
         debug_assert!((priority as usize) < NUM_BUCKETS);
-        let p = priority as usize;
+        // Hard clamp, not just the debug_assert: this queue sits behind a
+        // JNI boundary and a release-mode index panic would abort the JVM.
+        let p = (priority as usize).min(NUM_BUCKETS - 1);
         self.buckets[p].push_back(id);
         self.size += 1;
         if priority as i32 > self.head_priority {

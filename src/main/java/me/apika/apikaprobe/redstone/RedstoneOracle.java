@@ -133,6 +133,15 @@ public final class RedstoneOracle {
 
 	// --- Mixin entry points -------------------------------------------------
 
+	/** End-of-tick self-heal: an exception mid-cascade skips the RETURN
+	 *  inject, leaving depth stuck nonzero and the oracle silently dead
+	 *  for the session. Called from RedstonePhaseMonitor's tick handler
+	 *  on the server thread. */
+	public static void resetPerTick() {
+		DEPTH.get()[0] = 0;
+		SNAPSHOT.get().pos = null;
+	}
+
 	public static void onWireUpdateBegin(
 			Level world, BlockPos pos, BlockState state,
 			Orientation orientation, boolean blockAdded) {
@@ -140,6 +149,14 @@ public final class RedstoneOracle {
 		int[] depth = DEPTH.get();
 		if (depth[0]++ != 0) return;
 		Snapshot snap = SNAPSHOT.get();
+		// Experimental-redstone worlds run ExperimentalRedstoneWireEvaluator
+		// (RedStoneWireBlock.useExperimentalEvaluator); this oracle predicts
+		// with the default evaluator's math, so every comparison there is a
+		// false positive. Skip the snapshot; onWireUpdateEnd sees pos==null.
+		if (world.enabledFeatures().contains(net.minecraft.world.flag.FeatureFlags.REDSTONE_EXPERIMENTS)) {
+			snap.pos = null;
+			return;
+		}
 		snap.pos = pos.immutable();
 		snap.preWritePower = state.is(Blocks.REDSTONE_WIRE)
 				? state.getValue(RedStoneWireBlock.POWER)
