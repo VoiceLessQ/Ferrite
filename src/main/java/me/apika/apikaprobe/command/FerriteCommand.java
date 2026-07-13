@@ -1455,9 +1455,9 @@ public final class FerriteCommand {
 		if (d == null) {
 			sendFeedback(ctx, "[pregen] idle", false);
 		} else {
-			String msg = String.format("[pregen] %d/%d (%.1f/s)%s",
+			String msg = String.format("[pregen] %d/%d (%.1f/s, %d skipped)%s",
 					d.doneCount(), d.totalCount(), d.chunksPerSecond(),
-					d.isCancelled() ? " [cancelling]" : "");
+					d.skippedCount(), d.isCancelled() ? " [cancelling]" : "");
 			sendFeedback(ctx, msg, false);
 		}
 		return Command.SINGLE_SUCCESS;

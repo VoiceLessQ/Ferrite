@@ -51,6 +51,7 @@ public final class PregenDriver {
 	private final Semaphore inflight = new Semaphore(inflightCap);
 	private final SlidingWindowRate rate = new SlidingWindowRate();
 	private final AtomicInteger done = new AtomicInteger();
+	private final AtomicInteger skipped = new AtomicInteger();
 	private final CompletableFuture<Void> completion = new CompletableFuture<>();
 	private volatile boolean cancelled = false;
 
@@ -114,6 +115,7 @@ public final class PregenDriver {
 	}
 
 	public int doneCount() { return done.get(); }
+	public int skippedCount() { return skipped.get(); }
 	public int totalCount() { return total; }
 	public double chunksPerSecond() { return rate.chunksPerSecond(); }
 	public boolean isCancelled() { return cancelled; }
@@ -129,11 +131,14 @@ public final class PregenDriver {
 					break;
 				}
 				CompletableFuture
-						.supplyAsync(() -> ChunkForcer.submitAsync(world, pos.x(), pos.z()),
+						.supplyAsync(() -> ChunkForcer.submitIfMissingAsync(world, pos.x(), pos.z()),
 								world.getServer())
 						.thenCompose(f -> f)
-						.whenComplete((v, err) -> {
+						.whenComplete((generated, err) -> {
 							inflight.release();
+							if (err == null && Boolean.FALSE.equals(generated)) {
+								skipped.incrementAndGet();
+							}
 							int n = done.incrementAndGet();
 							rate.record(n);
 							progress.onProgress(n, total, rate.chunksPerSecond());

@@ -214,7 +214,10 @@ public final class WorldgenStateBootstrap {
 							}
 							@Override
 							public void onComplete(int t) {
-								ExampleMod.LOGGER.info("[autopregen] complete -- {} chunks", t);
+								me.apika.apikaprobe.worldgen.chunk.PregenDriver d =
+										me.apika.apikaprobe.worldgen.chunk.PregenDriver.active();
+								ExampleMod.LOGGER.info("[autopregen] complete -- {} chunks ({} skipped as already generated)",
+										t, d != null ? d.skippedCount() : 0);
 							}
 							@Override
 							public void onCancelled(int done, int t) {

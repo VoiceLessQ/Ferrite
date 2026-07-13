@@ -8,6 +8,10 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.Registry;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.visitors.CollectFields;
+import net.minecraft.nbt.visitors.FieldSelector;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.resources.Identifier;
@@ -106,6 +110,41 @@ public final class ChunkForcer {
 		} catch (Throwable t) {
 			return CompletableFuture.failedFuture(t);
 		}
+	}
+
+	/** Skip-aware pre-gen path (Chunky-style). Checks whether the chunk
+	 *  already reached FULL before paying ticket + load: first the live
+	 *  holder via getChunkNow, then a streaming Status-only NBT scan of
+	 *  the region file (no full chunk deserialize). Completes true if a
+	 *  generation was submitted, false if skipped as already generated.
+	 *  Caller must already be on server thread. */
+	public static CompletableFuture<Boolean> submitIfMissingAsync(ServerLevel world, int cx, int cz) {
+		if (world.getChunkSource().getChunkNow(cx, cz) != null) {
+			return CompletableFuture.completedFuture(false);
+		}
+		ChunkPos pos = new ChunkPos(cx, cz);
+		CollectFields statusCollector = new CollectFields(
+				new FieldSelector(StringTag.TYPE, "Status"));
+		CompletableFuture<Boolean> generated;
+		try {
+			generated = world.getChunkSource().chunkScanner()
+					.scanChunk(pos, statusCollector)
+					.thenApply(ignored -> {
+						if (statusCollector.getResult() instanceof CompoundTag chunkNbt) {
+							String status = chunkNbt.getString("Status").orElse("");
+							return !("minecraft:full".equals(status) || "full".equals(status));
+						}
+						return true;
+					});
+		} catch (Throwable t) {
+			return CompletableFuture.failedFuture(t);
+		}
+		// scanChunk completes on an IO worker; ticket submission must
+		// happen back on the server thread.
+		return generated.thenComposeAsync(needsGen -> {
+			if (!needsGen) return CompletableFuture.completedFuture(false);
+			return submitAsync(world, cx, cz).thenApply(v -> true);
+		}, world.getServer());
 	}
 
 	public static int inflightCount() { return inflight.size(); }
