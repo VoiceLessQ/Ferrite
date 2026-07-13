@@ -576,6 +576,46 @@ Moonrise-, or Lithium-style worldgen acceleration, they should run
 that mod instead of Ferrite for chunkgen, not both. Ferrite's lane
 stays: vanilla worldgen, bit-exact validation, tick-time wins.
 
+## 26.2 tick-time discovery: one live candidate (2026-07-13)
+
+First discovery pass on 26.2 (the 26.1.x candidate list was measured
+empty): interactive world, all monitors on, a spawned horde of 600+
+zombies, skeletons, and creepers pressing the player. Monitors at
+that load: entities 14.2 ms/tick (monster 11.5), nav-tick under 1 ms
+(vanilla's PathTypeCache absorbing the horde), block entities and
+items negligible, mob-spawn attempts ~0.5 ms into a saturated cap.
+
+A 60 s JFR (settings=profile, 2433 server-thread samples) decomposed
+the monster tick:
+
+| slice | server thread |
+|---|---|
+| EntitySection#getEntities (spatial queries) | 20.0% (top leaf) |
+| PalettedContainer#get | 13.0% |
+| goal/AI selection | 8.2% |
+| movement + collision shapes | 7.4% |
+| sensing/targeting (overlaps getEntities) | 6.9% |
+| pathfinding | 3.4% |
+
+**The candidate: entity spatial queries.** Targeting, sensing, and
+collision all ask "which entities are in this box"; vanilla answers
+with a per-mob linear scan of section buckets, O(mobs x neighbors)
+over data that barely changes between queries. Biggest single slice
+any candidate has shown since cramming, and the same family: spatial
+entity math over flat data (positions and AABBs), easy oracle
+(compare returned sets).
+
+Known risks before scoping, so the gates have targets: mid-tick
+semantics (entities move while others query; an index must update
+incrementally or accept snapshot staleness, and targeting may be
+less forgiving than cramming was); gate six looks favorable for once
+because the cost is algorithmic rather than dispatch, but the same
+structural fix might be reachable in pure Java, which would be the
+cheaper first probe; and this is Lithium's home turf, so any Rust
+index has to beat their Java-side answer, not vanilla. Next step if
+pursued: a query-count monitor (queries/tick, entities scanned per
+query) to size the win, then the six-gate check.
+
 ## Things not to re-investigate
 
 Listed so that future us, having forgotten why, does not re-open them:
