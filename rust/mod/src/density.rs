@@ -164,6 +164,15 @@ pub enum DensityFunction {
         rarity_value_mapper: RarityValueMapper,
     },
 
+    /// 26.2 `DensityFunctions.IntervalSelect(input, thresholds, functions)`.
+    /// `input < thresholds[i]` picks `functions[i]`; else the last function.
+    /// Replaces WeirdScaledSampler in the caves spaghetti DFs.
+    IntervalSelect {
+        input: Box<DensityFunction>,
+        thresholds: Vec<f64>,
+        functions: Vec<DensityFunction>,
+    },
+
     /// `DensityFunctions.Spline(CubicSpline)` — Hermite cubic spline
     /// over one or more coordinate DFs. Used by the overworld's
     /// `offset` / `factor` / `jaggedness` terrain shape formulas.
@@ -626,6 +635,7 @@ pub mod opcode {
     pub const BLENDED_NOISE: u8 = 0x17;
     pub const FIND_TOP_SURFACE: u8 = 0x18;
     pub const END_ISLAND: u8 = 0x19;
+    pub const INTERVAL_SELECT: u8 = 0x1A;
 
     // Spline sub-opcodes.
     pub const SPLINE_CONSTANT: u8 = 0x00;
@@ -763,6 +773,19 @@ fn parse_node(bytes: &[u8], c: &mut usize) -> Result<DensityFunction, String> {
             Ok(DensityFunction::FindTopSurface { density, upper_bound, lower_bound, cell_height })
         }
         opcode::END_ISLAND => Ok(DensityFunction::EndIsland(LazyEndIsland::new())),
+        opcode::INTERVAL_SELECT => {
+            let input = Box::new(parse_node(bytes, c)?);
+            let n = read_u16(bytes, c)? as usize;
+            let mut thresholds = Vec::with_capacity(n);
+            for _ in 0..n {
+                thresholds.push(read_f64(bytes, c)?);
+            }
+            let mut functions = Vec::with_capacity(n + 1);
+            for _ in 0..=n {
+                functions.push(parse_node(bytes, c)?);
+            }
+            Ok(DensityFunction::IntervalSelect { input, thresholds, functions })
+        }
         other => Err(format!("unknown DF opcode: 0x{:02x} at offset {}", other, *c - 1)),
     }
 }
@@ -937,6 +960,16 @@ impl DensityFunction {
                 } else {
                     when_out_of_range.compute(ctx, state)
                 }
+            }
+
+            DensityFunction::IntervalSelect { input, thresholds, functions } => {
+                let v = input.compute(ctx, state);
+                for (i, t) in thresholds.iter().enumerate() {
+                    if v < *t {
+                        return functions[i].compute(ctx, state);
+                    }
+                }
+                functions[functions.len() - 1].compute(ctx, state)
             }
 
             DensityFunction::Marker { wrapped, .. } => wrapped.compute(ctx, state),
@@ -1189,6 +1222,24 @@ impl DensityFunction {
                 }
             }
 
+            DensityFunction::IntervalSelect { input, thresholds, functions } => {
+                let mut input_buf = vec![0.0; n];
+                input.compute_batch(xs, ys, zs, state, &mut input_buf);
+                // Same all-branches strategy as RangeChoice above.
+                let mut bufs = vec![vec![0.0; n]; functions.len()];
+                for (f, buf) in functions.iter().zip(bufs.iter_mut()) {
+                    f.compute_batch(xs, ys, zs, state, buf);
+                }
+                for i in 0..n {
+                    let v = input_buf[i];
+                    let mut pick = functions.len() - 1;
+                    for (j, t) in thresholds.iter().enumerate() {
+                        if v < *t { pick = j; break; }
+                    }
+                    out[i] = bufs[pick][i];
+                }
+            }
+
             DensityFunction::Marker { wrapped, .. } => {
                 wrapped.compute_batch(xs, ys, zs, state, out);
             }
@@ -1347,6 +1398,12 @@ impl DensityFunction {
             DensityFunction::WeirdScaledSampler { input, .. } => {
                 input.enumerate_di_inputs(out);
             }
+            DensityFunction::IntervalSelect { input, functions, .. } => {
+                input.enumerate_di_inputs(out);
+                for f in functions {
+                    f.enumerate_di_inputs(out);
+                }
+            }
             // Spline coordinate functions can contain DIs. Walk them.
             DensityFunction::Spline(spline) => {
                 spline.enumerate_di_inputs(out);
@@ -1462,6 +1519,20 @@ impl DensityFunction {
                 if v >= *min_inclusive && v < *max_exclusive { in_v } else { out_v }
             }
 
+            DensityFunction::IntervalSelect { input, thresholds, functions } => {
+                let v = input.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter);
+                // Always eval all children for counter stability.
+                let mut vals = Vec::with_capacity(functions.len());
+                for f in functions {
+                    vals.push(f.compute_with_di_lerp(ctx, state, di_buffers, chunk_min, cell_size, corner_dims, counter));
+                }
+                let mut pick = functions.len() - 1;
+                for (j, t) in thresholds.iter().enumerate() {
+                    if v < *t { pick = j; break; }
+                }
+                vals[pick]
+            }
+
             // Leaves and per-position ops fall back to plain compute.
             // They don't contain DIs (verified by enumerate_di_inputs
             // not recursing into them).
@@ -1539,6 +1610,10 @@ impl DensityFunction {
 
             DensityFunction::WeirdScaledSampler { .. } => 0.0,
 
+            DensityFunction::IntervalSelect { functions, .. } => {
+                functions.iter().map(|f| f.min_value()).fold(f64::MAX, f64::min)
+            }
+
             DensityFunction::Spline(spline) => spline.min_value_of() as f64,
 
             // Vanilla BlendedNoise.minValue = -maxValue (see vanilla
@@ -1606,6 +1681,10 @@ impl DensityFunction {
             DensityFunction::WeirdScaledSampler {
                 noise_name, rarity_value_mapper, ..
             } => rarity_value_mapper.max_rarity() * Self::noise_max_default(noise_name),
+
+            DensityFunction::IntervalSelect { functions, .. } => {
+                functions.iter().map(|f| f.max_value()).fold(f64::MIN, f64::max)
+            }
 
             DensityFunction::Spline(spline) => spline.max_value_of() as f64,
 

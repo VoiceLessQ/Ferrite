@@ -84,6 +84,7 @@ public final class DensityFunctionWalker {
 	private static final int OP_BLENDED_NOISE = 0x17;
 	private static final int OP_FIND_TOP_SURFACE = 0x18;
 	private static final int OP_END_ISLAND = 0x19;
+	private static final int OP_INTERVAL_SELECT = 0x1A;
 	private static final int OP_SPLINE_CONSTANT = 0x00;
 	private static final int OP_SPLINE_MULTIPOINT = 0x01;
 	private static final int MARKER_INTERPOLATED = 0;
@@ -192,6 +193,11 @@ public final class DensityFunctionWalker {
 		if (cls.contains("RangeChoice") || cls.contains("RangeSelector")) {
 			encodeRangeChoice(out, node); return;
 		}
+		// 26.2 IntervalSelect: quantized spaghetti rarity (replaces
+		// WeirdScaledSampler in caves DFs). n thresholds pick among n+1 children.
+		if (cls.contains("IntervalSelect")) {
+			encodeIntervalSelect(out, node); return;
+		}
 		if (cls.contains("Constant")) { encodeConstant(out, node); return; }
 		// Yarn `InterpolatedNoiseSampler` (mojmap `BlendedNoise`) — vanilla's
 		// main 3D terrain density. Tested before the generic "Noise" catch
@@ -233,7 +239,9 @@ public final class DensityFunctionWalker {
 		// Mul(Constant, X) it was folded from. Without this, fingerprints
 		// of any subtree containing a constant-folded Mul/Add (very common
 		// in vanilla worldgen) diverge between pre/post mapAll.
-		if (cls.contains("LinearOperation")) {
+		// 26.2 mojmap constant-folds Mul/Add into MulOrAdd, same record
+		// shape as yarn's LinearOperation {specificType, input, argument}.
+		if (cls.contains("LinearOperation") || cls.equals("MulOrAdd") || cls.endsWith("$MulOrAdd")) {
 			encodeLinearOperation(out, node);
 			return;
 		}
@@ -466,6 +474,26 @@ public final class DensityFunctionWalker {
 		writeNode(out, invokeAny(node, new String[]{"whenOutOfRange"}));
 	}
 
+	private static void encodeIntervalSelect(ByteArrayOutputStream out, Object node) {
+		out.write(OP_INTERVAL_SELECT);
+		writeNode(out, invokeAny(node, new String[]{"input"}));
+		double[] thresholds = null;
+		Object tObj = invokeAny(node, new String[]{"thresholds"});
+		if (tObj != null) {
+			try {
+				thresholds = (double[]) tObj.getClass().getMethod("toDoubleArray").invoke(tObj);
+			} catch (ReflectiveOperationException | ClassCastException ignored) {
+				// fall through to empty
+			}
+		}
+		Object fObj = invokeAny(node, new String[]{"functions"});
+		java.util.List<?> functions = fObj instanceof java.util.List<?> list ? list : java.util.List.of();
+		int n = thresholds == null ? 0 : Math.min(thresholds.length, Math.max(0, functions.size() - 1));
+		writeShort(out, n);
+		for (int i = 0; i < n; i++) writeDouble(out, thresholds[i]);
+		for (int i = 0; i <= n && i < functions.size(); i++) writeNode(out, functions.get(i));
+	}
+
 	private static void encodeNoise(ByteArrayOutputStream out, Object node) {
 		out.write(OP_NOISE);
 		String name = resolveNoiseName(invokeAny(node, new String[]{"noise"}));
@@ -640,6 +668,23 @@ public final class DensityFunctionWalker {
 	private static final java.util.concurrent.ConcurrentHashMap<String, Boolean> dumpedCoordClass =
 			new java.util.concurrent.ConcurrentHashMap<>();
 
+	/** True if the object implements an interface named DensityFunction anywhere in its hierarchy. */
+	private static boolean isDensityFunction(Object o) {
+		for (Class<?> c = o.getClass(); c != null; c = c.getSuperclass()) {
+			for (Class<?> i : c.getInterfaces()) {
+				if (i.getSimpleName().equals("DensityFunction") || isDfInterface(i)) return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean isDfInterface(Class<?> iface) {
+		for (Class<?> i : iface.getInterfaces()) {
+			if (i.getSimpleName().equals("DensityFunction") || isDfInterface(i)) return true;
+		}
+		return false;
+	}
+
 	private static Object extractSplineCoordFn(Object coord) {
 		if (coord == null) return null;
 		// One-shot dump per class: list its no-arg methods so we can see
@@ -668,6 +713,9 @@ public final class DensityFunctionWalker {
 			"function", "densityFunction", "densityFunctionWrapper",
 			"holder", "delegate", "df",
 		});
+		// 26.2: Coordinate.function() returns the DensityFunction directly
+		// (often a HolderHolder), no Holder wrapper. writeNode handles it.
+		if (holder != null && isDensityFunction(holder)) return holder;
 		if (holder == null) {
 			// Brute force: walk no-arg accessors looking for a Holder.
 			for (Method m : coord.getClass().getDeclaredMethods()) {

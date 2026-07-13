@@ -518,24 +518,30 @@ public final class DensityParity {
 	}
 
 	private static Method findMapAll(Class<?> dfClass, Class<?> visitorClass) {
-		// Yarn renames mojmap `mapAll` to something like `apply`. Find by
-		// signature: a method taking exactly the visitor interface as its
-		// single parameter, returning DensityFunction (or its supertype).
+		// 26.2 split the visitor into mapChildren (direct children only) and
+		// mapAll (recursive default). Signature alone matches both; prefer the
+		// method literally named mapAll, else fall back to signature match
+		// (yarn renames on 1.21.11 main).
+		Method fallback = null;
 		Class<?> c = dfClass;
 		while (c != null && c != Object.class) {
 			for (Method m : c.getDeclaredMethods()) {
 				if (m.getParameterCount() == 1 && m.getParameterTypes()[0].equals(visitorClass)) {
 					m.setAccessible(true);
-					return m;
+					if (m.getName().equals("mapAll")) return m;
+					if (fallback == null) fallback = m;
 				}
 			}
 			c = c.getSuperclass();
 		}
 		for (Class<?> iface : dfClass.getInterfaces()) {
 			Method m = findMapAll(iface, visitorClass);
-			if (m != null) return m;
+			if (m != null) {
+				if (m.getName().equals("mapAll")) return m;
+				if (fallback == null) fallback = m;
+			}
 		}
-		return null;
+		return fallback;
 	}
 
 	/**
