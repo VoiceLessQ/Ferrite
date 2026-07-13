@@ -616,6 +616,23 @@ index has to beat their Java-side answer, not vanilla. Next step if
 pursued: a query-count monitor (queries/tick, entities scanned per
 query) to size the win, then the six-gate check.
 
+Same day, the `[entity-query]` monitor (commit `dbd3bc2`, mixin on
+both `EntitySectionStorage.getEntities` overloads) put numbers on
+gate 3 and the six-gate check passed, the first candidate to clear
+all gates since cramming: 1490-1560 queries/tick at the 600-mob
+horde, 1.7-2.8 us per query steady-state (40x the 50 ns JIT death
+line; the cost is candidate-set width, not dispatch), 2.5-4.1
+ms/tick mean with p95 spikes to 16.8 ms when the horde clusters.
+Win ceiling at that load is roughly 2-3 ms/tick average and most of
+the spike windows, scaling superlinearly with mob count. Two design
+centerpieces carried into scoping: mid-tick query semantics
+(entities move while others query; incremental index updates vs
+snapshot staleness) and the set-compare shadow oracle
+(RedstoneOracle pattern, entity-id sets). One accounting note: JFR
+leaf attribution said 20% of server thread, the outer-call monitor
+says ~10% average; the difference is per-section inner-loop frames
+and the clustered spike windows.
+
 ## Things not to re-investigate
 
 Listed so that future us, having forgotten why, does not re-open them:
