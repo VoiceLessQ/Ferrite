@@ -187,6 +187,44 @@ public final class WorldgenStateBootstrap {
 				ExampleMod.LOGGER.error("[autovalidate] failure", t);
 			}
 		}
+
+		// One-shot auto-pregen, gated by -Dferrite.autopregen=cx,cz,radius.
+		// Kicks a pregen run at the given chunk coords right after worldgen
+		// state finalize; rate lines land in the log as [ferrite-pregen].
+		// Headless chunks/s measurement without driving an interactive client.
+		String apProp = System.getProperty("ferrite.autopregen");
+		if (apProp != null && !apProp.isEmpty()) {
+			try {
+				String[] parts = apProp.split(",");
+				int cx = Integer.parseInt(parts[0].trim());
+				int cz = Integer.parseInt(parts[1].trim());
+				int radius = Integer.parseInt(parts[2].trim());
+				int total = (2 * radius + 1) * (2 * radius + 1);
+				ExampleMod.LOGGER.info("[autopregen] starting @ chunk ({}, {}) radius={} ({} chunks, inflight={})",
+						cx, cz, radius, total, me.apika.apikaprobe.worldgen.chunk.PregenDriver.maxInflight);
+				me.apika.apikaprobe.worldgen.chunk.PregenDriver.run(
+						server.overworld(), cx, cz, radius,
+						new me.apika.apikaprobe.worldgen.chunk.PregenProgressListener() {
+							@Override
+							public void onProgress(int done, int t, double rate) {
+								if (done % 500 == 0 || done == t) {
+									ExampleMod.LOGGER.info(String.format(
+											"[autopregen] %d/%d chunks (%.1f/s)", done, t, rate));
+								}
+							}
+							@Override
+							public void onComplete(int t) {
+								ExampleMod.LOGGER.info("[autopregen] complete -- {} chunks", t);
+							}
+							@Override
+							public void onCancelled(int done, int t) {
+								ExampleMod.LOGGER.info("[autopregen] cancelled -- {}/{} chunks", done, t);
+							}
+						});
+			} catch (RuntimeException e) {
+				ExampleMod.LOGGER.warn("[autopregen] bad property '{}' (want cx,cz,radius): {}", apProp, e.toString());
+			}
+		}
 	}
 
 	/**
