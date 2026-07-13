@@ -38,6 +38,7 @@
 		"TickHandSwingMixin",
 		"TickNewAiMixin",
 		"ActiveTargetGoalMixin",
+		"EntitySectionStorageMixin",
 		"GoalSelectorMixin",
 		"MoveControlMixin",
 		"LookControlMixin",

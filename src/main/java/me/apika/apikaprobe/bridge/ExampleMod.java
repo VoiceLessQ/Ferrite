@@ -23,6 +23,7 @@ import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
 import me.apika.apikaprobe.monitor.AquiferMonitor;
 import me.apika.apikaprobe.monitor.ChunkGenMonitor;
 import me.apika.apikaprobe.monitor.ChunkSaveMonitor;
+import me.apika.apikaprobe.monitor.EntityQueryMonitor;
 import me.apika.apikaprobe.monitor.EntityTickMonitor;
 import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
 import me.apika.apikaprobe.monitor.LightTimingMonitor;
@@ -82,6 +83,7 @@ public class ExampleMod implements ModInitializer {
 		MovementInternalsMonitor.register();
 		MonsterPhaseMonitor.register();
 		TargetScanMonitor.register();
+		EntityQueryMonitor.register();
 		GoalSelectorMonitor.register();
 		MoveControlMonitor.register();
 		LookControlMonitor.register();
