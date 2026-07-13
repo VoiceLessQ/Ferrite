@@ -7,6 +7,17 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Added
+
+- **Pre-gen now skips chunks that are already generated.** Before
+  paying a ticket and a FULL-status promotion, the driver checks the
+  live chunk holder, then stream-scans the region file for just the
+  chunk's Status field (no full deserialize). Re-running pre-gen over
+  existing terrain completes at thousands of chunks per second instead
+  of re-loading every chunk from disk; measured 289/289 skipped
+  sub-second on a fully generated area, with virgin-generation
+  throughput unchanged. Skip counts show in `/ferrite pregen status`.
+
 ## [0.6.6-alpha] - 2026-07-13
 
 ### Fixed
