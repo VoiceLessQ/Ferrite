@@ -7,6 +7,8 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.6.6-alpha] - 2026-07-13
+
 ### Fixed
 
 - **Five latent redstone defects found in a full review of the AC
