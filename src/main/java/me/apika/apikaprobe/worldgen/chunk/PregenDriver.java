@@ -136,7 +136,11 @@ public final class PregenDriver {
 						.thenCompose(f -> f)
 						.whenComplete((generated, err) -> {
 							inflight.release();
-							if (err == null && Boolean.FALSE.equals(generated)) {
+							if (err != null) {
+								me.apika.apikaprobe.bridge.ExampleMod.LOGGER.warn(
+										"[pregen] chunk ({}, {}) failed: {}",
+										pos.x(), pos.z(), err.toString());
+							} else if (Boolean.FALSE.equals(generated)) {
 								skipped.incrementAndGet();
 							}
 							int n = done.incrementAndGet();

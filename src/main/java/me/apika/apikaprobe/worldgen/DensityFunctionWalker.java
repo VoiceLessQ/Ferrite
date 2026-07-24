@@ -482,16 +482,25 @@ public final class DensityFunctionWalker {
 		if (tObj != null) {
 			try {
 				thresholds = (double[]) tObj.getClass().getMethod("toDoubleArray").invoke(tObj);
-			} catch (ReflectiveOperationException | ClassCastException ignored) {
-				// fall through to empty
+			} catch (ReflectiveOperationException | ClassCastException e) {
+				throw new IllegalStateException("IntervalSelect thresholds extraction failed on "
+						+ node.getClass().getName() + " (got " + tObj.getClass().getName() + ")", e);
 			}
 		}
 		Object fObj = invokeAny(node, new String[]{"functions"});
 		java.util.List<?> functions = fObj instanceof java.util.List<?> list ? list : java.util.List.of();
-		int n = thresholds == null ? 0 : Math.min(thresholds.length, Math.max(0, functions.size() - 1));
+		// A degenerate encode (0 thresholds, 1 child) is a silent wrong-caves
+		// bug downstream; fail loudly instead so the walker mismatch surfaces.
+		if (thresholds == null || functions.size() != thresholds.length + 1) {
+			throw new IllegalStateException("IntervalSelect shape mismatch on "
+					+ node.getClass().getName() + ": thresholds="
+					+ (thresholds == null ? "null" : thresholds.length)
+					+ " functions=" + functions.size());
+		}
+		int n = thresholds.length;
 		writeShort(out, n);
 		for (int i = 0; i < n; i++) writeDouble(out, thresholds[i]);
-		for (int i = 0; i <= n && i < functions.size(); i++) writeNode(out, functions.get(i));
+		for (int i = 0; i <= n; i++) writeNode(out, functions.get(i));
 	}
 
 	private static void encodeNoise(ByteArrayOutputStream out, Object node) {

@@ -135,6 +135,14 @@ public final class ChunkForcer {
 							return !("minecraft:full".equals(status) || "full".equals(status));
 						}
 						return true;
+					})
+					// Fail open: a scan error (corrupt/locked region, IO worker
+					// shutdown) must not silently skip the chunk. Generate instead.
+					.exceptionally(t -> {
+						me.apika.apikaprobe.bridge.ExampleMod.LOGGER.warn(
+								"[pregen] status scan failed for chunk ({}, {}), generating anyway: {}",
+								cx, cz, t.toString());
+						return true;
 					});
 		} catch (Throwable t) {
 			return CompletableFuture.failedFuture(t);
