@@ -18,6 +18,25 @@ marks pre-release research builds.
   sub-second on a fully generated area, with virgin-generation
   throughput unchanged. Skip counts show in `/ferrite pregen status`.
 
+### Fixed
+
+- **An unreadable region file no longer makes pre-gen skip chunks.**
+  If the Status scan failed (locked file, IO worker shutting down, a
+  region the reader cannot open), the chunk was treated as already
+  generated and silently left ungenerated. The scan now fails open:
+  it names the chunk in the log and generates it. Verified by holding
+  an exclusive lock on a region file during a 121-chunk run, which
+  produced 121 warnings and 121 generated chunks instead of 121 silent
+  skips. Chunks whose generation itself fails are logged too, rather
+  than counted as done.
+- **Malformed IntervalSelect nodes now stop the walker instead of
+  encoding wrong caves.** A density function node whose threshold and
+  child counts disagree used to encode as a degenerate node, which
+  reads as valid bytecode and produces wrong cave terrain with no
+  error anywhere. The walker now rejects it and says what it saw.
+  Every IntervalSelect in the live 26.2 registry passes; density
+  parity stays 50/50 bit-exact at 2000 samples.
+
 ## [0.6.6-alpha] - 2026-07-13
 
 ### Fixed
