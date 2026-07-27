@@ -228,6 +228,7 @@ To cross-check the Rust side alone: `cargo test` from the repo root runs the ker
 
 - The redstone wire algorithm is adapted from [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current) (MIT). Full attribution in [LICENSES.md](LICENSES.md). The port targets 26.x mojmap and installs transparently as a `DefaultRedstoneController` subclass; the design and algorithm remain entirely Space Walker's.
 - The JNI / native-loading scaffolding was originally forked from [Brayan-724/rust-mod-probe](https://github.com/Brayan-724/rust-mod-probe), the proof of concept that demonstrated calling Rust from Fabric.
+- Linux aarch64 support was contributed and tested on real hardware (a Raspberry Pi 4B running a full server) by [cwright814](https://github.com/cwright814) in PR #8.
 
 ---
 
