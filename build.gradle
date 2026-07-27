@@ -122,9 +122,16 @@ if (hostOs.isWindows()) {
 	nativeLibName = 'rust_mod.dll'
 	nativeOsDir = 'windows'
 } else if (hostOs.isLinux()) {
-	nativeTarget = 'x86_64-unknown-linux-gnu'
-	nativeLibName = 'librust_mod.so'
-	nativeOsDir = 'linux'
+	def hostArch = System.getProperty("os.arch", "").toLowerCase()
+	if (hostArch.contains("aarch64") || hostArch.contains("arm64")) {
+		nativeTarget = 'aarch64-unknown-linux-gnu'
+		nativeLibName = 'librust_mod.so'
+		nativeOsDir = 'linux-aarch64'
+	} else {
+		nativeTarget = 'x86_64-unknown-linux-gnu'
+		nativeLibName = 'librust_mod.so'
+		nativeOsDir = 'linux'
+	}
 } else if (hostOs.isMacOsX()) {
 	nativeTarget = 'aarch64-apple-darwin'
 	nativeLibName = 'librust_mod.dylib'

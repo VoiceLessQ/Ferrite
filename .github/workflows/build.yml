@@ -60,6 +60,29 @@ jobs:
           path: target/x86_64-unknown-linux-gnu/release/librust_mod.so
           if-no-files-found: error
 
+  build-native-linux-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: install gcc-aarch64-linux-gnu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: add aarch64 rust target
+        run: rustup target add aarch64-unknown-linux-gnu
+      - name: cargo build (aarch64-unknown-linux-gnu)
+        shell: bash
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --release --target aarch64-unknown-linux-gnu --manifest-path=rust/mod/Cargo.toml
+      - name: upload native
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-linux-aarch64
+          path: target/aarch64-unknown-linux-gnu/release/librust_mod.so
+          if-no-files-found: error
+
   build-native-macos:
     runs-on: macos-latest
     steps:
@@ -90,7 +113,7 @@ jobs:
           if-no-files-found: error
 
   assemble-jar:
-    needs: [build-native-windows, build-native-linux, build-native-macos]
+    needs: [build-native-windows, build-native-linux, build-native-linux-aarch64, build-native-macos]
     runs-on: ubuntu-latest
     steps:
       - name: checkout
@@ -112,6 +135,11 @@ jobs:
         with:
           name: native-linux
           path: src/main/resources/assets/ferrite/natives/linux
+      - name: download linux aarch64 native
+        uses: actions/download-artifact@v4
+        with:
+          name: native-linux-aarch64
+          path: src/main/resources/assets/ferrite/natives/linux-aarch64
       - name: download macos native
         uses: actions/download-artifact@v4
         with:
