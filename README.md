@@ -195,6 +195,35 @@ The native library is bundled for Windows, Linux (x86_64 and aarch64), and macOS
 
 ---
 
+## Building from source
+
+If you'd rather build the jar yourself than download it from Modrinth or CurseForge:
+
+**Prerequisites**
+
+- JDK 25
+- Rust (stable, via [rustup](https://rustup.rs/))
+- A C linker for your platform:
+  - Windows: mingw-w64 GCC via MSYS2, see [docs/SETUP_MINGW.md](docs/SETUP_MINGW.md) for the full setup
+  - Linux: system GCC (`build-essential` or equivalent)
+  - macOS: Xcode command line tools
+
+**Build**
+
+```
+git clone https://github.com/VoiceLessQ/Ferrite.git
+cd Ferrite
+./gradlew build
+```
+
+The `buildRustLib` task compiles the native library for your host platform automatically (it runs `cargo build --release` with the right target triple) and copies it into the jar resources. The finished jar lands in `build/libs/`.
+
+A locally built jar only bundles the native for the platform you built on. The release jars bundle all four (Windows x86_64, Linux x86_64, Linux aarch64, macOS universal) because CI builds each on its own runner; on any other platform your local jar still runs, it just falls back to vanilla behavior.
+
+To cross-check the Rust side alone: `cargo test` from the repo root runs the kernel test suite, and `cargo clippy --release` matches the lint gate CI enforces.
+
+---
+
 ## Credits
 
 - The redstone wire algorithm is adapted from [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current) (MIT). Full attribution in [LICENSES.md](LICENSES.md). The port targets 26.1.2 mojmap and installs transparently as a `DefaultRedstoneController` subclass; the design and algorithm remain entirely Space Walker's.

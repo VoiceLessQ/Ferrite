@@ -9,6 +9,15 @@ marks pre-release research builds.
 
 ### Added
 
+- **Linux aarch64 native support** (PR #8, contributed by cwright814,
+  tested on a Raspberry Pi 4B). The jar now bundles a fourth native
+  built by a new CI cross-compile job; `RustBridge` picks it by
+  `os.arch` at load time, and local Gradle builds on ARM hosts target
+  it automatically. Verified in the field: a full server on a 2GB
+  Pi 4B under OpenJ9 with memory to spare.
+- **Building-from-source section in the README**: toolchain
+  prerequisites per platform, the one-command Gradle build, and what a
+  locally built jar bundles versus the CI release jars.
 - **Pre-gen now skips chunks that are already generated.** Before
   paying a ticket and a FULL-status promotion, the driver checks the
   live chunk holder, then stream-scans the region file for just the
