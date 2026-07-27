@@ -17,8 +17,9 @@ marks pre-release research builds.
   Parity re-verified on the LTO build: noise 63/63, density 50/50
   bit-exact, biome 1999/2000 (the documented tie). No
   `panic = "abort"`: unwinding is what lets a native panic fall
-  back to vanilla instead of killing the server. In-game perf A/B
-  pending; profile is compute-identical, only inlining changes.
+  back to vanilla instead of killing the server. In-game A/B at a
+  1022-zombie cramming farm: 38-41 ms/tick LTO vs 37-40 ms/tick old
+  profile, within noise; perf-neutral, kept for the size win.
 - **Removed the aarch64 to x86_64 native fallback** in the loader:
   a wrong-arch library can never load, so the fallback only
   replaced an honest "not bundled for this platform" log with a
