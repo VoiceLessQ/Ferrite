@@ -34,6 +34,7 @@ Full measurement tables, methodology, and source: [github.com/VoiceLessQ/Ferrite
 ## Credits
 
 * Redstone wire algorithm adapted from [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current) (MIT); the design and algorithm remain entirely Space Walker's.
+* Linux aarch64 support contributed and tested on real hardware by [cwright814](https://github.com/cwright814).
 * JNI scaffolding originally forked from [Brayan-724/rust-mod-probe](https://github.com/Brayan-724/rust-mod-probe).
 
 MIT licensed.
