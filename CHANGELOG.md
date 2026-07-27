@@ -7,6 +7,8 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.6.7-alpha] - 2026-07-27
+
 ### Added
 
 - **Linux aarch64 native support** (PR #8, contributed by cwright814,
