@@ -7,6 +7,36 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.7.0-alpha] - 2026-07-27
+
+First release on Minecraft 26.2.
+
+### Changed
+
+- **Ported to Minecraft 26.2** (mojmap, JDK 25). Density parity is
+  50/50 bit-exact at 2000 samples after re-syncing the walker to
+  26.2's API: findMapAll now prefers the method actually named
+  mapAll (26.2 added a mapChildren with the same signature), spline
+  coordinates return their DensityFunction directly instead of a
+  Holder, and two new node types are encoded end to end
+  (IntervalSelect, which replaces WeirdScaledSampler in cave
+  routing, and MulOrAdd). Noise 63/63. Chunkgen throughput measured
+  performance-neutral against the 26.1.2 build: 110-114 chunks/s on
+  two 3721-chunk virgin pre-gen runs vs ~115/s baseline.
+- **AC redstone re-verified in-game on 26.2**: Rust BFS active on
+  33.7% of 24,700 cascades in a pulse-machine session, TPS 20.00
+  held, zero oracle mismatches outside the documented
+  scheduled-tick false-positive window.
+
+### Known issues
+
+- Biome parity is 1999/2000: one lush_caves vs dripstone_caves
+  disagreement at extreme coordinates (9,000+ blocks out), under
+  investigation. Biome selection only; no terrain or save effect.
+- The deep-marker diagnostic walk registers no interior cache
+  routes on 26.2. Affects default-off diagnostics only; no live
+  path reads those fingerprints.
+
 ### Added
 
 - **Linux aarch64 native support** (PR #8, contributed by cwright814,

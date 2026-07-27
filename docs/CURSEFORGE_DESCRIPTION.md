@@ -1,7 +1,7 @@
 
 ## Ferrite
 
-**What you get:** A performance mod for Minecraft 26.1.2 (mojmap, JDK 25). Built natively against 26.1's deobfuscated source rather than recompiled from the 1.21.11 codebase, so the parity and tick-cost numbers below are measured on 26.1.2 directly. It's a Fabric (Java) mod that calls into native Rust via JNI for the hot paths. Java handles Minecraft integration and mixins, Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary. The 1.21.11 line continues separately on the `main` branch.
+**What you get:** A performance mod for Minecraft 26.2 (mojmap, JDK 25). Built natively against the current deobfuscated source rather than recompiled from an older codebase; parity re-validated on 26.2 (density 50/50 bit-exact, noise 63/63) and chunkgen measured performance-neutral against the 26.1.2 build. Most tick-cost numbers below were measured on 26.1.2; AC redstone was re-verified in-game on 26.2. It's a Fabric (Java) mod that calls into native Rust via JNI for the hot paths. Java handles Minecraft integration and mixins, Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary. The 1.21.11 line continues separately on the `main` branch.
 
 **Live now:**
 
@@ -72,10 +72,10 @@ Low-end hardware (4-core CPU, integrated graphics) is especially useful — the 
 
 ## Requirements
 
-* Minecraft 26.1.2 (this build) / Minecraft 1.21.11 (separate `main` branch builds)
+* Minecraft 26.2 (this build) / 26.1.2 and 1.21.11 available as older releases
 * Java 25 (Temurin recommended; CI builds against JDK 25)
-* Fabric Loader 0.18.4+
-* Fabric API 0.147.0+26.1.2
+* Fabric Loader 0.19.3+
+* Fabric API 0.154.2+26.2
 * Works in **singleplayer and multiplayer**
 * **Server-side compatible** , can be installed on a server without requiring players to have the mod
 
