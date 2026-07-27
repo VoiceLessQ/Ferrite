@@ -58,12 +58,10 @@ public class RustBridge {
       return false;
     }
 
+    // No cross-arch fallback: an x86_64 .so can never load on an aarch64
+    // JVM, so falling back only trades an honest "not bundled" log for a
+    // misleading "failed to load" one.
     InputStream in = RustBridge.class.getResourceAsStream(resourcePath);
-    if (in == null && NATIVE_LINUX_AARCH64.equals(resourcePath)) {
-      resourcePath = NATIVE_LINUX;
-      in = RustBridge.class.getResourceAsStream(resourcePath);
-    }
-
     if (in == null) {
       ExampleMod.LOGGER.error(
           "rust_mod native not found in jar at {}. Jar built without native for this platform — running without native support.",

@@ -6,3 +6,14 @@ members = [
   "rust/mc",
   "rust/mod",
 ]
+
+# Fat LTO + one codegen unit: measured 2.1 MB -> 794 KB on the dll
+# (dead cross-crate code eliminated), build 14 s -> 21 s. Keep the
+# symbol table (strip debuginfo only) so native crash reports from
+# user hardware still carry function names. No panic=abort: the
+# cdylib lives inside a JVM and unwinding is the vanilla-fallback
+# safety story.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "debuginfo"
