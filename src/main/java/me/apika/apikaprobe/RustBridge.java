@@ -14,6 +14,7 @@ public class RustBridge {
   // picks the one that matches the host OS at runtime.
   private static final String NATIVE_WINDOWS = "/assets/ferrite/natives/windows/rust_mod.dll";
   private static final String NATIVE_LINUX   = "/assets/ferrite/natives/linux/librust_mod.so";
+  private static final String NATIVE_LINUX_AARCH64 = "/assets/ferrite/natives/linux-aarch64/librust_mod.so";
   private static final String NATIVE_MACOS   = "/assets/ferrite/natives/macos/librust_mod.dylib";
 
   public static final boolean NATIVE_AVAILABLE;
@@ -34,13 +35,18 @@ public class RustBridge {
 
   private static boolean loadNativeLibrary() {
     String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+    String osArch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
     String resourcePath;
     String tempSuffix;
     if (osName.contains("win")) {
       resourcePath = NATIVE_WINDOWS;
       tempSuffix = ".dll";
     } else if (osName.contains("linux")) {
-      resourcePath = NATIVE_LINUX;
+      if (osArch.contains("aarch64") || osArch.contains("arm64")) {
+        resourcePath = NATIVE_LINUX_AARCH64;
+      } else {
+        resourcePath = NATIVE_LINUX;
+      }
       tempSuffix = ".so";
     } else if (osName.contains("mac") || osName.contains("darwin")) {
       resourcePath = NATIVE_MACOS;
@@ -52,14 +58,20 @@ public class RustBridge {
       return false;
     }
 
-    try (InputStream in = RustBridge.class.getResourceAsStream(resourcePath)) {
-      if (in == null) {
-        ExampleMod.LOGGER.error(
-            "rust_mod native not found in jar at {}. Jar built without native for this platform — running without native support.",
-            resourcePath);
-        return false;
-      }
+    InputStream in = RustBridge.class.getResourceAsStream(resourcePath);
+    if (in == null && NATIVE_LINUX_AARCH64.equals(resourcePath)) {
+      resourcePath = NATIVE_LINUX;
+      in = RustBridge.class.getResourceAsStream(resourcePath);
+    }
 
+    if (in == null) {
+      ExampleMod.LOGGER.error(
+          "rust_mod native not found in jar at {}. Jar built without native for this platform — running without native support.",
+          resourcePath);
+      return false;
+    }
+
+    try {
       File tempFile = File.createTempFile("rust_mod_", tempSuffix);
       tempFile.deleteOnExit();
       Files.copy(in, tempFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
@@ -73,6 +85,10 @@ public class RustBridge {
           "rust_mod native library failed to load — falling back to Java. Reason: {}",
           e.getMessage());
       return false;
+    } finally {
+      try {
+        in.close();
+      } catch (IOException ignored) {}
     }
   }
 
