@@ -7,6 +7,22 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Changed
+
+- **Monitor logging defaults off on small heaps.** Max heap of 3 GB
+  or less (Pi-class servers, often on slow SD-card I/O) now boots
+  with the periodic monitor reports silenced instead of paying ~5
+  log lines/sec. Counters still run; `/ferrite log monitors on` or
+  `-Dferrite.log.monitors.on=true` re-enables at any time. Normal
+  heaps keep the old default.
+
+### Added
+
+- **One-line hardware stamp at boot**: `[hw] arch cores maxHeap jvm
+  native monitors`, so shared log excerpts self-describe the host
+  they came from. Field reports from low-end hardware no longer
+  need follow-up questions about specs.
+
 ## [0.7.1-alpha] - 2026-07-27
 
 ### Fixed

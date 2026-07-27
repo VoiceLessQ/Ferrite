@@ -57,6 +57,16 @@ public class ExampleMod implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		LOGGER.info("Hello Fabric world!");
+		// One-line hardware stamp so shared logs self-describe their host.
+		LOGGER.info("[hw] arch={} cores={} maxHeap={}MB jvm={} native={} monitors={}",
+				System.getProperty("os.arch"),
+				Runtime.getRuntime().availableProcessors(),
+				Runtime.getRuntime().maxMemory() / (1024 * 1024),
+				System.getProperty("java.vm.name"),
+				me.apika.apikaprobe.RustBridge.NATIVE_AVAILABLE,
+				me.apika.apikaprobe.monitor.MonitorLog.ENABLED
+						? "on" : (me.apika.apikaprobe.monitor.MonitorLog.SMALL_HEAP
+								? "off(small-heap)" : "off"));
 
 		TpsMonitor.register();
 		// NoiseStageMonitor and AquiferMonitor must register BEFORE ChunkGenMonitor
