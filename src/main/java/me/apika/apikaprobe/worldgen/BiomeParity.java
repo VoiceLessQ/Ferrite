@@ -34,6 +34,9 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class BiomeParity {
 	private static final AtomicReference<Object> lastBiomeSource = new AtomicReference<>();
+	/** All captured sources; validate picks the overworld one by biome set. */
+	private static final java.util.List<Object> allBiomeSources =
+			java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 	/** The {@code Climate.Sampler} for the live overworld (mojmap)
 	 *  / yarn `Climate.Sampler`. Captured at world
 	 *  load, used by {@link #lookupBiomeAt} to sample climate at any
@@ -46,6 +49,28 @@ public final class BiomeParity {
 	/** Called by {@code MultiNoiseBiomeSourceCaptureMixin} on construction. */
 	public static void captureBiomeSource(Object biomeSource) {
 		lastBiomeSource.set(biomeSource);
+		allBiomeSources.add(biomeSource);
+	}
+
+	/** Pick the overworld source: its possibleBiomes contains plains.
+	 *  The nether source is constructed after the overworld one, so
+	 *  lastBiomeSource alone compares our overworld tree against nether
+	 *  ground truth (0/2000, all crimson_forest answers). */
+	private static Object overworldBiomeSource() {
+		synchronized (allBiomeSources) {
+			for (Object src : allBiomeSources) {
+				try {
+					Method m = src.getClass().getMethod("possibleBiomes");
+					Object biomes = m.invoke(src);
+					if (biomes != null && biomes.toString().contains("minecraft:plains")) {
+						return src;
+					}
+				} catch (ReflectiveOperationException ignored) {
+					// fall through to next candidate
+				}
+			}
+		}
+		return lastBiomeSource.get();
 	}
 
 	/** Called by {@code WorldgenStateBootstrap} after it resolves the
@@ -206,7 +231,7 @@ public final class BiomeParity {
 		if (biomeNames.isEmpty()) {
 			return "[biome-parity] no biomes registered with Rust — load an overworld first";
 		}
-		Object biomeSource = lastBiomeSource.get();
+		Object biomeSource = overworldBiomeSource();
 		if (biomeSource == null) {
 			return "[biome-parity] vanilla MultiNoiseBiomeSource not captured";
 		}

@@ -719,6 +719,47 @@ change could have moved, run it, and let the number decide. This
 whole section only works because each closure wrote its number down;
 a closure without one would be a superstition we couldn't check.
 
+## Biome 1999/2000, diagnosed and closed (2026-07-27)
+
+The one biome miss from the 26.2 recon turned out to be an exact
+distance tie, worked out by hand against 26.2's
+OverworldBiomeBuilder. The failing sample is climate target
+(t=8982, h=10081, c=8386, e=18516, d=5122, w=-13016), quantized
+x10000. The two cave biomes differ in exactly one box each:
+dripstone_caves constrains continentalness to [8000, 10000],
+lush_caves constrains humidity to [7000, 10000]; everything else
+they share. At this target, continentalness 8386 is inside both
+boxes and humidity 10081 is 81 outside both (it also exceeds
+FULL_RANGE). Per-axis distances come out identical on every axis:
+81 (humidity), 8516 (erosion, outside every biome's box), 3016
+(weirdness). Fitness ties at 81,625,073 on both sides. Vanilla's
+tree search happens to reach dripstone first (registered first,
+OverworldBiomeBuilder line 833); our R-tree reaches lush. Both are
+nearest.
+
+The reason only the validator ever sees it: the parity check
+samples uniformly in plus-minus 20000 per axis, but real terrain
+never produces erosion 1.85. Ties need a point that is outside
+multiple boxes at once by matching margins, and the in-gamut
+climate space has a strict nearest biome at every sampled point,
+which is why 1999 of 2000 and every earlier 100-sample recon pass
+cleanly.
+
+Two side findings from the same session. The in-game
+`/ferrite biome validate` command had been comparing our overworld
+tree against whichever MultiNoiseBiomeSource was constructed last,
+which is the nether's, producing a screaming 0/2000 with
+crimson_forest answers; the validator now picks the captured source
+whose biome set contains plains. And the deep-marker walk on 26.2
+reports found=8 registered=0 because the walk dedup-returns on the
+pre-seeded router roots without recursing into them; every consumer
+of those fingerprints is default-off, so it degrades diagnostics
+only. Fix queued, not urgent.
+
+Verdict: no bug, no code change to the R-tree, closed. If a future
+validator wants 2000/2000, the honest change is to count
+equal-fitness answers as a pass, not to nudge sampling ranges.
+
 ## Things not to re-investigate
 
 Listed so that future us, having forgotten why, does not re-open them:
