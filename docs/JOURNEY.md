@@ -642,6 +642,83 @@ brushing the 50 ms budget. The cost driver is candidate-set width,
 exactly what an index collapses, and it grows fastest in the packed
 scenarios where servers actually die.
 
+## The retro: what a straighter path would have looked like (2026-07-27)
+
+With aarch64 landed and the first outside contributor in the log, we
+stopped and asked a question the project had never asked directly:
+knowing everything we know now, what would we have done differently
+for performance? Not to beat ourselves up. To extract the ordering
+rules while the memory is fresh, and to decide whether any dumped
+plan deserves another look now that the ground has shifted.
+
+The honest answer, ranked by wasted effort:
+
+1. **Gate six should have existed on day one.** We ported the
+   chunkgen math stack to bit-exactness before asking what vanilla's
+   warm steady-state cost per call actually was. It was 20-50 ns.
+   One JFR profile of a warmed-up server at the start would have
+   shown a flat worker profile with no dominant leaf, and months of
+   default-off kernels would have been scoped down or skipped. We
+   measured our own kernel speed instead ("Rust 7x faster on
+   equivalent work"), which was true and irrelevant. The tick thread
+   never cared.
+
+2. **Profile first, pick targets second.** Every win that is
+   default-on today (cramming, redstone AC, the BE gates) came out
+   of monitors on a realistic heavy world, sorted by ms/tick. We
+   found that method in month three. Had the first month been
+   instrumentation instead of "chunkgen looks like clean flat data,"
+   cramming and redstone surface immediately and chunkgen never
+   ranks. Boundary-first target picking optimizes for what is easy
+   to port, not what costs ticks.
+
+3. **A cheap Java probe before every Rust kernel.** The walkability
+   cache burned six sessions before we learned vanilla 26.1 already
+   fronts the same path with its own PathTypeCache. A 20-line
+   counter mixin asking "how often does vanilla miss its own cache"
+   would have answered in an hour. Hopper scans, chunk save, and
+   mob spawn all died at gate 1 in a single evening each, but only
+   because by then the probe habit existed.
+
+4. **Aquifer parity chased the wrong metric.** 99.895% and still
+   default-off indefinitely, because the perf case was never there
+   and the artifact case never went away. The first "this will be
+   default-off regardless" signal should end the work, not push it
+   toward another nine.
+
+What was not a mistake, and this matters for the revisit question:
+the parity infrastructure. The validators are why the 26.1 and 26.2
+ports took days, and why the C2ME conflict was caught as 35/50 hard
+numbers instead of silent world corruption. Slow to build, kept
+paying. Same for the closed threads themselves: each one carries its
+measurement, which is what makes revisiting cheap.
+
+**On revisiting dumped plans.** Coming this far changes the ground
+under some closures, so the closures deserve a periodic look, with a
+rule: a closed thread reopens on new evidence, never on hope. What
+"new evidence" means concretely today:
+
+- Every JIT-wall closure was measured on desktop x86 HotSpot. The
+  Pi 4B report puts Ferrite on OpenJ9 and ARM in the field, where
+  none of those numbers were taken. That is a real unknown, and we
+  own no hardware to resolve it. The Pi perf lines requested in
+  PR #8 are the data channel; if they arrive, we read them as gate
+  measurements, not as an excuse.
+- SIMD Perlin gets deader on ARM, not less. NEON is 128-bit.
+- The DFC reopener keeps its price tag: ~8-15% of worker CPU
+  addressable, multi-week cost, measured 2026-07-13. Nothing since
+  has moved either number.
+- The entity spatial query index is the one plan whose case got
+  stronger, and it was never dumped. Its cost is algorithmic, so it
+  matters most on exactly the low-end hardware that just showed up.
+  Per lesson 3 above, it starts with the pure-Java probe.
+
+The pattern for future revisits is the same one that closed the
+threads: name what changed, find the cheapest measurement that the
+change could have moved, run it, and let the number decide. This
+whole section only works because each closure wrote its number down;
+a closure without one would be a superstition we couldn't check.
+
 ## Things not to re-investigate
 
 Listed so that future us, having forgotten why, does not re-open them:
