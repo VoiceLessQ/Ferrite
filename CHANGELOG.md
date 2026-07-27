@@ -7,6 +7,21 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.7.1-alpha] - 2026-07-27
+
+### Fixed
+
+- **`/ferrite biome validate` compared against the wrong dimension.**
+  The validator used whichever biome source was constructed last,
+  which is the nether's, so the in-game command reported a screaming
+  0/2000 with all-nether answers while the boot-time validator was
+  fine. It now picks the captured source whose biome set contains
+  plains. The long-standing 1999/2000 was also diagnosed and closed:
+  an exact fitness tie between lush_caves and dripstone_caves at a
+  climate point real terrain never produces; vanilla and Ferrite
+  break the tie in different but equally valid orders. No in-game
+  effect.
+
 ### Changed
 
 - **Fat LTO release profile for the native library.** The workspace

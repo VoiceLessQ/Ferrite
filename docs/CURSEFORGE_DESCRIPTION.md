@@ -13,6 +13,7 @@
 * **Predictive chunk forcing** (`/ferrite chunkforce on`, default off). Force-generates terrain ahead of moving players: the generation ring leads your flight path by up to 12 chunks, so at top speed you only ever see your render distance, never the generation front. Stationary players get a plain radial buffer.
 * **Density function port: 50/50 bit-exact on 26.1.2** (vs the 41/42 baseline on 1.21.11). Building blocks for the future Rust DF compiler are now in tree.
 * **Logging gate** (`/ferrite log monitors on|off|status`). Runtime toggle for the periodic monitor reports. About 5 lines/sec across 24 buckets in normal play; turn off on long sessions or I/O-bound hardware to cut log volume without losing the counters.
+* **Slimmer natives (0.7.1).** The bundled Rust libraries are built with fat LTO: the Windows dll drops from 2.1 MB to under 800 KB with symbol tables kept for readable crash reports. Measured performance-neutral at a 1022-zombie cramming farm; parity re-verified bit-exact on the LTO build.
 
 Logs tick breakdowns every 5s so the next port targets real bottlenecks.
 
