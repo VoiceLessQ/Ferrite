@@ -7,6 +7,23 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Changed
+
+- **Fat LTO release profile for the native library.** The workspace
+  had no release profile at all; `lto = "fat"` plus
+  `codegen-units = 1` cuts the Windows dll from 2.1 MB to 794 KB
+  (cross-crate dead code eliminated), with debuginfo stripped but
+  the symbol table kept so native crash reports stay readable.
+  Parity re-verified on the LTO build: noise 63/63, density 50/50
+  bit-exact, biome 1999/2000 (the documented tie). No
+  `panic = "abort"`: unwinding is what lets a native panic fall
+  back to vanilla instead of killing the server. In-game perf A/B
+  pending; profile is compute-identical, only inlining changes.
+- **Removed the aarch64 to x86_64 native fallback** in the loader:
+  a wrong-arch library can never load, so the fallback only
+  replaced an honest "not bundled for this platform" log with a
+  misleading "failed to load" one.
+
 ## [0.7.0-alpha] - 2026-07-27
 
 ### Known issues
