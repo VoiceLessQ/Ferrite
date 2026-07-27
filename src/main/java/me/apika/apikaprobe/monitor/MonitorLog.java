@@ -9,8 +9,12 @@ import org.slf4j.LoggerFactory;
  * runtime flag can silence the whole class of log noise without touching
  * one-shot bootstrap logs or command output.
  *
- * <p>Initial state from {@code -Dferrite.log.monitors.off=true} (default
- * enabled).  Runtime toggle via {@code /ferrite log monitors on|off|status}.
+ * <p>Initial state: enabled, unless {@code -Dferrite.log.monitors.off=true}
+ * or the JVM max heap is 3 GB or less (Pi-class hardware with slow SD-card
+ * I/O should not pay ~5 log lines/sec by default; the boot stamp says which
+ * default applied).  Runtime toggle via {@code /ferrite log monitors
+ * on|off|status}; {@code -Dferrite.log.monitors.on=true} forces on
+ * regardless of heap.
  *
  * <p>Counters and rate-limiter state in each monitor still tick normally
  * when ENABLED is false — only the LOGGER emission is suppressed, so
@@ -19,8 +23,19 @@ import org.slf4j.LoggerFactory;
 public final class MonitorLog {
 	private MonitorLog() {}
 
-	public static volatile boolean ENABLED =
-			!Boolean.getBoolean("ferrite.log.monitors.off");
+	/** Heap at or below this boots with monitors off (small-server default). */
+	private static final long SMALL_HEAP_BYTES = 3L * 1024 * 1024 * 1024;
+
+	public static final boolean SMALL_HEAP =
+			Runtime.getRuntime().maxMemory() <= SMALL_HEAP_BYTES;
+
+	public static volatile boolean ENABLED = initialState();
+
+	private static boolean initialState() {
+		if (Boolean.getBoolean("ferrite.log.monitors.off")) return false;
+		if (Boolean.getBoolean("ferrite.log.monitors.on")) return true;
+		return !SMALL_HEAP;
+	}
 
 	private static final Logger L = LoggerFactory.getLogger("ferrite");
 
