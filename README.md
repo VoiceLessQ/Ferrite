@@ -186,11 +186,12 @@ Low-end hardware (4-core CPU, integrated graphics) is especially useful: the `[c
 |---|---|
 | Windows x86_64 | Developed and tested throughout |
 | Linux x86_64 | Verified on WSL Ubuntu 24.04, OpenJDK 21: server loads `/tmp/rust_mod_*.so`, initEngine returns Rayon pool size, reaches "Done" with no errors |
+| Linux aarch64 | Verified: server loads `/tmp/rust_mod_*.so`, native engine initializes and performs well (tested on Raspberry Pi 4B) |
 | macOS (universal) | Partial: binary confirmed structurally correct (`lipo -info` shows both x86_64 + arm64 slices); runtime load not yet verified on real Apple hardware |
 
 The macOS `.dylib` is a fat binary produced by `lipo -create` on the CI `macos-latest` runner. Happy to mark it verified once a Mac user confirms `System.load` succeeds; a log snippet showing `Loaded rust_mod from /tmp/rust_mod_*.dylib` is enough.
 
-The native library is bundled for Windows, Linux, and macOS. If it fails to load on your platform, Ferrite falls back to vanilla behavior automatically, with no crashes and no broken worlds. ARM Linux is not bundled yet.
+The native library is bundled for Windows, Linux (x86_64 and aarch64), and macOS. If it fails to load on your platform, Ferrite falls back to vanilla behavior automatically, with no crashes and no broken worlds.
 
 ---
 
