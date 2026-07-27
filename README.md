@@ -1,6 +1,6 @@
 ## Ferrite
 
-**What you get:** a performance mod for Minecraft 26.1.2. It is a Fabric (Java) mod that calls into native Rust via JNI for the hot paths. Java handles Minecraft integration and mixins; Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary.
+**What you get:** a performance mod for Minecraft 26.2. It is a Fabric (Java) mod that calls into native Rust via JNI for the hot paths. Java handles Minecraft integration and mixins; Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary.
 
 **Working today:**
 
@@ -172,9 +172,9 @@ Low-end hardware (4-core CPU, integrated graphics) is especially useful: the `[c
 
 ## Requirements
 
-- Minecraft 26.1.2 (JDK 25 required, provided automatically with most modern launchers)
-- Fabric Loader 0.18.4+
-- Fabric API 0.147.0+26.1.2 or newer
+- Minecraft 26.2 (JDK 25 required, provided automatically with most modern launchers); 26.1.2 and 1.21.11 builds available as older releases
+- Fabric Loader 0.19.3+
+- Fabric API 0.154.2+26.2 or newer
 - Works in **singleplayer and multiplayer**
 - **Server-side compatible**, can be installed on a server without requiring players to have the mod
 
@@ -226,7 +226,7 @@ To cross-check the Rust side alone: `cargo test` from the repo root runs the ker
 
 ## Credits
 
-- The redstone wire algorithm is adapted from [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current) (MIT). Full attribution in [LICENSES.md](LICENSES.md). The port targets 26.1.2 mojmap and installs transparently as a `DefaultRedstoneController` subclass; the design and algorithm remain entirely Space Walker's.
+- The redstone wire algorithm is adapted from [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current) (MIT). Full attribution in [LICENSES.md](LICENSES.md). The port targets 26.x mojmap and installs transparently as a `DefaultRedstoneController` subclass; the design and algorithm remain entirely Space Walker's.
 - The JNI / native-loading scaffolding was originally forked from [Brayan-724/rust-mod-probe](https://github.com/Brayan-724/rust-mod-probe), the proof of concept that demonstrated calling Rust from Fabric.
 
 ---
