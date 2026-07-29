@@ -22,6 +22,12 @@ marks pre-release research builds.
   native monitors`, so shared log excerpts self-describe the host
   they came from. Field reports from low-end hardware no longer
   need follow-up questions about specs.
+- **`[entity-tick] misc-top` breakdown.** When the misc entity
+  bucket has a tick over 5 ms in a window, a second line names the
+  top three entity types by time (total, worst single entity,
+  count). Prompted by a Raspberry Pi field report (PR #8) where
+  misc spiked to 47.8 ms with no way to tell which entity type was
+  responsible.
 
 ## [0.7.1-alpha] - 2026-07-27
 

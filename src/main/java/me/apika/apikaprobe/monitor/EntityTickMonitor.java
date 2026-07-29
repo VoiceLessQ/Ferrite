@@ -46,6 +46,17 @@ public final class EntityTickMonitor {
 	// Per-entity tick timer (server-thread, but ThreadLocal for safety).
 	private static final ThreadLocal<Long> TICK_START = ThreadLocal.withInitial(() -> 0L);
 	private static final ThreadLocal<Integer> TICK_CATEGORY = ThreadLocal.withInitial(() -> -1);
+	private static final ThreadLocal<net.minecraft.world.entity.EntityType<?>> TICK_TYPE =
+			ThreadLocal.withInitial(() -> null);
+
+	// Misc-bucket breakdown: per-EntityType {total ns, max single-entity ns,
+	// count} for the window. Server-thread-owned, drained at report time.
+	// Exists because a field report (PR #8, Pi 4B) showed misc spiking to
+	// 47.8 ms with no way to tell WHICH entity type was responsible.
+	private static final java.util.HashMap<net.minecraft.world.entity.EntityType<?>, long[]> MISC_BY_TYPE =
+			new java.util.HashMap<>();
+	/** Emit the misc-top breakdown line when the window's worst misc tick exceeds this. */
+	private static final long MISC_TOP_THRESHOLD_NS = 5_000_000L;
 
 	// Per-tick running sums — one per category. Plain longs, server-thread-owned.
 	private static final long[] THIS_TICK_NS = new long[CAT_COUNT];
@@ -71,7 +82,9 @@ public final class EntityTickMonitor {
 	}
 
 	public static void onEntityTickBegin(Entity entity) {
-		TICK_CATEGORY.set(categorize(entity));
+		int cat = categorize(entity);
+		TICK_CATEGORY.set(cat);
+		TICK_TYPE.set(cat == CAT_MISC ? entity.getType() : null);
 		TICK_START.set(System.nanoTime());
 	}
 
@@ -88,6 +101,16 @@ public final class EntityTickMonitor {
 		}
 		long duration = System.nanoTime() - start;
 		THIS_TICK_NS[cat] += duration;
+		if (cat == CAT_MISC) {
+			net.minecraft.world.entity.EntityType<?> type = TICK_TYPE.get();
+			if (type != null) {
+				TICK_TYPE.set(null);
+				long[] slot = MISC_BY_TYPE.computeIfAbsent(type, t -> new long[3]);
+				slot[0] += duration;
+				if (duration > slot[1]) slot[1] = duration;
+				slot[2]++;
+			}
+		}
 	}
 
 	private static int categorize(Entity entity) {
@@ -156,6 +179,28 @@ public final class EntityTickMonitor {
 		}
 		sb.append("  n=").append(ticks).append(" ticks");
 		MonitorLog.info(sb.toString());
+
+		// Misc breakdown: name the top offenders when the misc bucket had a
+		// hot tick this window, then reset for the next window either way.
+		if (!MISC_BY_TYPE.isEmpty()) {
+			if (maxes[CAT_MISC] >= MISC_TOP_THRESHOLD_NS) {
+				java.util.List<java.util.Map.Entry<net.minecraft.world.entity.EntityType<?>, long[]>> top =
+						new java.util.ArrayList<>(MISC_BY_TYPE.entrySet());
+				top.sort((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0]));
+				StringBuilder mb = new StringBuilder("[entity-tick] misc-top:");
+				int limit = Math.min(3, top.size());
+				for (int i = 0; i < limit; i++) {
+					long[] v = top.get(i).getValue();
+					mb.append(' ')
+					  .append(net.minecraft.world.entity.EntityType.getKey(top.get(i).getKey()).getPath())
+					  .append(" total=").append(formatMs(v[0]))
+					  .append(" maxSingle=").append(formatMs(v[1]))
+					  .append(" n=").append(v[2]);
+				}
+				MonitorLog.info(mb.toString());
+			}
+			MISC_BY_TYPE.clear();
+		}
 	}
 
 	private static String formatMs(long nanos) {
