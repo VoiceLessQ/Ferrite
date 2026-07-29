@@ -7,6 +7,8 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.6.8-alpha] - 2026-07-29
+
 ### Changed
 
 - **Monitor logging defaults off on small heaps.** Max heap of 3 GB
@@ -30,21 +32,6 @@ marks pre-release research builds.
   responsible.
 
 ## [0.6.7-alpha] - 2026-07-27
-
-## [0.7.0-alpha] - 2026-07-27
-
-### Known issues
-
-- Biome parity reads 1999/2000 in the validator: the one miss is an
-  exact fitness tie between lush_caves and dripstone_caves at a
-  climate point outside the range real terrain produces (validator
-  samples wider than the game's climate space). Vanilla and Ferrite
-  break the tie in different but equally valid orders. No in-game
-  effect; real climate points match 100%.
-- The deep-marker diagnostic walk registers no interior cache
-  routes on 26.2. Affects default-off diagnostics only; no live
-  path reads those fingerprints.
->>>>>>> 47d8912 (monitors default off on small heaps; hardware stamp at boot)
 
 ### Added
 
