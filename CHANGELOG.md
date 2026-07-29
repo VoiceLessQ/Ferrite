@@ -18,6 +18,25 @@ marks pre-release research builds.
 
 ### Added
 
+- **Entity spatial query index** (opt-in,
+  `-Dferrite.entityquery.cache=true`). Sections holding 32+ entities
+  get a per-section bitset grid (4-block cells over storage-list
+  indices); "which entities are in this box" queries visit only
+  candidate indices in vanilla iteration order instead of scanning
+  every entity in the section, so consumer order, abort semantics,
+  and mid-tick liveness are preserved exactly. Maintained
+  incrementally on the section-manager move callbacks (the
+  interleave probe showed 93% of queries follow a move, so lazy
+  rebuilds were ruled out by measurement). At a 1022-zombie farm:
+  query cost 14.4-16.8 down to 10.3 ms/tick (34% cut), whole-server
+  mspt 36-40 down to ~32.7, with a shadow oracle reporting zero
+  mismatches across 83,000+ sampled queries. A cheaper
+  position-filter variant was built first and measured neutral
+  (pruning intersect tests is free; not walking the list is the
+  win); it remains as the fallback path for small sections and the
+  typed overload. Default off pending broader soak; the oracle
+  (`-Dferrite.entityquery.oracle=<1-in-N>`) stays available for
+  field validation.
 - **`-Dferrite.pregen.inflight=<n>`** sets the pre-gen inflight cap
   at boot (dedicated servers and headless benches; the runtime
   command still overrides). While adding it, the 200 default was
