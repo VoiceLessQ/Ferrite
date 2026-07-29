@@ -38,6 +38,7 @@
 		"TickHandSwingMixin",
 		"TickNewAiMixin",
 		"ActiveTargetGoalMixin",
+		"ClassInstanceMultiMapAccessor",
 		"EntityCellMixin",
 		"EntitySectionCallbackMixin",
 		"EntitySectionMixin",

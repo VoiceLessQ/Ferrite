@@ -30,10 +30,17 @@ public abstract class TransientEntitySectionCallbackMixin {
 	private void ferrite$updateCell(CallbackInfo ci) {
 		if (!EntityCellIndex.ENABLED) return;
 		if (entity instanceof CellHolder holder) {
-			holder.ferrite$setPackedPos(entity.blockPosition().asLong());
+			long oldPacked = holder.ferrite$packedPos();
+			long newPacked = entity.blockPosition().asLong();
+			holder.ferrite$setPackedPos(newPacked);
+			SectionExtents section = (SectionExtents) currentSection;
 			AABB bb = entity.getBoundingBox();
-			((SectionExtents) currentSection).ferrite$growExtents(
+			section.ferrite$growExtents(
 					(float) (Math.max(bb.getXsize(), bb.getZsize()) * 0.5), (float) bb.getYsize());
+			me.apika.apikaprobe.spatial.SectionGrid grid = section.ferrite$grid();
+			if (grid != null) {
+				grid.onMove(entity, oldPacked, newPacked);
+			}
 		}
 	}
 }

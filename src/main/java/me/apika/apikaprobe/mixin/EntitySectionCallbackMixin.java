@@ -34,11 +34,19 @@ public abstract class EntitySectionCallbackMixin {
 		EntityQueryMonitor.onMoveEvent(newKey != currentSectionKey);
 		if (me.apika.apikaprobe.spatial.EntityCellIndex.ENABLED
 				&& entity instanceof me.apika.apikaprobe.spatial.CellHolder holder) {
-			holder.ferrite$setPackedPos(pos.asLong());
+			long oldPacked = holder.ferrite$packedPos();
+			long newPacked = pos.asLong();
+			holder.ferrite$setPackedPos(newPacked);
 			// Refresh extents so entities that grew (slimes) stay covered.
+			me.apika.apikaprobe.spatial.SectionExtents section =
+					(me.apika.apikaprobe.spatial.SectionExtents) currentSection;
 			net.minecraft.world.phys.AABB bb = entity.getBoundingBox();
-			((me.apika.apikaprobe.spatial.SectionExtents) currentSection).ferrite$growExtents(
+			section.ferrite$growExtents(
 					(float) (Math.max(bb.getXsize(), bb.getZsize()) * 0.5), (float) bb.getYsize());
+			me.apika.apikaprobe.spatial.SectionGrid grid = section.ferrite$grid();
+			if (grid != null) {
+				grid.onMove(entity, oldPacked, newPacked);
+			}
 		}
 	}
 }

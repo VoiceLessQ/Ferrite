@@ -36,4 +36,13 @@ public abstract class EntitySectionStorageMixin {
 	private void ferrite$onTypedQueryEnd(CallbackInfo ci) {
 		EntityQueryMonitor.onQueryEnd();
 	}
+
+	@Inject(method = "createSection", at = @At("RETURN"))
+	private void ferrite$stampOrigin(long sectionPos,
+			org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<net.minecraft.world.level.entity.EntitySection<?>> cir) {
+		((me.apika.apikaprobe.spatial.SectionExtents) cir.getReturnValue()).ferrite$setOrigin(
+				net.minecraft.core.SectionPos.x(sectionPos) << 4,
+				net.minecraft.core.SectionPos.y(sectionPos) << 4,
+				net.minecraft.core.SectionPos.z(sectionPos) << 4);
+	}
 }
