@@ -25,10 +25,20 @@ import me.apika.apikaprobe.monitor.EntityQueryMonitor;
 public abstract class EntitySectionCallbackMixin {
 	@Shadow @Final private EntityAccess entity;
 	@Shadow private long currentSectionKey;
+	@Shadow private net.minecraft.world.level.entity.EntitySection<?> currentSection;
 
 	@Inject(method = "onMove()V", at = @At("HEAD"))
 	private void ferrite$countMove(CallbackInfo ci) {
-		long newKey = SectionPos.asLong(entity.blockPosition());
+		net.minecraft.core.BlockPos pos = entity.blockPosition();
+		long newKey = SectionPos.asLong(pos);
 		EntityQueryMonitor.onMoveEvent(newKey != currentSectionKey);
+		if (me.apika.apikaprobe.spatial.EntityCellIndex.ENABLED
+				&& entity instanceof me.apika.apikaprobe.spatial.CellHolder holder) {
+			holder.ferrite$setPackedPos(pos.asLong());
+			// Refresh extents so entities that grew (slimes) stay covered.
+			net.minecraft.world.phys.AABB bb = entity.getBoundingBox();
+			((me.apika.apikaprobe.spatial.SectionExtents) currentSection).ferrite$growExtents(
+					(float) (Math.max(bb.getXsize(), bb.getZsize()) * 0.5), (float) bb.getYsize());
+		}
 	}
 }

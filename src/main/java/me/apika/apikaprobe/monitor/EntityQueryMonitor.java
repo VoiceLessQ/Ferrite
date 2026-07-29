@@ -141,5 +141,22 @@ public final class EntityQueryMonitor {
 			String.format("%.1f", (double) transitions / ticks),
 			String.format("%.1f", count == 0 ? 0.0 : 100.0 * transitions / count)
 		);
+		if (me.apika.apikaprobe.spatial.EntityCellIndex.ENABLED) {
+			long scanned = me.apika.apikaprobe.spatial.EntityCellIndex.scanned;
+			long filtered = me.apika.apikaprobe.spatial.EntityCellIndex.filteredOut;
+			long delivered = me.apika.apikaprobe.spatial.EntityCellIndex.delivered;
+			long oChecks = me.apika.apikaprobe.spatial.EntityCellIndex.oracleChecks;
+			long oMiss = me.apika.apikaprobe.spatial.EntityCellIndex.oracleMismatches;
+			me.apika.apikaprobe.spatial.EntityCellIndex.scanned = 0;
+			me.apika.apikaprobe.spatial.EntityCellIndex.filteredOut = 0;
+			me.apika.apikaprobe.spatial.EntityCellIndex.delivered = 0;
+			me.apika.apikaprobe.spatial.EntityCellIndex.oracleChecks = 0;
+			MonitorLog.info(
+				"[entity-query-cache] scanned={} filtered={} ({}%) delivered={}  oracle: checks={} mismatches={}",
+				scanned, filtered,
+				String.format("%.1f", scanned == 0 ? 0.0 : 100.0 * filtered / scanned),
+				delivered, oChecks, oMiss
+			);
+		}
 	}
 }
