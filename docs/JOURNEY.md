@@ -760,6 +760,47 @@ Verdict: no bug, no code change to the R-tree, closed. If a future
 validator wants 2000/2000, the honest change is to count
 equal-fitness answers as a pass, not to nudge sampling ranges.
 
+## The aarch64 week: what one contributor unlocked (2026-07-29)
+
+We got lucky, and it is worth writing down exactly what the luck
+bought, because half of it is opportunities that were sitting in
+stale sections of this file.
+
+The sequence: cwright814 wanted Ferrite on a 2 GB Raspberry Pi 4B,
+found no ARM native, compiled one, and sent PR #8, tested on their own
+hardware. We merged it, released it in 0.6.7, and within two days their
+field report handed us more new information than any session this
+month produced on our own:
+
+- **A hardware class we cannot buy data from otherwise.** Every gate
+  and closure in this file was measured on desktop x86 HotSpot. His
+  server runs ARM, OpenJ9, and a 2 GB heap, and it surfaced things
+  our profile never could: entity tick at ~27 ms with only ~300
+  mobs, misc-bucket spikes to 47.8 ms that our mob-farm-shaped test
+  worlds never exercised, and a RAM comparison (Moonrise +400 MB vs
+  our few) we did not know was a selling point.
+- **Field answers to desk-level compat questions.** Their production
+  stack runs C2ME, Lithium, FerriteCore, Krypton, and ZFastNoise
+  beside Ferrite. Several Tier 3 unknowns in COMPATIBILITY.md now
+  have a running-in-production answer.
+- **A new instrument.** Chasing their numbers produced the pi-sim
+  method (4-core affinity pin plus small heap), which immediately
+  paid out three times: the G1-vs-ZGC stutter diagnosis, the
+  1022-zombies-at-20-TPS-on-4-cores headline, and the inflight-cap
+  re-validation that closed a lead the same day it was proposed.
+- **Reopened stale questions on their merits.** The JIT-wall
+  closures are HotSpot measurements; OpenJ9 in the field means they
+  are unverified there, and the entity-query candidate got its
+  strongest evidence yet from exactly the hardware that was not in
+  the plan.
+
+The durable lesson sits next to the retro's: our measurement
+discipline made the luck usable. The monitors gave them something
+worth sending, the parity validators made their stack safe to run, and
+the hardware stamp and misc-top breakdown shipped within days so the
+NEXT report answers the questions this one opened. Luck delivered
+one contributor; the instrumentation turned them into a lab.
+
 ## Things not to re-investigate
 
 Listed so that future us, having forgotten why, does not re-open them:
