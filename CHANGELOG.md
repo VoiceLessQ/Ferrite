@@ -18,6 +18,12 @@ marks pre-release research builds.
 
 ### Added
 
+- **`-Dferrite.pregen.inflight=<n>`** sets the pre-gen inflight cap
+  at boot (dedicated servers and headless benches; the runtime
+  command still overrides). While adding it, the 200 default was
+  re-validated on a constrained 4-core / 2 GB profile: 42.8 chunks/s
+  vs 34.8 at cap 50, the same relationship as on desktop hardware,
+  so the default stands on weak CPUs too.
 - **One-line hardware stamp at boot**: `[hw] arch cores maxHeap jvm
   native monitors`, so shared log excerpts self-describe the host
   they came from. Field reports from low-end hardware no longer

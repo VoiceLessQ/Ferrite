@@ -29,10 +29,12 @@ import java.util.concurrent.atomic.AtomicReference;
  * lifecycle uses this to persist a resume snapshot.
  */
 public final class PregenDriver {
-	// Runtime-tunable via /ferrite pregen inflight <n>. Measured 2026-07-12
-	// on 26.1.2, four 3721-chunk virgin runs: cap 50 = 90-96 chunks/s,
-	// cap 200 = 114-118/s, cap 400 = no further gain. TPS 20 held at all.
-	public static volatile int maxInflight = 200;
+	// Runtime-tunable via /ferrite pregen inflight <n>, boot-settable via
+	// -Dferrite.pregen.inflight=<n>. Measured 2026-07-12 on 26.1.2, four
+	// 3721-chunk virgin runs: cap 50 = 90-96 chunks/s, cap 200 = 114-118/s,
+	// cap 400 = no further gain. TPS 20 held at all.
+	public static volatile int maxInflight =
+			Integer.getInteger("ferrite.pregen.inflight", 200);
 	public static final int CHECKPOINT_INTERVAL = 100;
 
 	private static final AtomicReference<PregenDriver> ACTIVE = new AtomicReference<>();
