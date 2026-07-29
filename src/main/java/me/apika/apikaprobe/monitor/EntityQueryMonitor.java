@@ -32,9 +32,22 @@ public final class EntityQueryMonitor {
 	private static long thisTickCount = 0L;
 	private static long thisTickNs = 0L;
 
+	// Move/query interleave probe (index-design decider, LOCAL_DESIGN).
+	// A "transition" is a query that saw at least one move since the
+	// previous query: transitions/tick near queries/tick means fully
+	// interleaved (lazy per-section rebuild degenerates); a small number
+	// means movement and queries cluster in phases (lazy is fine).
+	private static boolean movedSinceQuery = false;
+	private static long thisTickMovesSame = 0L;
+	private static long thisTickMovesCross = 0L;
+	private static long thisTickTransitions = 0L;
+
 	private static final AtomicLong TOTAL_COUNT = new AtomicLong();
 	private static final AtomicLong TOTAL_NS = new AtomicLong();
 	private static final AtomicLong TICK_COUNT = new AtomicLong();
+	private static final AtomicLong TOTAL_MOVES_SAME = new AtomicLong();
+	private static final AtomicLong TOTAL_MOVES_CROSS = new AtomicLong();
+	private static final AtomicLong TOTAL_TRANSITIONS = new AtomicLong();
 	private static final LatencyHistogram TICK_COST = new LatencyHistogram();
 
 	private static volatile long lastReportNs = System.nanoTime();
@@ -51,8 +64,19 @@ public final class EntityQueryMonitor {
 	public static void onQueryBegin() {
 		if (Thread.currentThread() != serverThread) return;
 		if (depth++ == 0) {
+			if (movedSinceQuery) {
+				thisTickTransitions++;
+				movedSinceQuery = false;
+			}
 			queryStart = System.nanoTime();
 		}
+	}
+
+	/** Section-callback move event; crossing = entity changed sections. */
+	public static void onMoveEvent(boolean crossing) {
+		if (Thread.currentThread() != serverThread) return;
+		if (crossing) thisTickMovesCross++; else thisTickMovesSame++;
+		movedSinceQuery = true;
 	}
 
 	public static void onQueryEnd() {
@@ -70,6 +94,13 @@ public final class EntityQueryMonitor {
 			TOTAL_NS.addAndGet(thisTickNs);
 			TICK_COST.record(thisTickNs);
 		}
+		TOTAL_MOVES_SAME.addAndGet(thisTickMovesSame);
+		TOTAL_MOVES_CROSS.addAndGet(thisTickMovesCross);
+		TOTAL_TRANSITIONS.addAndGet(thisTickTransitions);
+		thisTickMovesSame = 0L;
+		thisTickMovesCross = 0L;
+		thisTickTransitions = 0L;
+		movedSinceQuery = false;
 		thisTickCount = 0L;
 		thisTickNs = 0L;
 		depth = 0;
@@ -84,6 +115,9 @@ public final class EntityQueryMonitor {
 		long ticks = TICK_COUNT.getAndSet(0L);
 		long count = TOTAL_COUNT.getAndSet(0L);
 		long ns = TOTAL_NS.getAndSet(0L);
+		long movesSame = TOTAL_MOVES_SAME.getAndSet(0L);
+		long movesCross = TOTAL_MOVES_CROSS.getAndSet(0L);
+		long transitions = TOTAL_TRANSITIONS.getAndSet(0L);
 		LatencyHistogram.Snapshot snap = TICK_COST.drain();
 		lastReportNs = now;
 
@@ -98,6 +132,14 @@ public final class EntityQueryMonitor {
 			String.format("%.2f", perQueryUs),
 			snap.formatLine(),
 			ticks
+		);
+		MonitorLog.info(
+			"[entity-query] interleave: moves={}/tick (same-section={} cross={})  mq-transitions={}/tick ({}% of queries)",
+			String.format("%.1f", (double) (movesSame + movesCross) / ticks),
+			String.format("%.1f", (double) movesSame / ticks),
+			String.format("%.1f", (double) movesCross / ticks),
+			String.format("%.1f", (double) transitions / ticks),
+			String.format("%.1f", count == 0 ? 0.0 : 100.0 * transitions / count)
 		);
 	}
 }
