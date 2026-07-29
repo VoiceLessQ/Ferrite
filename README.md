@@ -189,6 +189,8 @@ A field-proven recipe for small servers (Raspberry Pi class, 2-4 GB RAM), based 
 3. **Use a small heap and a lean JVM.** The reference setup runs OpenJ9 on DietPi at well under a 2 GB footprint. On HotSpot with a small heap, prefer ZGC (`-XX:+UseZGC`): in a 4-core / 2 GB test at 1022 zombies, G1 froze for up to 640 ms per collection while ZGC held a flat 20 TPS with worst ticks around 60 ms. On heaps of 3 GB or less, Ferrite automatically silences its periodic monitor logging so slow SD-card I/O is not paying for log lines; `/ferrite log monitors on` re-enables it when you want to collect numbers.
 4. **Keep an eye on entities, not chunks.** On weak CPUs the tick budget goes to mobs long before terrain. Ferrite's default-on features (cramming, block-entity ticker gates, hopper hint) target exactly that, and the `[entity-tick]` log line tells you where the remaining time goes.
 
+Ferrite's own memory cost is negligible: a heap census on a loaded world (JDK 25, post-GC class histogram) measured about 3.4 KB of live Ferrite objects on the Java heap; adding class metadata, the Rust worldgen state (noise tables, biome tree, density bytecode) and the per-tick native buffers (which scale with mob count, roughly 50 KB per 1000 mobs) puts the total on the order of a few megabytes. A field report measured the same conclusion from the other side: swapping a popular alternative for the Ferrite + C2ME pairing freed about 400 MB on a 2 GB Raspberry Pi.
+
 The `[hw]` line at boot records your hardware in the log, so if you share performance excerpts in an issue, they self-describe the machine they came from.
 
 ---
