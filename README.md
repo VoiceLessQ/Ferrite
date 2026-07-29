@@ -180,6 +180,19 @@ Low-end hardware (4-core CPU, integrated graphics) is especially useful: the `[c
 
 ---
 
+## Running on low-end hardware
+
+A field-proven recipe for small servers (Raspberry Pi class, 2-4 GB RAM), based on a production setup shared by the contributor who added aarch64 support: a full server on a 2 GB Pi 4B with two players and ~200 MB of RAM to spare.
+
+1. **Pre-generate the world on a stronger machine.** Run Ferrite's pre-gen (`/ferrite pregen <radius>`) on your desktop, then copy the world folder to the small server. The weak CPU then reads finished chunks from disk instead of generating them. Re-running pre-gen skips already-generated chunks, so topping up the border later is cheap.
+2. **Let a chunk-parallelism mod handle stragglers.** For players wandering past the pre-generated border, a mod like C2ME spreads the remaining generation across cores. Ferrite shapes what gets requested; that mod makes the requests execute faster. The two do not overlap. (One caveat: with C2ME loaded, Ferrite's `/ferrite density validate` diagnostic reports false failures. Gameplay is unaffected.)
+3. **Use a small heap and a lean JVM.** The reference setup runs OpenJ9 on DietPi at well under a 2 GB footprint. On heaps of 3 GB or less, Ferrite automatically silences its periodic monitor logging so slow SD-card I/O is not paying for log lines; `/ferrite log monitors on` re-enables it when you want to collect numbers.
+4. **Keep an eye on entities, not chunks.** On weak CPUs the tick budget goes to mobs long before terrain. Ferrite's default-on features (cramming, block-entity ticker gates, hopper hint) target exactly that, and the `[entity-tick]` log line tells you where the remaining time goes.
+
+The `[hw]` line at boot records your hardware in the log, so if you share performance excerpts in an issue, they self-describe the machine they came from.
+
+---
+
 ## Platform verification
 
 | platform | status |
