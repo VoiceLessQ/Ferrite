@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
 import me.apika.apikaprobe.worldgen.BiomeParity;
+import me.apika.apikaprobe.monitor.MonitorLog;
 
 /**
  * Per-chunk timing of the FEATURES (decoration) phase, bucketed by
@@ -97,7 +98,7 @@ public final class ChunkDecoratorTiming {
 		if (grandCount == 0) return;
 
 		double grandAvgMs = (double) grandTotal / 1_000_000.0 / (double) grandCount;
-		ExampleMod.LOGGER.info(
+		MonitorLog.info(
 				"[chunkgen-features] window: {} chunks, total={}ms, avg={}ms/chunk",
 				grandCount, grandTotal / 1_000_000, String.format("%.2f", grandAvgMs));
 		int shown = Math.min(snapshot.length, 12);
@@ -106,7 +107,7 @@ public final class ChunkDecoratorTiming {
 			Bucket b = snapshot[i];
 			if (b.count == 0) continue;
 			double avgMs = (double) b.totalNs / 1_000_000.0 / (double) b.count;
-			ExampleMod.LOGGER.info(
+			MonitorLog.info(
 					"[chunkgen-features]   {}: n={} avg={}ms total={}ms",
 					names[i], b.count, String.format("%.3f", avgMs), b.totalNs / 1_000_000);
 		}
