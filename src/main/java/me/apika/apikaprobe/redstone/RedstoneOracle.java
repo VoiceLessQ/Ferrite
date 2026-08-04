@@ -18,6 +18,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.redstone.Orientation;
 
 import me.apika.apikaprobe.mixin.RedstoneControllerInvoker;
+import me.apika.apikaprobe.monitor.MonitorLog;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -301,7 +302,7 @@ public final class RedstoneOracle {
 
 		if (runs == 0L && sampledOut == 0L) return;
 
-		LOGGER.info("[redstone-oracle] bfs-runs={} sampled-out={} node-checks={} node-mismatches={}  (rate=1/{} cap={} nodes)",
+		MonitorLog.info("[redstone-oracle] bfs-runs={} sampled-out={} node-checks={} node-mismatches={}  (rate=1/{} cap={} nodes)",
 				runs, sampledOut, checks, mismatches,
 				SAMPLE_RATE, MAX_NODES_PER_BFS);
 	}

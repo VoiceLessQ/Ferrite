@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import me.apika.apikaprobe.RustBridge;
+import me.apika.apikaprobe.monitor.MonitorLog;
 
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -170,7 +171,7 @@ public final class CrammingDispatcher {
 		long now = System.nanoTime();
 		if (now - diagLastLogNs < 5_000_000_000L) return;
 		diagLastLogNs = now;
-		LOGGER.info(
+		MonitorLog.info(
 			"[cramming-dispatch] batches={} mobsTotal={}  pushed={}  damaged={}",
 			diagBatches, diagMobs, diagPushed, diagDamaged
 		);
