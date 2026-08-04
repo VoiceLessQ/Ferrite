@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import me.apika.apikaprobe.RustBridge;
+import me.apika.apikaprobe.monitor.MonitorLog;
 import me.apika.apikaprobe.mixin.EntityAdjustInvoker;
 
 import net.minecraft.world.entity.Entity;
@@ -235,7 +236,7 @@ public final class PhysicsDispatcher {
 		long now = System.nanoTime();
 		if (now - diagLastLogNs < 5_000_000_000L) return;
 		diagLastLogNs = now;
-		LOGGER.info(
+		MonitorLog.info(
 			"[physics-dispatch] buckets={} mobs={}  builds: {} ok / {} failed  "
 			+ "rebuilds={} bucketMisses={}  dispatched={} fallback={}  "
 			+ "lastReject={}x{}x{}",
