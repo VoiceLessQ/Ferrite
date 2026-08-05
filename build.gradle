@@ -78,6 +78,18 @@ loom {
 			if (project.findProperty("ferrite.navParity")?.toString() == "true") {
 				vmArg "-Dferrite.nav.parity=true"
 			}
+			// Entity-query bitset grid A/B arm: -Pferrite.entityQuery=true opts
+			// in (default off); -Pferrite.entityQueryOracle=<n> sets sample rate.
+			if (project.findProperty("ferrite.entityQuery")?.toString() == "true") {
+				vmArg "-Dferrite.entityquery.cache=true"
+			}
+			if (project.hasProperty("ferrite.entityQueryOracle")) {
+				vmArg "-Dferrite.entityquery.oracle=${project.property('ferrite.entityQueryOracle')}"
+			}
+			// -Pferrite.monitorsOn=true forces monitor logging on regardless of heap.
+			if (project.findProperty("ferrite.monitorsOn")?.toString() == "true") {
+				vmArg "-Dferrite.log.monitors.on=true"
+			}
 		}
 	}
 }
