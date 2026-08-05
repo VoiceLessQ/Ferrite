@@ -61,6 +61,26 @@ public final class EntityQueryMonitor {
 		});
 	}
 
+	// Caller-attribution probe (-Dferrite.entityquery.callers=true):
+	// samples 1/16 outer queries, walks to the first frame outside the
+	// query plumbing, buckets by class#method. Scoping instrument for the
+	// caller-side-avoidance candidate; off unless asked for.
+	private static final boolean CALLERS = Boolean.getBoolean("ferrite.entityquery.callers");
+	private static final int CALLER_SAMPLE = 16;
+	private static int callerCounter = 0;
+	private static final java.util.HashMap<String, long[]> CALLER_COUNTS = new java.util.HashMap<>();
+	private static final StackWalker WALKER = StackWalker.getInstance();
+
+	private static void sampleCaller() {
+		String caller = WALKER.walk(frames -> frames
+				.map(f -> f.getClassName() + "#" + f.getMethodName())
+				.filter(s -> !s.startsWith("me.apika")
+						&& !s.contains(".level.")
+						&& !s.contains("EntityGetter"))
+				.findFirst().orElse("<unknown>"));
+		CALLER_COUNTS.computeIfAbsent(caller, k -> new long[1])[0]++;
+	}
+
 	public static void onQueryBegin() {
 		if (Thread.currentThread() != serverThread) return;
 		if (depth++ == 0) {
@@ -68,6 +88,7 @@ public final class EntityQueryMonitor {
 				thisTickTransitions++;
 				movedSinceQuery = false;
 			}
+			if (CALLERS && ++callerCounter % CALLER_SAMPLE == 0) sampleCaller();
 			queryStart = System.nanoTime();
 		}
 	}
@@ -126,6 +147,18 @@ public final class EntityQueryMonitor {
 		double perTick = (double) count / ticks;
 		double perQueryUs = ns / 1_000.0 / count;
 
+		if (CALLERS && !CALLER_COUNTS.isEmpty()) {
+			long total = CALLER_COUNTS.values().stream().mapToLong(v -> v[0]).sum();
+			StringBuilder cb = new StringBuilder("[entity-query] callers (1/" + CALLER_SAMPLE + " sampled):");
+			CALLER_COUNTS.entrySet().stream()
+					.sorted((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0]))
+					.limit(8)
+					.forEach(e -> cb.append("  ").append(e.getKey())
+							.append('=').append(e.getValue()[0])
+							.append(" (").append(String.format("%.1f", 100.0 * e.getValue()[0] / total)).append("%)"));
+			MonitorLog.info(cb.toString());
+			CALLER_COUNTS.clear();
+		}
 		MonitorLog.info(
 			"[entity-query] queries={}/tick  per_query={}us  tick-cost: {}  ticks={}",
 			String.format("%.1f", perTick),

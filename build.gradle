@@ -86,6 +86,9 @@ loom {
 			if (project.hasProperty("ferrite.entityQueryOracle")) {
 				vmArg "-Dferrite.entityquery.oracle=${project.property('ferrite.entityQueryOracle')}"
 			}
+			if (project.findProperty("ferrite.entityQueryCallers")?.toString() == "true") {
+				vmArg "-Dferrite.entityquery.callers=true"
+			}
 			// -Pferrite.monitorsOn=true forces monitor logging on regardless of heap.
 			if (project.findProperty("ferrite.monitorsOn")?.toString() == "true") {
 				vmArg "-Dferrite.log.monitors.on=true"
