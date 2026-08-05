@@ -147,15 +147,19 @@ public final class EntityQueryMonitor {
 			long delivered = me.apika.apikaprobe.spatial.EntityCellIndex.delivered;
 			long oChecks = me.apika.apikaprobe.spatial.EntityCellIndex.oracleChecks;
 			long oMiss = me.apika.apikaprobe.spatial.EntityCellIndex.oracleMismatches;
+			long tQueries = me.apika.apikaprobe.spatial.EntityCellIndex.typedQueries;
+			long tScanned = me.apika.apikaprobe.spatial.EntityCellIndex.typedScanned;
 			me.apika.apikaprobe.spatial.EntityCellIndex.scanned = 0;
 			me.apika.apikaprobe.spatial.EntityCellIndex.filteredOut = 0;
 			me.apika.apikaprobe.spatial.EntityCellIndex.delivered = 0;
 			me.apika.apikaprobe.spatial.EntityCellIndex.oracleChecks = 0;
+			me.apika.apikaprobe.spatial.EntityCellIndex.typedQueries = 0;
+			me.apika.apikaprobe.spatial.EntityCellIndex.typedScanned = 0;
 			MonitorLog.info(
-				"[entity-query-cache] scanned={} filtered={} ({}%) delivered={}  oracle: checks={} mismatches={}",
+				"[entity-query-cache] scanned={} filtered={} ({}%) delivered={}  typed: queries={} scanned={}  oracle: checks={} mismatches={}",
 				scanned, filtered,
 				String.format("%.1f", scanned == 0 ? 0.0 : 100.0 * filtered / scanned),
-				delivered, oChecks, oMiss
+				delivered, tQueries, tScanned, oChecks, oMiss
 			);
 		}
 	}

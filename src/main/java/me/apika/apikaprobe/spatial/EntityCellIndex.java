@@ -33,4 +33,6 @@ public final class EntityCellIndex {
 	public static long oracleChecks;
 	public static long oracleMismatches;
 	public static int queryCounter;
+	public static long typedQueries;
+	public static long typedScanned;
 }

@@ -224,10 +224,12 @@ public abstract class EntitySectionMixin implements SectionExtents {
 			CallbackInfoReturnable<AbortableIterationConsumer.Continuation> cir) {
 		if (!EntityCellIndex.ENABLED) return;
 		Collection<? extends EntityAccess> found = storage.find(type.getBaseClass());
+		EntityCellIndex.typedQueries++;
 		if (found.isEmpty()) {
 			cir.setReturnValue(AbortableIterationConsumer.Continuation.CONTINUE);
 			return;
 		}
+		EntityCellIndex.typedScanned += found.size();
 		cir.setReturnValue(ferrite$run(found, type, bb, consumer));
 	}
 
