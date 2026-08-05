@@ -7,6 +7,16 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Changed
+
+- **Dispatch and oracle telemetry respects the small-heap monitor
+  default** (PR #10, contributed by cwright814). The
+  `[cramming-dispatch]`, `[physics-dispatch]`, `[redstone-oracle]`,
+  and `[chunkgen-features]` periodic lines predate MonitorLog and
+  bypassed it; on a Pi-class server they were most of the log file.
+  Now routed through MonitorLog, so heaps of 3 GB or less boot with
+  them silenced and `/ferrite log monitors on` re-enables them.
+
 ## [0.6.8-alpha] - 2026-07-29
 
 ### Changed
