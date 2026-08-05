@@ -1518,3 +1518,113 @@ cache versus fell through to vanilla." Without that, a timing
 improvement could be noise. With it, the session produces a number
 that can be cited in the release notes alongside the cramming and
 redstone wins.
+
+## The night the queries stopped: validating the index, then deleting the work
+
+### Four checks in one evening
+
+The bitset grid landed on 2026-07-29 with a 34% cut and a gate pass,
+but one session is one session. Four things stood between it and any
+default-on talk: a longer soak, a low-end A/B, the typed overload
+question, and whether it could share the seam with other optimization
+mods. All four got answered on 2026-08-05, and the last one changed
+what we built next.
+
+The soak was boring in the way you want. Forty-five minutes AFK at
+the 1022-zombie farm, oracle sampling 1 in 16, and the counters never
+moved off their line: per_query 9.7 to 9.9 us the whole run,
+10,843,869 oracle checks, zero mismatches across 541 consecutive
+windows. Two orders of magnitude more coverage than the landing-day
+83k. No drift, no rebuild pathology, no spikes.
+
+The pi-sim A/B was not boring. Same 4-core / 2G / ZGC recipe from the
+July session, matched 12-minute windows, and the constrained cores
+paid more for every candidate walk than the desktop did: per_query
+fell from 14.0-15.1 us to 6.0, query tick-cost from 16.3-17.6 ms to
+7.0, whole-server mspt from 41-44 to about 29.5. A 57% cut where the
+desktop showed 34. The win grows exactly where the field reports
+hurt, which is the best property a low-end optimization can have.
+
+The typed overload closed itself. New counters on the 5s line showed
+around 200 typed queries per tick and zero of them walking anything;
+they all hit empty class-groups and return before the loop starts.
+Per-class bits would have optimized a code path that already costs
+nothing.
+
+### The compat run that reframed the whole candidate
+
+The fourth check was compatibility at the seam, tested by installing
+a popular optimization mod beside the grid and watching for trouble.
+There was no trouble. Both mods' mixins applied to the same classes,
+zero injection failures, 105 clean windows, zero oracle mismatches.
+The planned detect-and-yield logic turned out to be unnecessary.
+
+The numbers were the interesting part. With that mod present, plain
+query volume fell from about 1170 per tick to 82, and the farm ran at
+15.3 mspt where our cache-only run sat at 32.7 under the same
+conditions. Its approach never touches the query itself. It rewrites
+the callers so most queries are never issued. Our grid makes each
+query about 40% cheaper; caller rewrites made 93% of them disappear.
+Avoidance beats acceleration, and we had just spent two weeks
+building very good acceleration.
+
+That could read as bad news. It is actually a map. If the queries
+can be avoided, the question becomes which ones, and whether they
+can be avoided without bending vanilla behavior, which is the line
+we do not cross and the other mod happily does.
+
+### One StackWalker probe, one number: 87.4%
+
+A sampled caller-attribution probe (StackWalker on 1 in 16 queries,
+bucketed by first frame outside the query plumbing) answered the
+"which ones" question in five minutes of farm time. Entity#collide
+issues 87.4% of all queries at the farm. Targeting scans are 7.1%.
+Cramming's pushEntities, the thing everyone assumes dominates a
+zombie pile, is 0.1%, because the cramming dispatcher already owns
+that lane.
+
+Then the source read turned the 87.4% into a gift. Entity#collide
+goes through getEntityCollisions, and that walk's predicate only
+ever accepts hard-collidable entities. In 26.2 the complete override
+set for canBeCollidedWith is three families: boats, shulkers, and
+the happy ghast. A zombie farm contains none of them. So 87% of the
+farm's queries walk a thousand entities to accept zero, every tick,
+and the correct result is known before the walk starts.
+
+One wrinkle, caught in the same read: canCollideWith is
+source-dependent. Boats and minecarts widen it to accept pushables,
+so a boat's collision query genuinely needs the walk. The skip gate
+therefore checks two things: the level holds zero hard-collidable
+entities, and the source is not a boat or minecart. When in doubt,
+walk.
+
+### ColliderSkip: 150 lines, 91%
+
+The build took under an hour because every piece already existed.
+A per-level count of the three hard-collider families, maintained on
+Fabric's entity load/unload events. An interface mixin on
+EntityGetter.getEntityCollisions that returns the empty list when the
+count is zero and the source predicate is the default. And the oracle
+pattern, reused a third time: 1 in 16 eligible queries fall through
+to the vanilla walk, and a non-empty result logs a mismatch.
+
+A/B at the farm against the same night's baseline: storage queries
+1171 to 209 per tick, query tick-cost 12.8 to 1.15 ms, whole-server
+mspt from the high 30s to about 20.5, TPS flat at 20. The oracle ran
+535,137 verification walks and found zero non-empty results. The
+skip beats the grid it was meant to supplement, and they compose;
+the grid still serves the 209 that remain.
+
+The residual risk is documented rather than solved: a modded entity
+that widens canCollideWith the way boats do would make the skip
+wrong, and the oracle would catch it in any world where it runs. The
+other open question is boats. One boat anywhere in the level zeroes
+the whole-level skip. If field data shows real worlds always have a
+boat loaded somewhere, the count moves per-section, which is the
+same maintenance the grid already does.
+
+Both features are opt-in and unreleased. The arc from "validate the
+index" to "the index is the smaller half of the win" took one
+evening, and the lesson is the same one the JIT wall taught in
+April: measure what the system actually does before optimizing how
+it does it.
