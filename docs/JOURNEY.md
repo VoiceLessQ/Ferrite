@@ -1505,8 +1505,8 @@ second is the same measurement under block-update pressure: an active
 redstone or piston array adjacent to the mob area, high eviction rate,
 worst-case for the kind-diff filter.
 
-The second scenario is the one that determines whether this ships
-stays default-on. A piston array near pathfinding mobs is exactly
+The second scenario is the one that decides whether this stays
+default-on. A piston array near pathfinding mobs is exactly
 the workload that could flip the cache from a win to a regression if
 the eviction rate outpaces the fill rate. The timing comparison under
 ideal conditions confirms the win exists; the adversarial scenario
