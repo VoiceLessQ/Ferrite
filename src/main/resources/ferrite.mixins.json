@@ -40,6 +40,7 @@
 		"ActiveTargetGoalMixin",
 		"ClassInstanceMultiMapAccessor",
 		"EntityCellMixin",
+		"EntityGetterMixin",
 		"EntitySectionCallbackMixin",
 		"EntitySectionMixin",
 		"EntitySectionStorageMixin",

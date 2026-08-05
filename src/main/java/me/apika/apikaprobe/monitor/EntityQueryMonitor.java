@@ -174,6 +174,21 @@ public final class EntityQueryMonitor {
 			String.format("%.1f", (double) transitions / ticks),
 			String.format("%.1f", count == 0 ? 0.0 : 100.0 * transitions / count)
 		);
+		if (me.apika.apikaprobe.spatial.ColliderSkip.ENABLED) {
+			long elig = me.apika.apikaprobe.spatial.ColliderSkip.eligible;
+			long skip = me.apika.apikaprobe.spatial.ColliderSkip.skipped;
+			long walks = me.apika.apikaprobe.spatial.ColliderSkip.oracleWalks;
+			long nonEmpty = me.apika.apikaprobe.spatial.ColliderSkip.oracleNonEmpty;
+			me.apika.apikaprobe.spatial.ColliderSkip.eligible = 0;
+			me.apika.apikaprobe.spatial.ColliderSkip.skipped = 0;
+			me.apika.apikaprobe.spatial.ColliderSkip.oracleWalks = 0;
+			MonitorLog.info(
+				"[collider-skip] eligible={} skipped={} ({}% of eligible)  oracle: walks={} nonEmpty={}",
+				elig, skip,
+				String.format("%.1f", elig == 0 ? 0.0 : 100.0 * skip / elig),
+				walks, nonEmpty
+			);
+		}
 		if (me.apika.apikaprobe.spatial.EntityCellIndex.ENABLED) {
 			long scanned = me.apika.apikaprobe.spatial.EntityCellIndex.scanned;
 			long filtered = me.apika.apikaprobe.spatial.EntityCellIndex.filteredOut;

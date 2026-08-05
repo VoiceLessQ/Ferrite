@@ -94,6 +94,7 @@ public class ExampleMod implements ModInitializer {
 		MonsterPhaseMonitor.register();
 		TargetScanMonitor.register();
 		EntityQueryMonitor.register();
+		me.apika.apikaprobe.spatial.ColliderSkip.register();
 		GoalSelectorMonitor.register();
 		MoveControlMonitor.register();
 		LookControlMonitor.register();

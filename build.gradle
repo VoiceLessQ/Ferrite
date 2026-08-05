@@ -89,6 +89,9 @@ loom {
 			if (project.findProperty("ferrite.entityQueryCallers")?.toString() == "true") {
 				vmArg "-Dferrite.entityquery.callers=true"
 			}
+			if (project.findProperty("ferrite.colliderSkip")?.toString() == "true") {
+				vmArg "-Dferrite.entityquery.colliderskip=true"
+			}
 			// -Pferrite.monitorsOn=true forces monitor logging on regardless of heap.
 			if (project.findProperty("ferrite.monitorsOn")?.toString() == "true") {
 				vmArg "-Dferrite.log.monitors.on=true"
