@@ -235,6 +235,18 @@ jar {
 	from("LICENSE") {
 		rename { "${it}_${project.base.archivesName.get()}"}
 	}
+	manifest {
+		def gitHash = "unknown"
+		try {
+			def p = ["git", "rev-parse", "--short", "HEAD"].execute(null, projectDir)
+			if (p.waitFor() == 0) gitHash = p.text.trim()
+		} catch (ignored) {}
+		attributes(
+			"Implementation-Version": "${project.version}",
+			"Ferrite-Build-Commit": gitHash,
+			"Ferrite-Build-Time": new Date().format("yyyy-MM-dd'T'HH:mm:ssXX", TimeZone.getTimeZone("UTC"))
+		)
+	}
 }
 
 // configure the maven publication
