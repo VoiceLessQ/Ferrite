@@ -1628,3 +1628,88 @@ index" to "the index is the smaller half of the win" took one
 evening, and the lesson is the same one the JIT wall taught in
 April: measure what the system actually does before optimizing how
 it does it.
+
+## First night in the Nether (2026-08-08)
+
+Everything Ferrite had been measured on so far lived in the
+overworld. Discussion #11 promised Nether numbers, so this session
+went and got some, starting with the nastiest workload the Nether
+offers: the gold farm, hundreds of zombified piglins stuffed into a
+one-block hole on purpose.
+
+Nobody wants to build that by hand, so a datapack did it. One
+function carves an obsidian rig into the nether at 0 60 0, turns
+off natural spawning for clean numbers, and disables cramming
+damage (the first pile of 800 suffocated in seconds, which was
+funny once). Other functions dump 100, 300, or 800 persistent
+piglins into the pit. The whole rig is five mcfunction files and a
+/reload. Two dumb obstacles on the way in: PowerShell wrote the
+files with a UTF-8 BOM, which mcfunction parsing rejects with a
+useless "unknown function" error, and 26.2 renamed every gamerule
+(doMobSpawning is now spawn_mobs; the registry rename ate the old
+camelCase names).
+
+### An idle pile is free, a dense pile is not
+
+First surprise: 300 idle piglins cost almost nothing. Around 140
+queries per tick, a tenth of a millisecond. Piglins are neutral;
+they stand there. Movement is what drives collision queries, and a
+calm pile barely moves. Overworld zombie numbers do not carry over
+to a calm pile, exactly as #11 suspected they wouldn't.
+
+Push the pile to ~914 and the picture flips. Vanilla baseline:
+878 queries per tick at 19.5 us each, 17.2 ms of query cost per
+tick, monster ticking at 24.6 ms average. That is worse per query
+than the 1022-zombie farm, because the whole pile shares ONE entity
+section. Every query walks all 900 neighbors.
+
+### The grid's worst case is the skip's best case
+
+That one-section detail set up a result we could not have staged
+better. The bitset grid prunes candidates by cell; when everything
+lives in the same cell, it prunes nothing, and the counters showed
+exactly that, 0.0% filtered. The collider skip, though, answers
+"any boats, shulkers, or minecarts here?" and a piglin pile has
+none, so 93.7% of eligible queries returned empty without walking
+anything.
+
+Desktop A/B at ~914 piglins: query cost 17.2 to about 1.0 ms per
+tick, monster tick 24.6 to 13.0 ms. Then the pi-sim pass, four
+cores and a 2G heap, same pile: query cost 19.5 to 0.7 ms, monster
+tick from roughly 27 down to 9. The win grows as the hardware
+shrinks, same shape as the overworld zombie test, and that is the
+number that matters for the Pi crowd #11 is aimed at. Oracles ran
+the whole time on both features. Thousands of sampled verification
+walks per window, zero mismatches, all night.
+
+### The 80,000 pushes that weren't
+
+One number nearly derailed the evening. The cramming dispatcher
+reported ~150 to 300 pushes per window in every baseline run, then
+~80,000 in the first run with the optimizations on. A 400x behavior
+difference attached to the feature would have been disqualifying,
+oracle or no oracle, because the oracle checks query answers, not
+downstream motion.
+
+So it got the hypothesis treatment instead of a shrug. Fresh pile
+versus settled pile: no change. Survival versus creative: no
+change. Then the matched test, fresh pile with the optimizations ON
+under pi-sim: 256 to 295 pushes, completely normal. The feature was
+innocent. The likely culprit is embarrassing in hindsight: that one
+run began by teleporting the player directly onto the pit, and 900
+piglins spent every tick shoving against a body standing in their
+hole. The lesson filed next to the others: a scary correlation
+deserves a controlled test before it deserves a panic.
+
+### What the Nether said so far
+
+The gold-farm shape is real, it is the collider skip's home turf,
+and the win on small hardware is the largest Ferrite has measured
+anywhere. Still open before this leaves the opt-in shelf: an
+angered pile (group anger means pathing plus real movement),
+fortress natural spawning, a mixed load with ghasts and magma
+cubes, and one source question with teeth: if striders count as
+hard-collidable, a single ambient strider in a lava ocean disarms
+the whole-level skip, and the per-section count stops being an
+upgrade path and becomes the design.
+
