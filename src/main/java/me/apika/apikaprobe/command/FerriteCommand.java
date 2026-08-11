@@ -244,7 +244,11 @@ public final class FerriteCommand {
 						.then(Commands.literal("monitors")
 								.then(Commands.literal("on").executes(FerriteCommand::logMonitorsOn))
 								.then(Commands.literal("off").executes(FerriteCommand::logMonitorsOff))
-								.then(Commands.literal("status").executes(FerriteCommand::logMonitorsStatus)))));
+								.then(Commands.literal("status").executes(FerriteCommand::logMonitorsStatus)))
+						.then(Commands.literal("status").executes(FerriteCommand::logCategoryStatus))
+						.then(Commands.argument("category", StringArgumentType.word())
+								.then(Commands.literal("on").executes(FerriteCommand::logCategoryOn))
+								.then(Commands.literal("off").executes(FerriteCommand::logCategoryOff)))));
 	}
 
 	/**
@@ -1632,6 +1636,43 @@ public final class FerriteCommand {
 	private static int logMonitorsStatus(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = String.format("[log] monitors=%s",
 				me.apika.apikaprobe.monitor.MonitorLog.ENABLED ? "ENABLED" : "DISABLED");
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * Per-category mute for periodic monitor lines, e.g.
+	 * {@code /ferrite log cramming-dispatch off}.  The category is the
+	 * bracket tag each line starts with, without the brackets.  Only
+	 * affects lines routed through MonitorLog; one-shot bootstrap logs
+	 * and command output are untouched.  Volatile, not persisted (#13).
+	 */
+	private static int logCategoryOff(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		String cat = StringArgumentType.getString(ctx, "category");
+		me.apika.apikaprobe.monitor.MonitorLog.mute(cat);
+		String msg = "[log] category [" + cat + "] MUTED (counters still tick; '/ferrite log " + cat + " on' to resume)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int logCategoryOn(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		String cat = StringArgumentType.getString(ctx, "category");
+		boolean was = me.apika.apikaprobe.monitor.MonitorLog.unmute(cat);
+		String msg = was
+				? "[log] category [" + cat + "] unmuted"
+				: "[log] category [" + cat + "] was not muted (check spelling against the bracket tag in latest.log)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int logCategoryStatus(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		java.util.List<String> muted = me.apika.apikaprobe.monitor.MonitorLog.mutedCategories();
+		String msg = String.format("[log] monitors=%s muted=%s",
+				me.apika.apikaprobe.monitor.MonitorLog.ENABLED ? "ENABLED" : "DISABLED",
+				muted.isEmpty() ? "(none)" : String.join(", ", muted));
 		sendFeedback(ctx, msg, false);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
