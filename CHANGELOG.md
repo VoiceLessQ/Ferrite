@@ -25,6 +25,22 @@ marks pre-release research builds.
 
 ### Added
 
+- **Per-category log muting** (#14). `/ferrite log <category> off`
+  silences one monitor tag (`physics-dispatch`, `cramming-dispatch`,
+  `redstone-oracle`, and every other bracket tag) without touching
+  the rest; `on` resumes it on the next report window and
+  `/ferrite log status` lists what is muted. Counters keep running
+  while muted. The global `/ferrite log monitors` switch is
+  unchanged.
+- **Module toggles persist across restarts** (#13). Cramming, the
+  hopper layer, AC redstone, monitor logging, and muted log
+  categories now save to `config/ferrite.properties` on every
+  toggle and reload at boot. The file stores only deviations from
+  defaults, so it stays empty (absent, in fact) until something is
+  changed, and reverting a toggle removes its line. Diagnostic and
+  experiment flags stay session-only on purpose, as does prewarm,
+  since enabling it during boot breaks spawn loading.
+
 - **Entity spatial query index** (opt-in,
   `-Dferrite.entityquery.cache=true`). Sections holding 32+ entities
   get a per-section bitset grid (4-block cells over storage-list

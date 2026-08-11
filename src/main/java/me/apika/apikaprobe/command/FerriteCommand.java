@@ -256,10 +256,12 @@ public final class FerriteCommand {
 	 * the cancel mixin no-ops and vanilla LivingEntity.tickCramming runs
 	 * unmodified — including vanilla cramming damage. Lets users A/B
 	 * the perf claim ("stable TPS at 1000+ mobs") in their own world.
-	 * Volatile, not persisted.
+	 * Persisted via FerriteConfig (#13).
 	 */
 	private static int enableCramming(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		CrammingDispatcher.ENABLED = true;
+		me.apika.apikaprobe.config.FerriteConfig.set(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_CRAMMING, true, true);
 		String msg = "[cramming] Ferrite cramming enabled — batched Rust path active (vanilla cramming damage NOT applied)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
@@ -268,6 +270,8 @@ public final class FerriteCommand {
 
 	private static int disableCramming(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		CrammingDispatcher.ENABLED = false;
+		me.apika.apikaprobe.config.FerriteConfig.set(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_CRAMMING, false, true);
 		String msg = "[cramming] Ferrite cramming disabled — vanilla path active (cramming damage will fire per maxEntityCramming gamerule)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
@@ -288,6 +292,8 @@ public final class FerriteCommand {
 		me.apika.apikaprobe.monitor.HopperHintMonitor.USE_HINT = true;
 		me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE = true;
 		me.apika.apikaprobe.hopper.HopperLaneRouteConfig.ENABLE = true;
+		me.apika.apikaprobe.config.FerriteConfig.setString(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_HOPPER, "true");
 		String msg = "[hopper] Ferrite hopper layer ENABLED (extract hint + per-slot fire + lane routing)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
@@ -298,6 +304,8 @@ public final class FerriteCommand {
 		me.apika.apikaprobe.monitor.HopperHintMonitor.USE_HINT = false;
 		me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE = false;
 		me.apika.apikaprobe.hopper.HopperLaneRouteConfig.ENABLE = false;
+		me.apika.apikaprobe.config.FerriteConfig.setString(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_HOPPER, "false");
 		String msg = "[hopper] Ferrite hopper layer DISABLED, vanilla hopper paths active";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
@@ -318,20 +326,22 @@ public final class FerriteCommand {
 	}
 
 	/**
-	 * Enables the Alternate-Current wire algorithm for the current server
-	 * session only. Setting is held in a static volatile field, NOT
-	 * persisted, flips back to the default ({@code false}) on server
-	 * restart. Re-issue the command after each restart if you want it on.
+	 * Enables the Alternate-Current wire algorithm. Persisted via
+	 * FerriteConfig (#13), so it survives server restarts.
 	 */
 	private static int enableAc(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		FerriteWireConfig.ENABLED = true;
-		sendFeedback(ctx, "[redstone] Alternate-Current wire algorithm enabled (this session only)", true);
-		ExampleMod.LOGGER.info("[redstone] AC wire algorithm enabled (via /ferrite, this session only)");
+		me.apika.apikaprobe.config.FerriteConfig.set(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_REDSTONE_AC, true, false);
+		sendFeedback(ctx, "[redstone] Alternate-Current wire algorithm enabled (persisted)", true);
+		ExampleMod.LOGGER.info("[redstone] AC wire algorithm enabled (via /ferrite, persisted)");
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int disableAc(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		FerriteWireConfig.ENABLED = false;
+		me.apika.apikaprobe.config.FerriteConfig.set(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_REDSTONE_AC, false, false);
 		sendFeedback(ctx, "[redstone] Alternate-Current wire algorithm disabled (vanilla path)", true);
 		ExampleMod.LOGGER.info("[redstone] AC wire algorithm disabled (via /ferrite)");
 		return Command.SINGLE_SUCCESS;
@@ -1619,6 +1629,8 @@ public final class FerriteCommand {
 	 */
 	private static int logMonitorsOn(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		me.apika.apikaprobe.monitor.MonitorLog.ENABLED = true;
+		me.apika.apikaprobe.config.FerriteConfig.setString(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_LOG_MONITORS, "true");
 		String msg = "[log] monitor reports ENABLED";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
@@ -1627,7 +1639,9 @@ public final class FerriteCommand {
 
 	private static int logMonitorsOff(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		me.apika.apikaprobe.monitor.MonitorLog.ENABLED = false;
-		String msg = "[log] monitor reports DISABLED (counters still tick; toggle on or restart to resume)";
+		me.apika.apikaprobe.config.FerriteConfig.setString(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_LOG_MONITORS, "false");
+		String msg = "[log] monitor reports DISABLED (counters still tick; '/ferrite log monitors on' to resume)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
@@ -1646,11 +1660,12 @@ public final class FerriteCommand {
 	 * {@code /ferrite log cramming-dispatch off}.  The category is the
 	 * bracket tag each line starts with, without the brackets.  Only
 	 * affects lines routed through MonitorLog; one-shot bootstrap logs
-	 * and command output are untouched.  Volatile, not persisted (#13).
+	 * and command output are untouched.  Persisted via FerriteConfig (#13).
 	 */
 	private static int logCategoryOff(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String cat = StringArgumentType.getString(ctx, "category");
 		me.apika.apikaprobe.monitor.MonitorLog.mute(cat);
+		saveMutedCategories();
 		String msg = "[log] category [" + cat + "] MUTED (counters still tick; '/ferrite log " + cat + " on' to resume)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
@@ -1660,12 +1675,19 @@ public final class FerriteCommand {
 	private static int logCategoryOn(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String cat = StringArgumentType.getString(ctx, "category");
 		boolean was = me.apika.apikaprobe.monitor.MonitorLog.unmute(cat);
+		if (was) saveMutedCategories();
 		String msg = was
 				? "[log] category [" + cat + "] unmuted"
 				: "[log] category [" + cat + "] was not muted (check spelling against the bracket tag in latest.log)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
+	}
+
+	private static void saveMutedCategories() {
+		me.apika.apikaprobe.config.FerriteConfig.setString(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_LOG_MUTED,
+				String.join(",", me.apika.apikaprobe.monitor.MonitorLog.mutedCategories()));
 	}
 
 	private static int logCategoryStatus(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {

@@ -57,6 +57,7 @@ public class ExampleMod implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		LOGGER.info("Hello Fabric world!");
+		me.apika.apikaprobe.config.FerriteConfig.load();
 		// One-line hardware stamp so shared logs self-describe their host.
 		LOGGER.info("[hw] arch={} cores={} maxHeap={}MB jvm={} native={} monitors={}",
 				System.getProperty("os.arch"),
