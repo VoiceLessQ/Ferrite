@@ -5,7 +5,7 @@ All notable changes to Ferrite are documented here. Format follows
 follow [Semantic Versioning](https://semver.org/); the `-alpha` suffix
 marks pre-release research builds.
 
-## [Unreleased]
+## [Released]
 
 ## [0.7.2-alpha] - 2026-08-13
 
