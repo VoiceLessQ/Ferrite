@@ -7,6 +7,8 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.7.2-alpha] - 2026-08-13
+
 ### Fixed
 
 - **Moonrise compatibility crash at boot** (#12). Moonrise replaces
