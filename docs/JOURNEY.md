@@ -1713,3 +1713,50 @@ hard-collidable, a single ambient strider in a lava ocean disarms
 the whole-level skip, and the per-section count stops being an
 upgrade path and becomes the design.
 
+## Moving day, then a purge (2026-08-13)
+
+The dev machine changed under the project. Ferrite was born on
+Windows, built through msys2 and a mingw cross target, pushed over
+HTTPS. Now it lives on Linux, and the migration announced itself in
+the pettiest way possible: 256 modified files in git status, none of
+them actually modified. Every one was a CRLF ghost, Windows line
+endings sitting in the working tree over LF content in the repo. One
+checkout swept them, one small commit (d6d8ada) normalized the two
+files that had slipped in as CRLF, and the tree went quiet. Leftovers
+remain and are welcome to: .cargo/config.toml still points at
+C:/msys64 paths that no Linux linker will ever read, and the mingw
+target still builds the Windows jar natives just fine.
+
+Same day, a different kind of housecleaning. The Moonrise crash (#12)
+had made a point worth hearing: every mixin we register is a promise
+that some vanilla method keeps existing, and two of ours crashed real
+users over injections that only fed a monitor line. So the whole
+mixin list got an audit, every class, target, and consumer, before
+deciding what deserved to keep making promises.
+
+The audit found something I had half forgotten. The json listed 82
+mixins, and 16 of them were empty. Bodies gutted during the 26.1.2
+mojmap port, "stubbed to keep the file in tree while build moves
+forward," said the javadoc, honestly, in files nobody reopened for
+seven months. The per-slot hopper probes, the old worldgen stage
+timers, all of them applying as no-ops every boot while still naming
+vanilla classes that any future rename could trip over. Six more
+files never made the json at all. Dead weight with a blast radius.
+
+Two commits took care of it. 4f98de9 removed the empty shells and
+the unregistered corpses; 170f15d retired five probes whose
+questions JOURNEY already answers: sign ticks, hopper scans, chunk
+save timing, the mob spawn census. Their numbers are recorded with
+their measurement conditions, and the probes themselves are one git
+show away if a question ever reopens. The compiler pushed back once,
+correctly: three accessor mixins I had judged dead turned out to be
+compile time dependencies of the default-off surface and
+bulk-density code, so they stayed with the parked work they serve.
+
+From 82 registered mixins to 61, about 1300 lines gone, zero
+behavior change, server boots clean in 0.676 seconds with no
+injection failures. The next vanilla bump has a third less surface
+to re-verify, and the next Moonrise-shaped mod has fewer promises of
+ours to break. Not glamorous work. The kind you only notice when it
+was never done.
+
