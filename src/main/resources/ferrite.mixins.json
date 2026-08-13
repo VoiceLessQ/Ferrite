@@ -1,6 +1,7 @@
 {
 	"required": true,
 	"package": "me.apika.apikaprobe.mixin",
+	"plugin": "me.apika.apikaprobe.FerriteMixinPlugin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
 		"ChunkPhaseMixin",

@@ -7,6 +7,18 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Moonrise compatibility crash at boot** (#12). Moonrise replaces
+  the vanilla light engine internals, which removed the injection
+  targets of the two ThreadedLevelLightEngine diagnostic mixins and
+  hard-crashed the game at init. A mixin config plugin now detects
+  Moonrise and skips those two mixins; for now the `[light]` monitor
+  reports no data when Moonrise is installed, since Moonrise owns
+  lighting at that point. A Moonrise-aware light probe may come
+  later. Verified against Moonrise 1.1.0: boot, existing-world play,
+  and fresh world creation all clean.
+
 ### Changed
 
 - **Monitor logging defaults off on small heaps.** Max heap of 3 GB
