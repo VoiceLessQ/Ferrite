@@ -9,15 +9,23 @@ marks pre-release research builds.
 
 ### Added
 
-- **Chunkforce auto mode, default on.** Forced chunk generation now
-  engages by itself when a player sustains roughly 40 blocks/s
-  (spectator dash, elytra dive) and stands down below that, so slow
-  play costs nothing and writes no extra chunks. Measured at ~88
-  blocks/s over virgin terrain: vanilla runs a standing hole of
-  130-160 missing chunks inside view distance and never recovers;
-  with forcing engaged the deficit converges to zero at the same
-  speed, TPS 20 throughout. `/ferrite chunkforce auto off` restores
-  the old manual-only behavior.
+- **Chunkforce auto mode, default off.** Forced chunk generation can
+  engage by itself when a player sustains roughly 40 blocks/s and
+  stand down below that; `/ferrite chunkforce auto on` enables it.
+  It stays off by default because the 10-run interleaved bench came
+  back negative: at 90 blocks/s over virgin terrain, vanilla alone
+  held a mean deficit of 0.9 missing chunks while auto mode measured
+  8.1, worse in all five paired runs; the forced tickets compete
+  with the urgent loads vanilla already prioritizes well. An earlier
+  single-run comparison had suggested a large win; it did not
+  survive repetition.
+- **`/ferrite arrival bench` and headless autobench.** Automated
+  straight-line flight at a fixed speed with the arrival monitor
+  running, single runs or interleaved baseline/auto suites on fresh
+  strips (`/ferrite arrival suite`), and a
+  `-Pferrite.autobench=x,z,speed,seconds,runs` gradle property that
+  runs a suite unattended and halts. This is the harness that caught
+  the auto-mode regression.
 - **`/ferrite arrival` monitor.** Counts chunks inside each player
   view distance that are not loaded, logged every 5 s: the
   server-side signature of terrain pop-in. About 50 us/tick at view

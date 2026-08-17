@@ -40,12 +40,12 @@ public final class ChunkForcer {
 
 	public static volatile boolean ENABLED = false;
 
-	/** Speed-gated auto mode (2026-08-17 A/B: vanilla runs a sustained
-	 *  43-159 missing-chunk deficit at ~88 blocks/s, chunkforce holds it
-	 *  at zero; below ~40 blocks/s the deficit is zero either way).
-	 *  Default ON: inert below the speed threshold, so slow play costs
-	 *  nothing and writes no extra chunks to disk. */
-	public static volatile boolean AUTO = true;
+	/** Speed-gated auto mode. Default OFF: the 10-run interleaved bench
+	 *  (2026-08-17, autobench, 90 b/s, vd 16) measured auto WORSE than
+	 *  vanilla in all 5 pairs (mean deficit 8.1 vs 0.9); forced tickets
+	 *  compete with vanilla's own better-prioritized urgent loads. The
+	 *  earlier single-run manual win did not survive repetition. */
+	public static volatile boolean AUTO = false;
 
 	/** Set per tick by ChunkForceTrigger when auto mode has at least one
 	 *  fast player; opens the submitOneShot gate without ENABLED. */
