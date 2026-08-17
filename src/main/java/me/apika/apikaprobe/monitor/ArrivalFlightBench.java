@@ -58,8 +58,55 @@ public final class ArrivalFlightBench {
 	private static float suitePitch;
 	private static final java.util.List<double[]> suiteResults = new java.util.ArrayList<>();
 
+	// Headless mode: -Dferrite.autobench=x,z,speed,seconds,runsPerArm
+	// teleports the first player to (x, 200, z) facing north, runs the
+	// suite, logs the comparison, and halts the server so the gradle
+	// process exits. Complete-control CI-style measurement, no manual
+	// commands (see build.gradle -Pferrite.autobench).
+	private static String autobenchSpec = System.getProperty("ferrite.autobench");
+	private static int autobenchDelay = 100;
+	private static boolean autoShutdown = false;
+
 	public static void register() {
 		ServerTickEvents.END_SERVER_TICK.register(ArrivalFlightBench::onTick);
+	}
+
+	private static void autobenchTick(MinecraftServer server) {
+		if (server.getPlayerList().getPlayers().isEmpty()) return;
+		if (--autobenchDelay > 0) return;
+		String spec = autobenchSpec;
+		autobenchSpec = null;
+		try {
+			String[] p = spec.split(",");
+			double x = Double.parseDouble(p[0].trim());
+			double z = Double.parseDouble(p[1].trim());
+			int speed = Integer.parseInt(p[2].trim());
+			int secs = Integer.parseInt(p[3].trim());
+			int runs = Integer.parseInt(p[4].trim());
+			ServerPlayer player = firstPlayer(server);
+			player.setGameMode(net.minecraft.world.level.GameType.SPECTATOR);
+			player.connection.teleport(x, 200.0, z, 0.0f, 0.0f);
+			autoShutdown = true;
+			// Suite fields come from the args, not the (still in-flight)
+			// teleport, so the start position is exact.
+			suite = true;
+			suiteRunsPerArm = runs;
+			suiteRunIndex = 0;
+			suiteResults.clear();
+			suiteStartX = x;
+			suiteStartY = 200.0;
+			suiteStartZ = z;
+			suiteYaw = 0.0f;
+			suitePitch = 0.0f;
+			speedBps = speed;
+			ticksTotal = secs * 20;
+			settleLeft = 100;
+			ExampleMod.LOGGER.info("[arrival-bench] autobench: ({}, {}) {} b/s x {} s, {} runs/arm",
+					x, z, speed, secs, runs);
+		} catch (RuntimeException e) {
+			ExampleMod.LOGGER.warn("[arrival-bench] bad autobench spec '{}' (want x,z,speed,seconds,runsPerArm): {}",
+					spec, e.toString());
+		}
 	}
 
 	/** Returns false if a run is already active. */
@@ -129,6 +176,10 @@ public final class ArrivalFlightBench {
 	private static final int WARMUP_CAP_TICKS = 1200;
 
 	private static void onTick(MinecraftServer server) {
+		if (autobenchSpec != null && !suite && pilot == null) {
+			autobenchTick(server);
+			return;
+		}
 		UUID id = pilot;
 		if (id == null) {
 			if (suite) suiteTick(server);
@@ -243,6 +294,11 @@ public final class ArrivalFlightBench {
 					mean[0] / n[0], mean[1] / n[1]));
 		}
 		broadcast(server, sb.toString());
+		if (autoShutdown) {
+			autoShutdown = false;
+			ExampleMod.LOGGER.info("[arrival-bench] autobench complete, halting server");
+			server.halt(false);
+		}
 	}
 
 	private static ServerPlayer firstPlayer(MinecraftServer server) {

@@ -63,6 +63,19 @@ loom {
 					programArg world.toString()
 				}
 			}
+			// Opt-in headless arrival bench: -Pferrite.autobench=x,z,speed,seconds,runsPerArm
+			// runs an interleaved baseline/auto suite at block (x,z) after the
+			// first player joins, then halts the server. Skips the title
+			// screen, same as autovalidate.
+			if (project.hasProperty("ferrite.autobench")) {
+				def spec = project.property("ferrite.autobench")
+				vmArg "-Dferrite.autobench=${spec}"
+				if (!project.hasProperty("ferrite.autovalidate") && !project.hasProperty("ferrite.autopregen")) {
+					def world = project.findProperty("ferrite.world") ?: "New World"
+					programArg "--quickPlaySingleplayer"
+					programArg world.toString()
+				}
+			}
 			// Opt-in dispatcher latency + run-duration probe.
 			// Boot with -Pferrite.dispatcherProbe=true to enable from the
 			// start; otherwise toggle in-game via /ferrite probe dispatcher on.
