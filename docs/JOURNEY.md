@@ -1900,3 +1900,74 @@ README has a flag that turns it off so you can watch the
 difference yourself. That last part is the tell, both ways. Slop
 cannot afford an off switch.
 
+
+## The win that sat in the tree for a month (2026-08-17)
+
+Today started with a complaint, not a plan: chunks are the big
+blocker. My first instinct was to design something new, a
+speculative directional pre-generator that watches player velocity
+and force-gens a cone ahead of flight. I wrote three paragraphs of
+scoping before actually reading the tree. ChunkForceTrigger already
+does all of it. Velocity-shifted ring centers, up to 12 chunks of
+lead at speed, one-shot tickets through the forcer. I built it on
+2026-07-12, validated its throughput and TPS behavior, marked it
+default-off, and forgot what question it was supposed to answer.
+
+The question it was supposed to answer had never been measured:
+does the player actually see fewer missing chunks? Throughput is a
+supply number. Pop-in is a demand number. Nobody had put them on
+the same chart.
+
+So the session became a measurement session. New monitor,
+ChunkArrivalMonitor, about a hundred lines: each tick, count the
+chunks inside each player view distance that are not loaded. Zero
+means the terrain was always there first. A sustained positive
+count is pop-in as the server sees it. Toggle is /ferrite arrival,
+cost is about 50 us per tick for 441 hasChunk probes at view
+distance 10, and the report prints its own scan cost so the
+observer effect stays visible.
+
+First flight was a false start twice over. The dev client boots a
+3 GB heap, which trips the small-heap default in MonitorLog, so the
+monitor ran for ninety seconds and logged nothing. My fault; the
+arrival command now warns when its reports would be muted. And at
+rocket-elytra cruise, about 34 blocks per second, the answer was a
+flat zero everywhere, vanilla included. At that speed there is
+nothing to win. Vanilla keeps up. Had I stopped there, this entry
+would be another closed-question note.
+
+Spectator mode at max scroll speed is a different world. At about
+88 blocks per second over virgin terrain, vanilla runs a standing
+hole of 43 to 159 missing chunks, peak 195, with literally every
+tick for 65 straight seconds missing part of the view area. Up to a
+third of what the player should see does not exist yet. Then the
+same flight with /ferrite chunkforce on: forty seconds of catch-up
+ramp starting 130 chunks behind, and then convergence. Zero point
+zero. Four consecutive report windows of exact zero at full speed,
+one brief blip of 13.8, TPS 20.00 the whole way, tick cost
+indistinguishable from the vanilla run.
+
+The arithmetic says the convergence is honest but tight. An
+88-block-per-second flight at view distance 10 sweeps roughly 115
+fresh chunks per second into view, and our pregen bench measured
+the vanilla generation ceiling at about 114 per second on this
+hardware. Chunkforce wins because it starts the work before the
+demand arrives; it has no headroom to spare. A dive-speed elytra or
+a bigger view distance would outrun it, and the deficit curve would
+show exactly where.
+
+What I like most about this one is what it is not. It is not a
+Rust port. It is not a kernel. It is a hundred lines of Java glue
+driving the vanilla ticket API, which means it never met the JIT
+wall, because it never raced the JIT at all. It moves work earlier
+instead of making work faster. That is the door the seed left open
+after every other one closed.
+
+Still open: whether it earns default-on. The honest costs are disk
+growth (every forced chunk persists) and worker contention with
+explicit pre-gen runs. The shape I favor is a speed gate, engage
+only above sustained fast flight, since below roughly 40 blocks per
+second the measurement says there is nothing to gain. That decision
+and a confirming run on a second seed are next-session work. One
+run per arm, one seed, singleplayer host: the numbers above carry
+those qualifiers.
