@@ -40,6 +40,17 @@ public final class ChunkForcer {
 
 	public static volatile boolean ENABLED = false;
 
+	/** Speed-gated auto mode (2026-08-17 A/B: vanilla runs a sustained
+	 *  43-159 missing-chunk deficit at ~88 blocks/s, chunkforce holds it
+	 *  at zero; below ~40 blocks/s the deficit is zero either way).
+	 *  Default ON: inert below the speed threshold, so slow play costs
+	 *  nothing and writes no extra chunks to disk. */
+	public static volatile boolean AUTO = true;
+
+	/** Set per tick by ChunkForceTrigger when auto mode has at least one
+	 *  fast player; opens the submitOneShot gate without ENABLED. */
+	static volatile boolean autoActive = false;
+
 	private static TicketType ticketType;
 
 	/** Tracks chunks we've submitted that haven't completed yet. */
@@ -66,7 +77,7 @@ public final class ChunkForcer {
 	 *  queued, false if disabled, capped, already inflight, or
 	 *  registration didn't run. Caller must already be on server thread. */
 	public static boolean submitOneShot(ServerLevel world, int cx, int cz) {
-		if (!ENABLED) return false;
+		if (!ENABLED && !autoActive) return false;
 		if (ticketType == null) return false;
 		if (inflight.size() >= MAX_INFLIGHT) return false;
 		long key = ChunkPrewarmer.key(cx, cz);

@@ -185,7 +185,10 @@ public final class FerriteCommand {
 				.then(Commands.literal("chunkforce")
 						.then(Commands.literal("on").executes(FerriteCommand::chunkForceOn))
 						.then(Commands.literal("off").executes(FerriteCommand::chunkForceOff))
-						.then(Commands.literal("status").executes(FerriteCommand::chunkForceStatus)))
+						.then(Commands.literal("status").executes(FerriteCommand::chunkForceStatus))
+						.then(Commands.literal("auto")
+								.then(Commands.literal("on").executes(FerriteCommand::chunkForceAutoOn))
+								.then(Commands.literal("off").executes(FerriteCommand::chunkForceAutoOff))))
 				.then(Commands.literal("arrival")
 						.then(Commands.literal("on").executes(FerriteCommand::arrivalOn))
 						.then(Commands.literal("off").executes(FerriteCommand::arrivalOff))
@@ -1391,10 +1394,22 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
+	private static int chunkForceAutoOn(CommandContext<CommandSourceStack> ctx) {
+		ChunkForcer.AUTO = true;
+		sendFeedback(ctx, "[chunkforce] auto mode ON (engages above ~40 blocks/s sustained)", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int chunkForceAutoOff(CommandContext<CommandSourceStack> ctx) {
+		ChunkForcer.AUTO = false;
+		sendFeedback(ctx, "[chunkforce] auto mode OFF (manual on/off only)", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
 	private static int chunkForceStatus(CommandContext<CommandSourceStack> ctx) {
 		String line = String.format(
-				"[chunkforce] enabled=%s inflight=%d scheduled=%d completed=%d errored=%d",
-				ChunkForcer.ENABLED, ChunkForcer.inflightCount(),
+				"[chunkforce] enabled=%s auto=%s inflight=%d scheduled=%d completed=%d errored=%d",
+				ChunkForcer.ENABLED, ChunkForcer.AUTO, ChunkForcer.inflightCount(),
 				ChunkForcer.scheduledCount(), ChunkForcer.completedCount(),
 				ChunkForcer.erroredCount());
 		sendFeedback(ctx, line, false);
