@@ -90,6 +90,8 @@ public class ExampleMod implements ModInitializer {
 		MonsterPhaseMonitor.register();
 		TargetScanMonitor.register();
 		me.apika.apikaprobe.monitor.ChunkArrivalMonitor.register();
+		// Bench must register after the monitor so it reads this tick's deficit.
+		me.apika.apikaprobe.monitor.ArrivalFlightBench.register();
 		EntityQueryMonitor.register();
 		me.apika.apikaprobe.spatial.ColliderSkip.register();
 		GoalSelectorMonitor.register();

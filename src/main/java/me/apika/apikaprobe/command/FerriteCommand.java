@@ -192,7 +192,12 @@ public final class FerriteCommand {
 				.then(Commands.literal("arrival")
 						.then(Commands.literal("on").executes(FerriteCommand::arrivalOn))
 						.then(Commands.literal("off").executes(FerriteCommand::arrivalOff))
-						.then(Commands.literal("status").executes(FerriteCommand::arrivalStatus)))
+						.then(Commands.literal("status").executes(FerriteCommand::arrivalStatus))
+						.then(Commands.literal("bench")
+								.then(Commands.literal("stop").executes(FerriteCommand::arrivalBenchStop))
+								.then(Commands.argument("blocksPerSec", IntegerArgumentType.integer(5, 300))
+										.then(Commands.argument("seconds", IntegerArgumentType.integer(5, 600))
+												.executes(FerriteCommand::arrivalBenchStart)))))
 				.then(Commands.literal("pregen")
 						.then(Commands.argument("radius", IntegerArgumentType.integer(1, 50))
 								.executes(FerriteCommand::pregenStart))
@@ -1437,6 +1442,38 @@ public final class FerriteCommand {
 	private static int arrivalStatus(CommandContext<CommandSourceStack> ctx) {
 		sendFeedback(ctx, "[chunk-arrival] enabled="
 				+ me.apika.apikaprobe.monitor.ChunkArrivalMonitor.ENABLED, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int arrivalBenchStart(CommandContext<CommandSourceStack> ctx) {
+		net.minecraft.server.level.ServerPlayer player;
+		try {
+			player = ctx.getSource().getPlayerOrException();
+		} catch (Exception e) {
+			sendFeedback(ctx, "[arrival-bench] needs a player (heading comes from your look direction)", false);
+			return 0;
+		}
+		int bps = IntegerArgumentType.getInteger(ctx, "blocksPerSec");
+		int secs = IntegerArgumentType.getInteger(ctx, "seconds");
+		if (!me.apika.apikaprobe.monitor.ArrivalFlightBench.start(player, bps, secs)) {
+			sendFeedback(ctx, "[arrival-bench] already running; /ferrite arrival bench stop first", false);
+			return 0;
+		}
+		sendFeedback(ctx, String.format(
+				"[arrival-bench] flying %d b/s for %d s along your look heading; summary at the end",
+				bps, secs), false);
+		if (!me.apika.apikaprobe.monitor.MonitorLog.ENABLED) {
+			sendFeedback(ctx, "[arrival-bench] note: per-5s report lines are muted"
+					+ " (small heap); the end summary still prints", false);
+		}
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int arrivalBenchStop(CommandContext<CommandSourceStack> ctx) {
+		boolean stopped = me.apika.apikaprobe.monitor.ArrivalFlightBench.stop();
+		sendFeedback(ctx, stopped
+				? "[arrival-bench] stopping, summary follows"
+				: "[arrival-bench] no run active", false);
 		return Command.SINGLE_SUCCESS;
 	}
 

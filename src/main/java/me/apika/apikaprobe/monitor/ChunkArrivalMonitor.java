@@ -26,6 +26,9 @@ public final class ChunkArrivalMonitor {
 
 	public static volatile boolean ENABLED = false;
 
+	/** Deficit computed on the most recent tick; read by ArrivalFlightBench. */
+	public static volatile long lastDeficit = 0L;
+
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 
 	// Server-thread only, no synchronization needed.
@@ -44,6 +47,7 @@ public final class ChunkArrivalMonitor {
 	}
 
 	public static void reset() {
+		lastDeficit = 0L;
 		ticks = 0L;
 		deficitSum = 0L;
 		deficitMax = 0L;
@@ -84,6 +88,7 @@ public final class ChunkArrivalMonitor {
 			}
 		}
 		long now = System.nanoTime();
+		lastDeficit = deficit;
 		ticks++;
 		deficitSum += deficit;
 		if (deficit > deficitMax) deficitMax = deficit;
