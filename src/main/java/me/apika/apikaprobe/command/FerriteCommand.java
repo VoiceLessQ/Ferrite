@@ -197,7 +197,12 @@ public final class FerriteCommand {
 								.then(Commands.literal("stop").executes(FerriteCommand::arrivalBenchStop))
 								.then(Commands.argument("blocksPerSec", IntegerArgumentType.integer(5, 300))
 										.then(Commands.argument("seconds", IntegerArgumentType.integer(5, 600))
-												.executes(FerriteCommand::arrivalBenchStart)))))
+												.executes(FerriteCommand::arrivalBenchStart))))
+						.then(Commands.literal("suite")
+								.then(Commands.argument("blocksPerSec", IntegerArgumentType.integer(5, 300))
+										.then(Commands.argument("seconds", IntegerArgumentType.integer(5, 600))
+												.then(Commands.argument("runsPerArm", IntegerArgumentType.integer(1, 10))
+														.executes(FerriteCommand::arrivalSuiteStart))))))
 				.then(Commands.literal("pregen")
 						.then(Commands.argument("radius", IntegerArgumentType.integer(1, 50))
 								.executes(FerriteCommand::pregenStart))
@@ -1466,6 +1471,28 @@ public final class FerriteCommand {
 			sendFeedback(ctx, "[arrival-bench] note: per-5s report lines are muted"
 					+ " (small heap); the end summary still prints", false);
 		}
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int arrivalSuiteStart(CommandContext<CommandSourceStack> ctx) {
+		net.minecraft.server.level.ServerPlayer player;
+		try {
+			player = ctx.getSource().getPlayerOrException();
+		} catch (Exception e) {
+			sendFeedback(ctx, "[arrival-bench] needs a player (heading comes from your look direction)", false);
+			return 0;
+		}
+		int bps = IntegerArgumentType.getInteger(ctx, "blocksPerSec");
+		int secs = IntegerArgumentType.getInteger(ctx, "seconds");
+		int runs = IntegerArgumentType.getInteger(ctx, "runsPerArm");
+		if (!me.apika.apikaprobe.monitor.ArrivalFlightBench.startSuite(player, bps, secs, runs)) {
+			sendFeedback(ctx, "[arrival-bench] already running; /ferrite arrival bench stop first", false);
+			return 0;
+		}
+		sendFeedback(ctx, String.format(
+				"[arrival-bench] suite: %d baseline + %d auto runs, %d b/s x %d s each,"
+						+ " fresh strip per run; comparison prints at the end",
+				runs, runs, bps, secs), false);
 		return Command.SINGLE_SUCCESS;
 	}
 
