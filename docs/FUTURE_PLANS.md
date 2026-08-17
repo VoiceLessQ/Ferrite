@@ -253,7 +253,7 @@ The signal that matters is different in shape: the init/pipeline
 long-pole pattern, where the lighting thread blocks chunk loads or
 chunk pipeline progress on a sustained server workload. That's a
 threading-model concern, not an algorithmic one, and the Rust BFS
-port that was investigated and shelved would not touch it.
+port that was investigated and closed would not touch it.
 
 **Next step (when signal arrives):** confirm via JFR that lighting is
 the long pole on chunk load specifically, distinct from the edit-spike

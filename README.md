@@ -153,7 +153,7 @@ This runs for everyone with no opt-in required, because it purely reduces overhe
 ## What's still in progress
 
 * **Chunk generation.** The Rust bulk-compute kernel measured ~7x faster than vanilla's noise-sync on equivalent work. The speedup is real but blocked at the density-function layer: vanilla evaluates DFs interleaved with interpolation inside `NoiseChunkGenerator` (marked `final`), so there is no clean intermediate cell-corner grid to hand to Rust without reimplementing the full DF tree. We pivoted to surface rule batch evaluation, which runs after density resolves with a clean boundary and still captures a realistic end-to-end chunkgen win.
-* **`adjustMovementForCollisions` port.** Attempted, then shelved. The AABB sweep math runs correctly in Rust, but snapshot materialization cost exceeded the sweep savings at realistic mob counts. Retained as disabled infrastructure for a future invalidation-cache redesign.
+* **`adjustMovementForCollisions` port.** Attempted, then set aside. The AABB sweep math runs correctly in Rust, but snapshot materialization cost exceeded the sweep savings at realistic mob counts. Retained as disabled infrastructure for a future invalidation-cache redesign.
 
 ---
 
