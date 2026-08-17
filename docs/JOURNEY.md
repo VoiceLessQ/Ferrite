@@ -2021,3 +2021,18 @@ port" but "vanilla schedules better than your guess." And the
 bench that proved it cost about two hundred lines and one honest
 afternoon of being wrong in public. Every number in this entry
 came from a run nobody flew.
+
+## Victory without a victory (2026-08-17, coda)
+
+Naming it plainly for the record. Chunkforce works: 114 chunks a
+second through the vanilla pipeline, a speed gate that engages
+itself, TPS flat, backlogs cleared on demand. And none of it was
+needed, because vanilla was never behind. Every piece succeeded
+except the premise.
+
+The victory that is real: a measurement harness that flies its own
+runs, a false positive caught the same day it was born, and a
+closed question that stays closed for the price of one command.
+Losing the feature cost an afternoon. Keeping the wrong default
+would have cost every future user a little bit of interference,
+forever, invisibly. I will take this trade every time.
