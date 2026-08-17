@@ -1971,3 +1971,53 @@ second the measurement says there is nothing to gain. That decision
 and a confirming run on a second seed are next-session work. One
 run per arm, one seed, singleplayer host: the numbers above carry
 those qualifiers.
+
+## The win that did not survive its own bench (2026-08-17, later that night)
+
+The entry above ends with a promotion pending and qualifiers
+attached. The qualifiers won.
+
+I promoted the speed gate to default-on, then built what the
+qualifiers demanded: an automated flight bench. One command
+teleports the pilot along a fixed heading at an exact speed,
+interleaves baseline and auto runs on fresh strips 3 km apart,
+warms each strip after the teleport so counting starts from a fully
+loaded view area, and prints the paired comparison. A headless
+gradle property runs the whole thing unattended and halts the
+server after. No hands, no mouse wheel, no faith.
+
+The bench then took the feature apart. Ten interleaved runs at 90
+blocks per second, view distance 16: vanilla alone held a mean
+deficit of 0.9 missing chunks; with auto forcing it was 8.1, worse
+in all five pairs. Ten more at view distance 10 on a fresh JVM
+boot, recreating the morning conditions as closely as I could:
+0.1 versus 0.2, both spotless. Vanilla does not drown. Not at 50,
+not at 90, not warm, not cold, not at either view distance. A
+Nether accident along the way (quickplay restores your logout
+dimension; the bench now forces the overworld) showed the same
+thing in a cheaper generator.
+
+So where did the morning drowning come from? The best explanation,
+inferred but consistent with every run: protocol contamination.
+Each drowning measurement teleported to virgin coordinates and
+began counting immediately, so the full 441-chunk initial fill
+rode along under the flight numbers. The bench warms first; the
+bench never saw vanilla lose. The dramatic convergence chunkforce
+showed in the morning was most plausibly a backlog of our own
+making being cleared, which vanilla would also have cleared had we
+stood still for ten seconds.
+
+Auto mode is back to default-off, in tree, one command away. The
+Rust cost-model planner sketched over the evening is not built;
+its gate was a reproducible benefit and there is none to plan for.
+The CHANGELOG says all of this plainly.
+
+What survives the day is worth more than the feature. Vanilla
+26.2's chunk pipeline keeps a fast player's view area full on this
+hardware, full stop, and anything we force on top of it just
+queues behind work it was already doing better. That is the JIT
+wall's quieter sibling: not "vanilla computes faster than your
+port" but "vanilla schedules better than your guess." And the
+bench that proved it cost about two hundred lines and one honest
+afternoon of being wrong in public. Every number in this entry
+came from a run nobody flew.
