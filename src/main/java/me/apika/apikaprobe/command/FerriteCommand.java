@@ -1405,6 +1405,11 @@ public final class FerriteCommand {
 		me.apika.apikaprobe.monitor.ChunkArrivalMonitor.reset();
 		me.apika.apikaprobe.monitor.ChunkArrivalMonitor.ENABLED = true;
 		sendFeedback(ctx, "[chunk-arrival] ENABLED, deficit logged every 5 s", false);
+		if (!me.apika.apikaprobe.monitor.MonitorLog.ENABLED) {
+			sendFeedback(ctx, "[chunk-arrival] WARNING: monitor logging is OFF"
+					+ " (small heap default); run /ferrite log monitors on"
+					+ " or reports will be swallowed", false);
+		}
 		return Command.SINGLE_SUCCESS;
 	}
 
