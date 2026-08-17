@@ -1760,3 +1760,143 @@ to re-verify, and the next Moonrise-shaped mod has fewer promises of
 ours to break. Not glamorous work. The kind you only notice when it
 was never done.
 
+## Where the Piano came from (2026-08-17)
+
+The Piano model was not designed. It was extracted from the first
+failed ports in April 2026 and then confirmed by the later ones,
+six failures in all, each correct in isolation and slower in
+production, and all of them the same failure wearing different
+clothes.
+
+### Six ports, one wall
+
+The surface rule dispatcher went first. Architecture proven, 99.9%
+parity, regression anyway. It read vanilla's internal state via
+reflection mid-flow, and that exposure cost more than the Rust math
+saved. First hint that where the boundary sits matters more than
+how fast the kernel runs.
+
+Bulk density was the humbling one. 58x faster in an isolated JNI
+bench, regression in production. Vanilla's CacheOnce plus JIT
+inlining amortizes per-block density to roughly 20ns a cell, and an
+interpreter does not beat that without becoming a compiler, which
+is a multi-week project on its own. Stripping Rayon didn't close
+the gap either. The toggle stayed default-off and the lesson got
+filed: a JIT-defended hot path is not a target, no matter what the
+bench says.
+
+The rest fell faster. Aquifer wanted per-block boundary crossings
+and carried a parity gap besides, wrong granularity for a JNI
+handoff. Structure placement scoring passed the shape test (clean
+per-chunk pause, flat inputs, one bulk handoff) and failed on size,
+because vanilla spends too little there for any win to matter.
+Decoration turned out to be a write-loop, not a compute slice;
+there was nothing to hand to Rust at all. And the physics port
+died before any code was written, JNI cost over the per-mob win,
+below the 2x line on paper.
+
+### What the failures taught sideways
+
+Three findings cut across all six. JFR frame counts overstate
+recoverable cost by roughly 3x, confirmed enough times that only
+O(N)-reduction arguments sourced from reading the code are trusted
+now. Reflection is a measurable tax; swapping per-call reflection
+on MaterialRuleContext for an @Invoker bought a universal -3ms off
+the vanilla baseline, proof that reading vanilla's state mid-flow
+is never free. And ordering is part of correctness: Rust assuming
+sequential noise evaluation (1-2-3-4) diverged from vanilla's
+dependency-driven interpolator order (2-1-4-3 and worse) even with
+bit-exact math per sample. Vanilla's evaluation order is a
+specification, not an implementation detail.
+
+### The inversion
+
+Line the failures up and they say one thing: every one of them
+asked vanilla for data mid-computation. Reflection, broken JIT
+paths, crossings at the wrong granularity, all variants of
+interrupting the flow.
+
+The Piano model inverts that. Stop asking. Own the inputs from the
+seed, compute the whole sequence continuously, hand back identical
+results at vanilla's natural pause. The gating questions in
+[PIANO_STATUS.md](PIANO_STATUS.md) formalize exactly this
+post-mortem, roughly one question per failure mode above.
+
+One archaeological footnote, because the name itself went missing
+for a while. The word never appears in a single commit message; it
+lives in the docs and in three code comments that point at
+PIANO_STATUS.md. For months the memory said the name came from
+something read online, and a deliberate search found nothing, which
+looked like a dead end until the repo's own history answered. The
+earliest trace is PIANO_STATUS.md landing 2026-04-28 already fully
+formed, and a working note from the next day, preserved in git
+history, has the original rationale in full: "Ferrite plays piano
+inside vanilla's orchestra. It does not replace vanilla. Each Rust
+port is one instrument played faster, slotting into vanilla's
+existing flow at a clean boundary." The piano was never the seed
+handoff or a player piano. It is Ferrite itself, one instrument in
+the ensemble, and the whole orchestra framing survives today in
+[DOC_MAP.md](DOC_MAP.md). The components of the model have prior
+art (JNI batching, JVM safepoints, differential validation); the
+assembly, the gates, and the name are all in-project, and the
+lesson from the hunt is filed with the others: before crediting a
+half-remembered source, read your own history first.
+
+### On the word "slop"
+
+This entry documents six failed ports, three falsified hypotheses,
+a parity check that proved a design wrong across 81,445,189
+samples (PIANO_STATUS.md, surface noise routing), and a naming
+question that took a git blob to settle. At some point someone is
+going to look at this project, see the AI disclosure, type "slop,"
+and move on. Fine. But let the record state what the word is being
+applied to.
+
+Slop is generated once and uploaded. Nobody measures slop twice on
+a pinned 4-core affinity mask because the first number looked too
+good. Slop does not keep a default-off toggle for a feature that
+measured 7 ms worse than vanilla, and it does not write down that
+the JFR estimate was 3x optimistic, because slop does not know what
+its estimates were. Slop has no oracle logging zero mismatches
+across 149,669 cascades all night (the README's redstone table,
+sourced from REDSTONE_PORT_PLAN.md), because an oracle is what you
+build when you expect to be wrong and want to find out before your
+users do. Every number in this journal sits in a public repo where
+it can be re-run and refuted, and about half of the experiments
+behind those numbers failed. That half stayed in the doc.
+
+What no one sees either is the scaffolding it took to find any of
+this out. Minecraft is not obfuscated anymore, and that helps less
+than people assume: readable names tell you what a method is
+called, not when it runs, how often, or why it is slow. A sixth of
+the Java in this repo is monitors, probes, and diagnostic mixins
+built to catch vanilla in the act, per-bucket tick timers, caller
+attribution, interleave probes, shadow oracles. Most of it exists
+to answer one question each ("does the query follow the move?")
+and earns its keep in a single JOURNEY entry. That code is the
+flashlight, the features are just what it found.
+
+And one more thing the disclosure badge flattens. English is not
+my first language. Part of what the AI does here is what an editor
+does: it takes my drafts, my measurements, and my decisions, and
+turns them into prose that does not make readers stumble over my
+grammar. I have a degree in IT technology and management; nobody
+taught me to write English performance journals, so I use a tool
+for the part that is not my craft, the same way I use a compiler
+for the part that is not hand-written assembly. If polished
+English is what triggers the "slop" reflex, then the accusation
+punishes non-native speakers for being readable, and I am not
+going to write worse on purpose to look more authentic.
+
+The tools generated plenty of the code here. They also generated
+the six ports above that got measured, found slower, and closed,
+which is the part no one uploads because it looks like nothing.
+That invisible pile of correct, parity-validated, rejected work is
+the actual cost of the visible features, and it is the exact thing
+the word "slop" claims does not exist. Anyone who wants to check
+is welcome to: the benchmarks are described down to the CPU, the
+validators are in the jar you download, and every claim in the
+README has a flag that turns it off so you can watch the
+difference yourself. That last part is the tell, both ways. Slop
+cannot afford an off switch.
+

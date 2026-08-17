@@ -653,3 +653,32 @@ The discipline here matters because the prior bulk-path attempts each
 shipped with parity confirmed but perf regressed — and the toggle
 existing default-off is fine, but flipping to default-on without live
 measurement is the failure mode this doc exists to prevent.
+
+## Origin note (2026-08-17)
+
+The Piano model was synthesized in-project, during the
+density-function regression post-mortem (April 2026; this doc
+landed 2026-04-28 with the model already named). The DF port
+failed because vanilla kept reaching into Rust's state mid-compute,
+so the question flipped from "what can Rust compute" to "where does
+vanilla pause" — and the five Piano questions formalized that
+post-mortem. (The four checks in
+[FUTURE_PLANS.md](FUTURE_PLANS.md) are the older port-worthiness
+gate; the five questions are the pause-point test. Distinct lists,
+both apply.)
+The components have prior art (standard JNI batching guidance, JVM
+safepoint behavior, BSP-style supersteps, oracle-style differential
+validation), which is why the model long *felt* borrowed from
+something read online. A deliberate search for an external "piano
+model" source (2026-08-17) found none; the assembly, the gates,
+and the name originated here.
+
+The name's rationale was thought lost, then recovered from an
+April 29 working note preserved in git history: "Ferrite plays
+piano inside vanilla's orchestra. It does not replace vanilla.
+Each Rust port is one instrument played faster, slotting into
+vanilla's existing flow at a clean boundary." The piano is Ferrite
+itself — one instrument in the ensemble, not a replacement for it —
+and the orchestra framing survives in [DOC_MAP.md](DOC_MAP.md).
+Full story in [JOURNEY.md](JOURNEY.md) "Where the Piano came from".
+Treat this doc as the canonical reference for the model.
