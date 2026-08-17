@@ -85,7 +85,11 @@ public final class ArrivalFlightBench {
 			int runs = Integer.parseInt(p[4].trim());
 			ServerPlayer player = firstPlayer(server);
 			player.setGameMode(net.minecraft.world.level.GameType.SPECTATOR);
-			player.connection.teleport(x, 200.0, z, 0.0f, 0.0f);
+			// Force the overworld: quickplay restores the last logout
+			// dimension, and a Nether run measures the wrong generator
+			// (128-tall chunks, deficit 0 even at 90 b/s; seen 2026-08-17).
+			player.teleportTo(server.overworld(), x, 200.0, z,
+					java.util.Set.of(), 0.0f, 0.0f, false);
 			autoShutdown = true;
 			// Suite fields come from the args, not the (still in-flight)
 			// teleport, so the start position is exact.
