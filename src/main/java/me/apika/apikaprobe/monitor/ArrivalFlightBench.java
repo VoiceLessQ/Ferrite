@@ -106,7 +106,11 @@ public final class ArrivalFlightBench {
 		if (pilot == null && !suite) return false;
 		suite = false;
 		ticksLeft = 0;
-		if (pilot == null) settleLeft = 0;
+		if (pilot == null) {
+			settleLeft = 0;
+			warmingUp = false;
+			ChunkArrivalMonitor.ENABLED = false;
+		}
 		return true;
 	}
 
@@ -116,6 +120,13 @@ public final class ArrivalFlightBench {
 
 	private static UUID suitePilot = null;
 	private static boolean suitePrevAuto;
+	// Post-teleport warmup: counting starts only once the arrival point
+	// has fully loaded (deficit 0) or the cap passes, so run averages
+	// measure flight arrival, not teleport fill (the max=1089 artifact
+	// in the first suite attempt, 2026-08-17).
+	private static boolean warmingUp = false;
+	private static int warmupLeft;
+	private static final int WARMUP_CAP_TICKS = 1200;
 
 	private static void onTick(MinecraftServer server) {
 		UUID id = pilot;
@@ -145,6 +156,19 @@ public final class ArrivalFlightBench {
 	}
 
 	private static void suiteTick(MinecraftServer server) {
+		if (warmingUp) {
+			ServerPlayer p = server.getPlayerList().getPlayer(suitePilot);
+			if (p == null) {
+				suite = false;
+				warmingUp = false;
+				broadcast(server, "[arrival-bench] suite aborted: pilot left");
+				return;
+			}
+			if (ChunkArrivalMonitor.lastDeficit > 0 && --warmupLeft > 0) return;
+			warmingUp = false;
+			beginRun(p, suiteYaw);
+			return;
+		}
 		if (settleLeft-- > 0) return;
 		int totalRuns = 2 * suiteRunsPerArm;
 		if (suiteRunIndex >= totalRuns) {
@@ -172,9 +196,17 @@ public final class ArrivalFlightBench {
 		double perpZ = Math.sin(yawRad) * STRIP_SPACING * suiteRunIndex;
 		player.connection.teleport(suiteStartX + perpX, suiteStartY,
 				suiteStartZ + perpZ, suiteYaw, suitePitch);
-		broadcast(server, String.format("[arrival-bench] suite run %d/%d (%s)",
+		broadcast(server, String.format("[arrival-bench] suite run %d/%d (%s), warming strip",
 				suiteRunIndex + 1, totalRuns, auto ? "auto" : "baseline"));
-		beginRun(player, suiteYaw);
+		// Monitor on during warmup so lastDeficit tracks the fill; the
+		// accumulators reset again in beginRun once counting starts.
+		ChunkArrivalMonitor.reset();
+		ChunkArrivalMonitor.ENABLED = true;
+		// Force a nonzero first reading so warmup does not end before
+		// the monitor has sampled the post-teleport state.
+		ChunkArrivalMonitor.lastDeficit = 1L;
+		warmupLeft = WARMUP_CAP_TICKS;
+		warmingUp = true;
 	}
 
 	private static void beginRun(ServerPlayer player, float yaw) {
