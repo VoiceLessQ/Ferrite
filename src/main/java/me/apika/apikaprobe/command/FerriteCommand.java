@@ -186,6 +186,10 @@ public final class FerriteCommand {
 						.then(Commands.literal("on").executes(FerriteCommand::chunkForceOn))
 						.then(Commands.literal("off").executes(FerriteCommand::chunkForceOff))
 						.then(Commands.literal("status").executes(FerriteCommand::chunkForceStatus)))
+				.then(Commands.literal("arrival")
+						.then(Commands.literal("on").executes(FerriteCommand::arrivalOn))
+						.then(Commands.literal("off").executes(FerriteCommand::arrivalOff))
+						.then(Commands.literal("status").executes(FerriteCommand::arrivalStatus)))
 				.then(Commands.literal("pregen")
 						.then(Commands.argument("radius", IntegerArgumentType.integer(1, 50))
 								.executes(FerriteCommand::pregenStart))
@@ -1394,6 +1398,25 @@ public final class FerriteCommand {
 				ChunkForcer.scheduledCount(), ChunkForcer.completedCount(),
 				ChunkForcer.erroredCount());
 		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int arrivalOn(CommandContext<CommandSourceStack> ctx) {
+		me.apika.apikaprobe.monitor.ChunkArrivalMonitor.reset();
+		me.apika.apikaprobe.monitor.ChunkArrivalMonitor.ENABLED = true;
+		sendFeedback(ctx, "[chunk-arrival] ENABLED, deficit logged every 5 s", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int arrivalOff(CommandContext<CommandSourceStack> ctx) {
+		me.apika.apikaprobe.monitor.ChunkArrivalMonitor.ENABLED = false;
+		sendFeedback(ctx, "[chunk-arrival] disabled", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int arrivalStatus(CommandContext<CommandSourceStack> ctx) {
+		sendFeedback(ctx, "[chunk-arrival] enabled="
+				+ me.apika.apikaprobe.monitor.ChunkArrivalMonitor.ENABLED, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
