@@ -5,6 +5,32 @@ All notable changes to Ferrite are documented here. Format follows
 follow [Semantic Versioning](https://semver.org/); the `-alpha` suffix
 marks pre-release research builds.
 
+## [Unreleased]
+
+### Added
+
+- **Chunkforce auto mode, default on.** Forced chunk generation now
+  engages by itself when a player sustains roughly 40 blocks/s
+  (spectator dash, elytra dive) and stands down below that, so slow
+  play costs nothing and writes no extra chunks. Measured at ~88
+  blocks/s over virgin terrain: vanilla runs a standing hole of
+  130-160 missing chunks inside view distance and never recovers;
+  with forcing engaged the deficit converges to zero at the same
+  speed, TPS 20 throughout. `/ferrite chunkforce auto off` restores
+  the old manual-only behavior.
+- **`/ferrite arrival` monitor.** Counts chunks inside each player
+  view distance that are not loaded, logged every 5 s: the
+  server-side signature of terrain pop-in. About 50 us/tick at view
+  distance 10; warns if monitor logging is muted so runs cannot
+  silently produce nothing.
+
+### Fixed
+
+- **Own nametag missing in F5 with nametag mods** (#15). A leftover
+  client mixin blanked the local player display name; mods that
+  render your own nametag (Third Person Nametags, Animatium) drew an
+  empty background. Removed.
+
 ## [Released]
 
 ## [0.7.2-alpha] - 2026-08-13
