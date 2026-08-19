@@ -2219,3 +2219,72 @@ pre-flip checks in early August, field-measured on weak hardware,
 then held one extra night because a measurement was missing its
 conditions. The piano gained an instrument that plays by itself
 now.
+
+## Taking stock (2026-08-19, later that night)
+
+Spent the rest of the day and rereading LOCAL_DESIGN and the code
+with one question: what actually needs improving now? Strange
+answer. The ranked candidate list is empty, on purpose, and the
+largest measured speedup in the tree went default on hours ago. What's left is
+mostly debt, not opportunity.
+
+The debt breaks down like this. The cramming CSR rewrite (R1,
+commit 18f3573) has parity tests and no tick-time A/B; the audit
+already flagged that. The monitor gating from the same session
+(A1) was never measured at horde load either, so one packed-mob
+evening with the cramming monitor on settles both. Then there is
+the spawn pre-filter, the last live performance idea anywhere in
+the notes: vanilla burns about 0.93 ms/tick attempting spawns into
+a full mob cap, and the fix is Java-only, same shape as the
+BE-ticker gates. Afternoon work, probably.
+
+The 26.2 port left two correctness threads dangling too. The
+biome validator still misses 1 in 2000 (lush caves vs dripstone at
+extreme coords, undiagnosed), and DeepMarkerWalker never learned
+IntervalSelect or MulOrAdd, which means the AC cache-route
+fingerprints on 26.2 are unverified while AC redstone sits there
+as a user-facing opt-in. That one bothers me more than its size
+suggests. Someone can turn it on today. And a cosmetic thing: the
+BulkChunkDensityMixin overwrite warning prints on every server
+boot. Harmless, default-off path, but it is the first Ferrite line
+any admin reads in their log.
+
+So no new instrument this time. After a default-on flip the job is
+to make what's already playing fully trustworthy, not to go
+hunting. The hunting list is empty because we measured it empty.
+
+One more thought, because the plateau deserves naming. Plenty of
+mods buy speed by changing what Minecraft is: relaxed update
+order, approximated worldgen, behavior that is almost vanilla.
+Ferrite never took that trade. Every port had to prove 1:1 parity
+or stay off, which is why the aquifer sits parked at 99.895%, why
+an oracle still samples every default-on feature, and why a mod
+built this way runs out of clean boundaries eventually. Flattening
+out is not the project failing. It is the constraint holding. The game
+still plays exactly like Minecraft, and that was the whole point.
+
+Spent a while browsing the big performance mods on GitHub to see
+how they do it, and the pattern is consistent: reimplement the
+mechanic in a faster shape and accept the behavioral drift. Cool
+engineering, honestly. But it skips what Minecraft is. Ferrite's
+rule is the opposite: prove the skipped work was dead, or don't
+skip it. The query filter only drops entities the intersect test
+would reject anyway. The collider skip only fires when the
+provably correct answer is the empty list, and boats and minecarts
+always walk because their acceptance is wider. Anything that could
+drift, AC redstone, the 99.895% aquifer, stays opt-in or off. And
+"I hope it doesn't diverge" is not left as hope; the oracles run
+at 1 in 16 in every default session, so any user's log would show
+the mismatch count if the proof were ever wrong.
+
+Which raises the ending question: does all this mean it is ready
+to leave alpha? Not tonight. The label comes off when the debt
+above is paid, when the cramming rewrite has its A/B, the biome
+miss is diagnosed or bounded, the AC fingerprints are verified on
+26.2, and a default-on release has soaked in the field without a
+single oracle mismatch reported. The flip was the last feature
+question; what remains is trust, and trust has a checklist now.
+Distribution barely factors into it. The jars live on GitHub
+releases either way, so whether a build also lands on Modrinth is
+a visibility decision, not a readiness one. Beta is earned in the
+log lines, not in the storefront.
