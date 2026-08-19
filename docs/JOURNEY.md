@@ -1765,3 +1765,33 @@ client fps smooth throughout. G1 young pauses measure 3 ms, old gen
 sits at 91%. Next session runs the pile on ZGC with the oracle off;
 if the spikes survive that, they are tick content, and a JFR gets
 the last word.
+
+### Addendum, same evening: the spikes were nobody's fault
+
+The ZGC run happened hours later, not next session, and it cleared
+the collector in one look: 120-391 ms window maxes, the same band
+G1 showed. Not garbage collection. So a JFR went after the ticks
+themselves, armed to start the moment the player rejoined, since
+both arms spiked hardest in the first two minutes at the pile.
+
+Reading it needed one trick worth keeping. The sampler fires every
+10 ms, so a 100 ms bucket holding 10 server-thread samples means
+the thread never slept: those buckets ARE the stall ticks, no
+timestamps required. Eighty-one of them, and their frame mix
+matched normal ticks almost exactly: pathfinding 17 percent
+against 12, collisions 26 against 27, nothing over-represented.
+A spike is not one subsystem misbehaving. It is every mob in the
+pile doing full-price work in the same tick, a shift wave rolling
+through 1,022 bodies, and it happens with Ferrite's flags off just
+as hard. The monitors made the same point from the other side:
+monster tick maxed near 200 ms in spike windows while all nine
+movement probes stayed under 10, so the time was spread, not
+concentrated.
+
+Verdict filed: vanilla horde behavior, no Ferrite action, and the
+opt-ins still halve the average tick those waves ride on. The
+lesson is the diagnostic shape. A stall with uniform composition
+is a wave, not a culprit, and chasing it per-subsystem would have
+burned nights finding nothing. If this ever needs reopening, the
+instrument is a per-tick histogram of which mobs cost what, not a
+third JFR.
