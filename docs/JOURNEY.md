@@ -1731,7 +1731,7 @@ scale, all measured and thrown away. The physics handoff was worse in
 RAM: its disabled path read three volatile ints for a diagnostic
 line, and that read class-initialized ~4.4 MB of direct buffers
 within seconds of the first tick. Physics has been default-off since
-April. Every player paid for it anyway.
+april. Every player paid for it anyway.
 
 The fix list ran two commits (`18f3573`, `5fc6e7a`): collection now
 gates with the reports, the reject diagnostics moved so the buffer
@@ -1795,3 +1795,47 @@ is a wave, not a culprit, and chasing it per-subsystem would have
 burned nights finding nothing. If this ever needs reopening, the
 instrument is a per-tick histogram of which mobs cost what, not a
 third JFR.
+
+## The server in the attic (2026-08-19, evening)
+
+The gate everything kept hitting was "unmeasured on a real server."
+Ferrite has never had one; every number in this journal came from a
+desktop with 24 cores, which is exactly the machine that hides the
+problem. Then it turned out there was a Proxmox box on the LAN with
+a Crafty install nobody could log into, password lost to a dead
+Vaultwarden.
+
+Recovering it took less than the argument about whether to. The
+install was healthy; only the admin password was gone, and Crafty
+stores argon2 hashes in a SQLite file, so a new hash written with
+its own library brought the panel back without touching anything
+else. No reinstall. The lost account turned out to be named admin
+all along.
+
+Then the real experiment. A fabric 26.2 dedicated server in the
+container, the 1,022-zombie farm world, one real network viewer,
+and a JFR flag on the launch command because the container image
+has no jcmd. First finding, the reason the whole rig exists: with
+Ferrite at default config, the LXC's slice of a shared CPU ran the
+farm at 64 ms per tick, TPS 15.5, and the flight recording put
+entity queries at 50.0 percent of the server thread. Half the tick,
+walking entity lists. On the desktop that same number was 38
+percent of monster tick and the server still made rate; here it was
+the difference between playable and not. The tracker-sync question
+that started the evening died quietly in the same file: 1.4 percent
+with a real viewer, packet encode living on Netty's thread, gate 1
+closed with a dedicated-server measurement this time.
+
+Second arm, same everything plus the two parked opt-ins. TPS 20.00
+locked inside fifteen seconds of the world loading. Mean tick 31.5
+against 64.3. Queries fell from 50 percent of the thread to 5, a 94
+percent absolute cut, the same number the nether pile produced on
+desktop, now reproduced on the hardware class where it matters.
+Pathfinding's share tripled, which reads backwards until you see
+it: at full speed the zombies finally get to move. The oracle rode
+along the entire session and found nothing.
+
+That is the flip evidence. The feature was built in July, validated
+in August, and parked behind flags waiting for exactly this: a weak
+CPU, a big farm, and a server that could not hold 20 TPS without
+it. The attic box keeps the flags on.
