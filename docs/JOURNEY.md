@@ -1839,3 +1839,15 @@ That is the flip evidence. The feature was built in July, validated
 in August, and parked behind flags waiting for exactly this: a weak
 CPU, a big farm, and a server that could not hold 20 TPS without
 it. The attic box keeps the flags on.
+
+### Addendum: the viewer curve
+
+Carpet's 26.2 build landed the same week, so the last unmeasured
+claim got its number that night. Twenty fake players at the pile,
+one long recording, and the tracker question closed for good:
+2.7 percent of the server thread at one viewer, 5.0 at
+twenty-one. Sub-linear, because vanilla computes each mob's delta
+once and per-viewer work is just enqueueing. About 1.7 ms per tick
+at the worst constructible case, and the little LXC held 20 TPS
+with twenty-one viewers standing on a thousand zombies. Some
+questions die of measurement; this one died twice in one evening.
