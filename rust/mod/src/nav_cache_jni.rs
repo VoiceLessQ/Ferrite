@@ -47,6 +47,29 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_navFillSection<'local
     nav_cache_storage::fill_section(id, raw);
 }
 
+/// Evict one section. Pairs with the Java-side key eviction so the Rust
+/// Vec<CellData> (16 KiB) is actually freed, not just unreachable.
+#[no_mangle]
+pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_navEvictSection<'local>(
+    _env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    chunk_x: jint,
+    section_y: jint,
+    chunk_z: jint,
+) {
+    let id = SectionId { chunk_x, section_y, chunk_z };
+    nav_cache_storage::evict_section(id);
+}
+
+/// Drop the whole cache (server stopped / world quit).
+#[no_mangle]
+pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_navClearAll<'local>(
+    _env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) {
+    nav_cache_storage::clear_all();
+}
+
 #[no_mangle]
 pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_navIsSectionCached<'local>(
     _env: JNIEnv<'local>,

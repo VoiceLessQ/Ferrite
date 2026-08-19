@@ -142,6 +142,8 @@ const _: [(); 24] = [(); std::mem::size_of::<RedstoneAcResult>()];
 // the cascade-per-tick path reuse buffers across calls without
 // reallocation. AC_QUEUE persists too — PriorityQueue::clear() resets
 // state without dropping bucket VecDeques.
+// Deliberately never shrunk: worst case ~500 KiB/thread after a 100k-wire
+// network, and shrinking would re-pay the growth on the next update.
 thread_local! {
     static AC_VIRTUAL_POWER: RefCell<Vec<i16>>          = RefCell::new(Vec::with_capacity(1024));
     static AC_FLOW_IN:       RefCell<Vec<u8>>           = RefCell::new(Vec::with_capacity(1024));

@@ -98,6 +98,14 @@ pub fn evict_section(id: SectionId) {
     sections().lock().unwrap().remove(&id);
 }
 
+/// Drop every cached section and release the map's backing storage.
+/// Called on server stop so a world quit does not pin the cache.
+pub fn clear_all() {
+    let mut map = sections().lock().unwrap();
+    map.clear();
+    map.shrink_to_fit();
+}
+
 pub fn is_section_cached(id: SectionId) -> bool {
     sections().lock().unwrap().contains_key(&id)
 }

@@ -38,6 +38,15 @@ public final class RustFlatCache implements DensityFunction.SimpleFunction {
 	private static final int SIDE = 5;
 	private static final int TOTAL = SIDE * SIDE;
 
+	/** Reused per thread; contents are consumed into a double[] before
+	 *  ensureCache returns, so per-instance allocateDirect (two buffers
+	 *  per chunk) was pure direct-buffer churn. */
+	private static final int NAME_BUF_CAP = 256;
+	private static final ThreadLocal<ByteBuffer> NAME_BUF = ThreadLocal.withInitial(() ->
+			ByteBuffer.allocateDirect(NAME_BUF_CAP).order(ByteOrder.nativeOrder()));
+	private static final ThreadLocal<ByteBuffer> OUT_BUF = ThreadLocal.withInitial(() ->
+			ByteBuffer.allocateDirect(TOTAL * 8).order(ByteOrder.nativeOrder()));
+
 	private final DensityFunction original;
 	private final String registeredName;
 	private final int chunkMinBlockX;
@@ -80,11 +89,18 @@ public final class RustFlatCache implements DensityFunction.SimpleFunction {
 
 			long t0 = System.nanoTime();
 			byte[] nameBytes = registeredName.getBytes(StandardCharsets.UTF_8);
-			ByteBuffer nameBuf = ByteBuffer.allocateDirect(nameBytes.length)
-					.order(ByteOrder.nativeOrder());
+			ByteBuffer nameBuf;
+			if (nameBytes.length <= NAME_BUF_CAP) {
+				nameBuf = NAME_BUF.get();
+				nameBuf.clear();
+			} else {
+				// Pathologically long DF name: one-off allocation.
+				nameBuf = ByteBuffer.allocateDirect(nameBytes.length)
+						.order(ByteOrder.nativeOrder());
+			}
 			nameBuf.put(nameBytes); nameBuf.flip();
-			ByteBuffer outBuf = ByteBuffer.allocateDirect(TOTAL * 8)
-					.order(ByteOrder.nativeOrder());
+			ByteBuffer outBuf = OUT_BUF.get();
+			outBuf.clear();
 
 			// FlatCache is Y-invariant: sample at any one Y level.
 			// Use Y=0 as a stable choice. Step=4 for quart grid.

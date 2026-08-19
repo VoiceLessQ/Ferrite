@@ -257,6 +257,12 @@ public class RustBridge {
   /** True if the section is already in the Rust cache. */
   public static native boolean navIsSectionCached(int chunkX, int sectionY, int chunkZ);
 
+  /** Evict one section from the Rust cache (frees its 16 KiB cell Vec). */
+  public static native void navEvictSection(int chunkX, int sectionY, int chunkZ);
+
+  /** Drop the whole Rust nav cache (server stopped / world quit). */
+  public static native void navClearAll();
+
   /** block_kind for the cached cell at (x,y,z), or -1 if uncached. */
   public static native byte navGetCellKind(int x, int y, int z);
 

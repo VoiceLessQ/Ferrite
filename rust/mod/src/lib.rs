@@ -66,6 +66,8 @@ pub use nav_cache_jni::Java_me_apika_apikaprobe_RustBridge_navOnBlockChanged;
 pub use nav_cache_jni::Java_me_apika_apikaprobe_RustBridge_navUpdateDoorState;
 pub use nav_cache_jni::Java_me_apika_apikaprobe_RustBridge_navFillSection;
 pub use nav_cache_jni::Java_me_apika_apikaprobe_RustBridge_navIsSectionCached;
+pub use nav_cache_jni::Java_me_apika_apikaprobe_RustBridge_navEvictSection;
+pub use nav_cache_jni::Java_me_apika_apikaprobe_RustBridge_navClearAll;
 pub use nav_cache_jni::Java_me_apika_apikaprobe_RustBridge_navGetCellKind;
 
 pub use engine::Java_me_apika_apikaprobe_RustBridge_initEngine;

@@ -54,21 +54,30 @@ public final class ClientLagMonitor {
 			return;
 		}
 
+		// Routed through MonitorLog so /ferrite log monitors off silences
+		// this too; when off, skip collection as well.
+		if (!me.apika.apikaprobe.monitor.MonitorLog.ENABLED) {
+			resetWindow(System.nanoTime());
+			return;
+		}
+
 		int fps = client.getFps();
 		sampleCount++;
 		fpsSum += fps;
 		if (fps < fpsMin) fpsMin = fps;
 		if (fps > fpsMax) fpsMax = fps;
 
-		lastEntities = world.getEntityCount();
-		lastChunks = world.getChunkSource().getLoadedChunksCount();
-
 		long now = System.nanoTime();
 		if (now - lastReportNs >= REPORT_INTERVAL_NS && sampleCount > 0) {
 			int avg = (int) (fpsSum / sampleCount);
 			String tag = avg >= 60 ? "OK" : avg >= 30 ? "WARN" : "LAG";
 
-			LOGGER.info("[client-lag] fps avg={} min={} max={} [{}]  entities={}  chunks={}  samples={}",
+			// Only sampled at report time; per-tick reads were wasted.
+			lastEntities = world.getEntityCount();
+			lastChunks = world.getChunkSource().getLoadedChunksCount();
+
+			me.apika.apikaprobe.monitor.MonitorLog.info(
+					"[client-lag] fps avg={} min={} max={} [{}]  entities={}  chunks={}  samples={}",
 					avg, fpsMin, fpsMax, tag, lastEntities, lastChunks, sampleCount);
 
 			resetWindow(now);

@@ -271,8 +271,8 @@ public final class RustAquiferSampler implements Aquifer {
         int gridOriginZ = chunkMinBlockZ - GRID_PADDING_Z_BLOCKS;
 
         int total = GRID_SIDE_X * GRID_SIDE_Z;
-        ByteBuffer buf = ByteBuffer.allocateDirect(total * Integer.BYTES)
-                .order(ByteOrder.nativeOrder());
+        ByteBuffer buf = GRID_BUF.get();
+        buf.clear();
         for (int gz = 0; gz < GRID_SIDE_Z; gz++) {
             for (int gx = 0; gx < GRID_SIDE_X; gx++) {
                 int worldX = gridOriginX + gx * GRID_STRIDE_BLOCKS;
@@ -292,6 +292,15 @@ public final class RustAquiferSampler implements Aquifer {
     public interface SurfaceHeightEstimator {
         int estimate(int blockX, int blockZ);
     }
+
+    /** Reused per chunkgen thread. Safe because initAquifer copies the
+     *  grid into an owned Rust Vec before returning, so the buffer is
+     *  dead the moment the wrapper constructor finishes; per-chunk
+     *  allocateDirect here caused irregular GC pauses via direct-buffer
+     *  reference processing (see ChunkPrewarmer for the precedent). */
+    private static final ThreadLocal<ByteBuffer> GRID_BUF = ThreadLocal.withInitial(() ->
+            ByteBuffer.allocateDirect(GRID_SIDE_X * GRID_SIDE_Z * Integer.BYTES)
+                    .order(ByteOrder.nativeOrder()));
 
     public record GridResult(ByteBuffer buf, int originX, int originZ) {}
 }

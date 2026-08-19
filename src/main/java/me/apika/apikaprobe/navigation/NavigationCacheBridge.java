@@ -256,6 +256,25 @@ public final class NavigationCacheBridge {
 		int base = sectionSet(key) << 1;
 		if (JAVA_KEYS[base] == key)          JAVA_KEYS[base] = EMPTY_KEY;
 		else if (JAVA_KEYS[base + 1] == key) JAVA_KEYS[base + 1] = EMPTY_KEY;
+		// Also free the Rust-side Vec; before this the native map only ever
+		// grew (~16 KiB per section, never reclaimed).
+		if (RustBridge.NATIVE_AVAILABLE) RustBridge.navEvictSection(cx, sy, cz);
+	}
+
+	/** Chunk unloaded: evict every cached section in its column, both sides. */
+	public static void onChunkUnloaded(int chunkX, int chunkZ, int minSectionY, int sectionCount) {
+		if (!WALK_CACHE_ENABLED) return;
+		for (int sy = minSectionY; sy < minSectionY + sectionCount; sy++) {
+			evictJavaSection(chunkX, sy, chunkZ);
+		}
+	}
+
+	/** Server stopped: drop everything, both sides. */
+	public static void onServerStopped() {
+		if (!WALK_CACHE_ENABLED) return;
+		java.util.Arrays.fill(JAVA_KEYS, EMPTY_KEY);
+		java.util.Arrays.fill(JAVA_KINDS, null);
+		if (RustBridge.NATIVE_AVAILABLE) RustBridge.navClearAll();
 	}
 
 	/**

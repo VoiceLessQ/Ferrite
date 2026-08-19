@@ -138,6 +138,18 @@ public class ExampleMod implements ModInitializer {
 			me.apika.apikaprobe.worldgen.WorldgenParity.clearCaptures();
 			me.apika.apikaprobe.worldgen.BiomeParity.clearCaptures();
 		});
+		// Nav cache eviction lifecycle. Gate on the raw property, not
+		// WALK_CACHE_ENABLED, so the bridge class (~82 KB eager statics)
+		// never loads when the feature is off.
+		if (Boolean.parseBoolean(System.getProperty("ferrite.nav.cache", "false"))) {
+			ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> {
+				net.minecraft.world.level.ChunkPos pos = chunk.getPos();
+				me.apika.apikaprobe.navigation.NavigationCacheBridge.onChunkUnloaded(
+					pos.x(), pos.z(), world.getMinSectionY(), world.getSectionsCount());
+			});
+			net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPED.register(server ->
+				me.apika.apikaprobe.navigation.NavigationCacheBridge.onServerStopped());
+		}
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			// Explicitly disable every Rust-backed dispatcher so vanilla

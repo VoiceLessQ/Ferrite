@@ -307,6 +307,14 @@ pub fn collect_colliders_from_snapshot(
     true
 }
 
+// Per-thread collider scratch, reused across entities. collide_entity runs
+// on the server thread or Rayon workers; each thread keeps its own buffers,
+// so the two Vec::with_capacity(64) (3 KiB each) stop churning per entity.
+thread_local! {
+    static COLLIDER_SCRATCH: std::cell::RefCell<(Vec<Aabb>, Vec<Aabb>)> =
+        std::cell::RefCell::new((Vec::with_capacity(64), Vec::with_capacity(64)));
+}
+
 // ============================================================================
 // Step-up candidate heights
 // ============================================================================
@@ -371,12 +379,21 @@ pub fn collide_entity(
 
     // --- Primary sweep ------------------------------------------------------
     let query = aabb.expand_toward(motion.x, motion.y, motion.z);
-    let mut colliders: Vec<Aabb> = Vec::with_capacity(64);
-    if !collect_colliders_from_snapshot(snap, query, &mut colliders) {
-        out.flags = FLAG_FALLBACK;
-        return false;
-    }
-    let adjusted = collide_with_shapes(motion, aabb, &colliders);
+    let adjusted = match COLLIDER_SCRATCH.with(|sc| {
+        let colliders = &mut sc.borrow_mut().0;
+        colliders.clear();
+        if !collect_colliders_from_snapshot(snap, query, colliders) {
+            None
+        } else {
+            Some(collide_with_shapes(motion, aabb, colliders))
+        }
+    }) {
+        Some(a) => a,
+        None => {
+            out.flags = FLAG_FALLBACK;
+            return false;
+        }
+    };
 
     // --- Step-up retry ------------------------------------------------------
     // Vanilla: if (maxUpStep > 0) && (bl4 || onGround) && (bl_x || bl_z)
@@ -399,32 +416,39 @@ pub fn collide_entity(
             let mut aabb3 = aabb2.expand_toward(motion.x, max_step as f64, motion.z);
             if !bl4 { aabb3 = aabb3.expand_toward(0.0, -1.0e-5, 0.0); }
 
-            let mut step_colliders: Vec<Aabb> = Vec::with_capacity(64);
-            if !collect_colliders_from_snapshot(snap, aabb3, &mut step_colliders) {
-                out.flags = FLAG_FALLBACK;
-                return false;
-            }
-
-            let heights = collect_candidate_step_heights(aabb2, &step_colliders, max_step, adjusted.y as f32);
-            let mut chosen: Option<Vec3d> = None;
-            let orig_horiz_sq = adjusted.x * adjusted.x + adjusted.z * adjusted.z;
-            for g in heights {
-                let cand = collide_with_shapes(
-                    Vec3d { x: motion.x, y: g as f64, z: motion.z },
-                    aabb2,
-                    &step_colliders,
-                );
-                let cand_horiz_sq = cand.x * cand.x + cand.z * cand.z;
-                if cand_horiz_sq > orig_horiz_sq {
-                    // Vanilla: return cand.add(0, -(aabb.min_y - aabb2.min_y), 0)
-                    let d = aabb.min_y - aabb2.min_y;
-                    chosen = Some(Vec3d { x: cand.x, y: cand.y - d, z: cand.z });
-                    break;
+            let step_result = COLLIDER_SCRATCH.with(|sc| {
+                let step_colliders = &mut sc.borrow_mut().1;
+                step_colliders.clear();
+                if !collect_colliders_from_snapshot(snap, aabb3, step_colliders) {
+                    return None;
                 }
-            }
-            match chosen {
-                Some(m) => (m, true),
-                None    => (adjusted, false),
+
+                let heights = collect_candidate_step_heights(aabb2, step_colliders, max_step, adjusted.y as f32);
+                let mut chosen: Option<Vec3d> = None;
+                let orig_horiz_sq = adjusted.x * adjusted.x + adjusted.z * adjusted.z;
+                for g in heights {
+                    let cand = collide_with_shapes(
+                        Vec3d { x: motion.x, y: g as f64, z: motion.z },
+                        aabb2,
+                        step_colliders,
+                    );
+                    let cand_horiz_sq = cand.x * cand.x + cand.z * cand.z;
+                    if cand_horiz_sq > orig_horiz_sq {
+                        // Vanilla: return cand.add(0, -(aabb.min_y - aabb2.min_y), 0)
+                        let d = aabb.min_y - aabb2.min_y;
+                        chosen = Some(Vec3d { x: cand.x, y: cand.y - d, z: cand.z });
+                        break;
+                    }
+                }
+                Some(chosen)
+            });
+            match step_result {
+                None => {
+                    out.flags = FLAG_FALLBACK;
+                    return false;
+                }
+                Some(Some(m)) => (m, true),
+                Some(None)    => (adjusted, false),
             }
         } else {
             (adjusted, false)
