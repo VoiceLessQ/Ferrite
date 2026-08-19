@@ -31,8 +31,8 @@ import net.minecraft.world.entity.vehicle.minecart.AbstractMinecart;
 public final class ColliderSkip {
 	private ColliderSkip() {}
 
-	/** Master switch: -Dferrite.entityquery.colliderskip=true (default off). */
-	public static final boolean ENABLED = Boolean.getBoolean("ferrite.entityquery.colliderskip");
+	/** Master switch: default on since 0.7.2; kill with -Dferrite.entityquery.colliderskip=false. */
+	public static final boolean ENABLED = !"false".equals(System.getProperty("ferrite.entityquery.colliderskip"));
 
 	/** Oracle: sample 1 in N eligible queries with the vanilla walk; 0 disables. */
 	public static final int ORACLE_RATE = Integer.getInteger("ferrite.entityquery.colliderskip.oracle", 16);

@@ -20,8 +20,8 @@ package me.apika.apikaprobe.spatial;
 public final class EntityCellIndex {
 	private EntityCellIndex() {}
 
-	/** Master switch: -Dferrite.entityquery.cache=true (default off). */
-	public static final boolean ENABLED = Boolean.getBoolean("ferrite.entityquery.cache");
+	/** Master switch: default on since 0.7.2; kill with -Dferrite.entityquery.cache=false. */
+	public static final boolean ENABLED = !"false".equals(System.getProperty("ferrite.entityquery.cache"));
 
 	/** Oracle: sample 1 in N filtered queries; 0 disables. Default 16 while alpha. */
 	public static final int ORACLE_RATE = Integer.getInteger("ferrite.entityquery.oracle", 16);

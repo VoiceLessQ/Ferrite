@@ -2176,3 +2176,46 @@ onto each connection. About 1.7 ms per tick
 at the worst constructible case, and the little LXC held 20 TPS
 with twenty-one viewers standing on a thousand zombies. Some
 questions die of measurement; this one died twice in one evening.
+
+## The flip (2026-08-19, night)
+
+One question was still open after the attic session: all the field
+evidence came from the nether. The user caught it, not the notes.
+The 1,022-zombie farm sits in the nether dimension, so every server
+number carried a condition nobody had written down. Correctness was
+never really in doubt, the oracle soak had run 10.8 million checks
+across whatever dimensions the desktop sessions touched, but "we
+never measured a plain overworld on the server" is exactly the kind
+of sentence this journal exists to prevent.
+
+So, one more run before flipping anything. Fresh world named
+accuracytest on the same LXC, brand-new overworld seed, the merged
+0.7.2 jar deployed, oracle sampling at 1 in 64, one real player and
+two Carpet bots wandering while mobs spawned naturally. Thirteen
+minutes. 5,198 sampled query checks against the vanilla walk, zero
+mismatches. 197,025 collider-skip verification walks, every single
+one confirming the skipped result would have been empty anyway.
+Skip rate held at 93.7 percent of eligible queries the whole time.
+
+That closed the last gap, and entityQuery plus colliderSkip went
+default on the same night. Two lines changed: each ENABLED now
+reads its property with true as the default, so
+-Dferrite.entityquery.cache=false and
+-Dferrite.entityquery.colliderskip=false are the kill switches.
+The oracle stays on at 1 in 16 through the alpha, cheap insurance
+that keeps writing mismatch counts into the log of anyone who can
+send one in.
+
+The honest footnote is Lithium. Its caller rewrites collapse query
+volume before our index ever sees it, 1,170 queries a tick down to
+82 in the coexistence test, so a Lithium server gains much less
+from this than the raw numbers above suggest. They run together
+without conflict; there is just less left to win. Everyone else
+gets the version of the farm that holds 20 TPS.
+
+This is the first feature in the tree that went from idea to
+default on entirely under the discipline: built in July, four
+pre-flip checks in early August, field-measured on weak hardware,
+then held one extra night because a measurement was missing its
+conditions. The piano gained an instrument that plays by itself
+now.

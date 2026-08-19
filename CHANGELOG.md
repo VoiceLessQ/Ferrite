@@ -41,6 +41,19 @@ marks pre-release research builds.
 
 ### Changed
 
+- **Entity query index and collider skip are now default on.** Both
+  were opt-in flags since 0.7.0. The evidence pile got deep enough:
+  10.8M oracle checks with zero mismatches in the desktop soak, a
+  dedicated-server A/B on a shared 4-core host that went from 15.5
+  TPS at 64.3 ms/tick to a locked 20 TPS at 31.5 ms (1022-zombie
+  farm, measured in the nether), and a fresh-overworld accuracy run
+  the same evening: 5,198 sampled query checks and 197,025
+  collider-skip verification walks, zero divergence in either.
+  Kill switches: `-Dferrite.entityquery.cache=false` and
+  `-Dferrite.entityquery.colliderskip=false`. One known overlap:
+  Lithium's caller rewrites already collapse query volume, so with
+  Lithium installed the gain here is smaller; the two coexist
+  cleanly in testing.
 - **Ferrite's own default-config footprint went down.** First audit
   of what the mod itself costs, not the vanilla systems it speeds
   up. All numbers: 26.2.x dev build, 2026-08-19, JDK 25, jcmd on a
