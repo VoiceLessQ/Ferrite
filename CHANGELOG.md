@@ -9,36 +9,37 @@ marks pre-release research builds.
 
 ### Changed
 
-- **The mod's own overhead shrank, measurably.** A self-audit of
-  what Ferrite costs at default config found and removed several
-  things nobody had looked at before. Numbers below were taken on
-  the 26.2.x dev build, 2026-08-19, JDK 25, jcmd against a live
-  client; docs/PIANO_STATUS.md has the commands to reproduce each
-  one.
-  - About 4.4 MB of off-heap buffers no longer allocate when the
-    physics dispatcher is off (its default). The class holding them
-    now never loads in a default session.
-  - The native library no longer starts its 6 worker threads at
-    boot. They are created on first use of a parallel path, and
-    every parallel path is opt-in, so a default session runs zero
-    extra threads (was 6, parked but resident).
-  - Cramming's spatial hash stopped re-allocating its cell buckets
-    every tick. Verified at a sustained ~1,000-mob pile: 15+ clean
-    report windows, push counts matching mob counts, tick time
-    steady at 32-35 ms.
-  - Two worldgen leak paths closed: parity-capture lists now clear
-    on server stop (they used to pin every world's noise state for
-    the whole game session), and the opt-in nav cache frees its
-    native memory on chunk unload and server stop (it used to only
-    grow, roughly 16 KB per cached section).
-  - Monitors stop collecting per-mob timings while their reports
-    are off, instead of measuring and discarding. At the 1,000-mob
-    pile on a 24-core desktop the tick-time delta sits below what
-    `/tick query` can resolve (34.7 ms both ways); the removed work
-    is roughly 100k boxed-Long allocations/s plus two nanoTime
-    calls per entity per tick, which matters most for GC pauses and
-    for slow CPUs like the Pi-class servers that boot with reports
-    off by default.
+- **Ferrite's own default-config footprint went down.** First audit
+  of what the mod itself costs, not the vanilla systems it speeds
+  up. All numbers: 26.2.x dev build, 2026-08-19, JDK 25, jcmd on a
+  live client. docs/PIANO_STATUS.md has the exact command behind
+  each claim if you want to re-check on your own machine.
+  - **~4.4 MB of off-heap buffers gone.** The physics handoff
+    buffers allocated within seconds of the first tick even with
+    physics off (its default). The class holding them no longer
+    loads at all in a default session.
+  - **Zero idle native threads, was 6.** The Rust worker pool used
+    to spawn at the title screen. It now starts on first use of a
+    parallel path, and every parallel path is opt-in.
+  - **Cramming stopped re-allocating per tick.** Its spatial hash
+    buckets now survive across ticks. Tested against a sustained
+    ~1,000-mob pile: push counts matched mob counts across 15+
+    report windows, tick time steady at 32-35 ms, and pair order is
+    unchanged, so the parity suite still passes.
+  - **Two leaks closed.** Parity-capture lists cleared on server
+    stop (they pinned every opened world's noise state until the
+    game quit). The opt-in nav cache frees native memory on chunk
+    unload and server stop; before, it could only grow, about 16 KB
+    per cached section.
+  - **Monitors stop measuring when reports are off.** They used to
+    time every entity tick and throw the result away: two nanoTime
+    calls, five ThreadLocal ops, and a boxed Long per entity, near
+    100k allocations/s at horde scale. On a 24-core desktop the
+    mspt delta is below `/tick query` resolution (34.7 ms either
+    way), so the honest claim is less GC pressure everywhere and
+    real time saved on slow CPUs, not a lower desktop mspt.
+    Pi-class servers boot with reports off, so they get this by
+    default.
 - **Monitor logging defaults off on small heaps.** Max heap of 3 GB
   or less (Pi-class servers, often on slow SD-card I/O) now boots
   with the periodic monitor reports silenced instead of paying ~5
