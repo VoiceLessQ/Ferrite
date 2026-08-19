@@ -1846,8 +1846,10 @@ Carpet's 26.2 build landed the same week, so the last unmeasured
 claim got its number that night. Twenty fake players at the pile,
 one long recording, and the tracker question closed for good:
 2.7 percent of the server thread at one viewer, 5.0 at
-twenty-one. Sub-linear, because vanilla computes each mob's delta
-once and per-viewer work is just enqueueing. About 1.7 ms per tick
+twenty-one. Sub-linear. Vanilla computes each mob's movement delta
+exactly once no matter who is watching, and the per-viewer share
+of the work is nothing more than enqueueing the finished packet
+onto each connection. About 1.7 ms per tick
 at the worst constructible case, and the little LXC held 20 TPS
 with twenty-one viewers standing on a thousand zombies. Some
 questions die of measurement; this one died twice in one evening.
