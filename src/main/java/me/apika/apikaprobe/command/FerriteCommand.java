@@ -1623,7 +1623,7 @@ public final class FerriteCommand {
 
 	private static int logMonitorsOff(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		me.apika.apikaprobe.monitor.MonitorLog.ENABLED = false;
-		String msg = "[log] monitor reports DISABLED (counters still tick; toggle on or restart to resume)";
+		String msg = "[log] monitor reports DISABLED (hot per-mob collection paused too; toggle on to resume)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
