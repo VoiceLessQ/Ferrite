@@ -14,7 +14,8 @@ import org.slf4j.LoggerFactory;
  * I/O should not pay ~5 log lines/sec by default; the boot stamp says which
  * default applied).  Runtime toggle via {@code /ferrite log monitors
  * on|off|status}; {@code -Dferrite.log.monitors.on=true} forces on
- * regardless of heap.
+ * regardless of heap.  Individual categories mute via {@code /ferrite log
+ * <category> off}, matched against the leading {@code [tag]} of each line.
  *
  * <p>Counters and rate-limiter state in each monitor still tick normally
  * when ENABLED is false — only the LOGGER emission is suppressed, so
@@ -39,19 +40,52 @@ public final class MonitorLog {
 
 	private static final Logger L = LoggerFactory.getLogger("ferrite");
 
+	/** Categories muted via /ferrite log <category> off; keys are the bracket tags without brackets. */
+	private static final java.util.Set<String> MUTED =
+			java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+	/** Extracts "cramming-dispatch" from "[cramming-dispatch] ...", or null if no leading tag. */
+	static String category(String msg) {
+		if (msg == null || msg.isEmpty() || msg.charAt(0) != '[') return null;
+		int end = msg.indexOf(']');
+		return end > 1 ? msg.substring(1, end) : null;
+	}
+
+	private static boolean emit(String msg) {
+		if (!ENABLED) return false;
+		if (MUTED.isEmpty()) return true;
+		String cat = category(msg);
+		return cat == null || !MUTED.contains(cat);
+	}
+
+	public static void mute(String category) {
+		MUTED.add(category);
+	}
+
+	/** Returns true if the category was muted. */
+	public static boolean unmute(String category) {
+		return MUTED.remove(category);
+	}
+
+	public static java.util.List<String> mutedCategories() {
+		java.util.List<String> out = new java.util.ArrayList<>(MUTED);
+		java.util.Collections.sort(out);
+		return out;
+	}
+
 	public static void info(String fmt, Object... args) {
-		if (ENABLED) L.info(fmt, args);
+		if (emit(fmt)) L.info(fmt, args);
 	}
 
 	public static void info(String msg) {
-		if (ENABLED) L.info(msg);
+		if (emit(msg)) L.info(msg);
 	}
 
 	public static void warn(String fmt, Object... args) {
-		if (ENABLED) L.warn(fmt, args);
+		if (emit(fmt)) L.warn(fmt, args);
 	}
 
 	public static void warn(String msg) {
-		if (ENABLED) L.warn(msg);
+		if (emit(msg)) L.warn(msg);
 	}
 }

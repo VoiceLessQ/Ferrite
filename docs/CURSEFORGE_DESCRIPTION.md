@@ -9,7 +9,7 @@ A performance mod for Minecraft 26.2 (Fabric, JDK 25). Java handles integration 
 * **Redstone** (`/ferrite redstone ac on`): Alternate Current algorithm plus a Rust BFS kernel. A lag machine that held vanilla at 1.4-1.8 TPS recovered to a flat 20.00 TPS. Zero mismatches across 150,000+ oracle checks. Off by default so contraptions tuned to vanilla update order keep working.
 * **Hoppers** (default on): extract loops skip drained slots, up to ~85% cheaper on partially-emptied chests. Opt-in hopper highway multiplies chain throughput ~3x for storage systems.
 * **Idle sign and furnace tickers suppressed** (default on): ~70% block-entity tick reduction at scale, self-healing, mod-subclass safe.
-* **Pre-gen and predictive chunk forcing** (opt-in): 90-118 chunks/s spawn pre-generation with resume, and a generation ring that leads your flight path so you never see terrain loading.
+* **Pre-gen and predictive chunk forcing** (opt-in): 90-118 chunks/s spawn pre-generation with resume, and a generation ring that leads your flight path, so terrain is usually already generated ahead of you.
 
 Worldgen math (noise, biomes, density functions) is ported bit-exact and validated every release; parity checks run 63/63 noise and 50/50 density on 26.2.
 
@@ -23,7 +23,7 @@ Worldgen math (noise, biomes, density functions) is ported bit-exact and validat
 
 ## Platforms
 
-Natives bundled for Windows x86_64, Linux x86_64, Linux aarch64 (tested on a Raspberry Pi 4B), and macOS (universal). If the native fails to load, Ferrite falls back to vanilla behavior automatically: no crashes, no broken worlds.
+Natives bundled for Windows x86_64, Linux x86_64, Linux aarch64 (tested on a Raspberry Pi 4B), and macOS (universal). If the native fails to load, Ferrite falls back to vanilla behavior automatically, so a missing native cannot crash the game or damage a world.
 
 ## How to help
 

@@ -40,6 +40,17 @@ public final class ChunkForcer {
 
 	public static volatile boolean ENABLED = false;
 
+	/** Speed-gated auto mode. Default OFF: the 10-run interleaved bench
+	 *  (2026-08-17, autobench, 90 b/s, vd 16) measured auto WORSE than
+	 *  vanilla in all 5 pairs (mean deficit 8.1 vs 0.9); forced tickets
+	 *  compete with vanilla's own better-prioritized urgent loads. The
+	 *  earlier single-run manual win did not survive repetition. */
+	public static volatile boolean AUTO = false;
+
+	/** Set per tick by ChunkForceTrigger when auto mode has at least one
+	 *  fast player; opens the submitOneShot gate without ENABLED. */
+	static volatile boolean autoActive = false;
+
 	private static TicketType ticketType;
 
 	/** Tracks chunks we've submitted that haven't completed yet. */
@@ -66,7 +77,7 @@ public final class ChunkForcer {
 	 *  queued, false if disabled, capped, already inflight, or
 	 *  registration didn't run. Caller must already be on server thread. */
 	public static boolean submitOneShot(ServerLevel world, int cx, int cz) {
-		if (!ENABLED) return false;
+		if (!ENABLED && !autoActive) return false;
 		if (ticketType == null) return false;
 		if (inflight.size() >= MAX_INFLIGHT) return false;
 		long key = ChunkPrewarmer.key(cx, cz);

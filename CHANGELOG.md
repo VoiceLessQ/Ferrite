@@ -7,6 +7,38 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Added
+
+- **Chunkforce auto mode, default off.** Forced chunk generation can
+  engage by itself when a player sustains roughly 40 blocks/s and
+  stand down below that; `/ferrite chunkforce auto on` enables it.
+  It stays off by default because the 10-run interleaved bench came
+  back negative: at 90 blocks/s over virgin terrain, vanilla alone
+  held a mean deficit of 0.9 missing chunks while auto mode measured
+  8.1, worse in all five paired runs; the forced tickets compete
+  with the urgent loads vanilla already prioritizes well. An earlier
+  single-run comparison had suggested a large win; it did not
+  survive repetition.
+- **`/ferrite arrival bench` and headless autobench.** Automated
+  straight-line flight at a fixed speed with the arrival monitor
+  running, single runs or interleaved baseline/auto suites on fresh
+  strips (`/ferrite arrival suite`), and a
+  `-Pferrite.autobench=x,z,speed,seconds,runs` gradle property that
+  runs a suite unattended and halts. This is the harness that caught
+  the auto-mode regression.
+- **`/ferrite arrival` monitor.** Counts chunks inside each player
+  view distance that are not loaded, logged every 5 s: the
+  server-side signature of terrain pop-in. About 50 us/tick at view
+  distance 10; warns if monitor logging is muted so runs cannot
+  silently produce nothing.
+
+### Fixed
+
+- **Own nametag missing in F5 with nametag mods** (#15). A leftover
+  client mixin blanked the local player display name; mods that
+  render your own nametag (Third Person Nametags, Animatium) drew an
+  empty background. Removed.
+
 ### Changed
 
 - **Ferrite's own default-config footprint went down.** First audit
@@ -40,11 +72,33 @@ marks pre-release research builds.
     real time saved on slow CPUs, not a lower desktop mspt.
     Pi-class servers boot with reports off, so they get this by
     default.
+- **Monitors pause hot collection while reports are off.** The
+  0.7.2 small-heap default silenced the log lines; as of this build
+  the per-mob timing collection itself stops too, so the default-off
+  state no longer pays the measurement cost either.
+
+## [Released]
+
+## [0.7.2-alpha] - 2026-08-13
+
+### Fixed
+
+- **Moonrise compatibility crash at boot** (#12). Moonrise replaces
+  the vanilla light engine internals, which removed the injection
+  targets of the two ThreadedLevelLightEngine diagnostic mixins and
+  hard-crashed the game at init. A mixin config plugin now detects
+  Moonrise and skips those two mixins; for now the `[light]` monitor
+  reports no data when Moonrise is installed, since Moonrise owns
+  lighting at that point. A Moonrise-aware light probe may come
+  later. Verified against Moonrise 1.1.0: boot, existing-world play,
+  and fresh world creation all clean.
+
+### Changed
+
 - **Monitor logging defaults off on small heaps.** Max heap of 3 GB
   or less (Pi-class servers, often on slow SD-card I/O) now boots
   with the periodic monitor reports silenced instead of paying ~5
-  log lines/sec. Per-tick counters still run, and as of this build
-  the per-mob collectors pause too; `/ferrite log monitors on` or
+  log lines/sec. Counters still run; `/ferrite log monitors on` or
   `-Dferrite.log.monitors.on=true` re-enables at any time. Normal
   heaps keep the old default.
 - **Dispatch and oracle telemetry respects the small-heap monitor
@@ -57,25 +111,32 @@ marks pre-release research builds.
 
 ### Added
 
+- **Per-category log muting** (#14). `/ferrite log <category> off`
+  silences one monitor tag (`physics-dispatch`, `cramming-dispatch`,
+  `redstone-oracle`, and every other bracket tag) without touching
+  the rest; `on` resumes it on the next report window and
+  `/ferrite log status` lists what is muted. Counters keep running
+  while muted. The global `/ferrite log monitors` switch is
+  unchanged.
+- **Module toggles persist across restarts** (#13). Cramming, the
+  hopper layer, AC redstone, monitor logging, and muted log
+  categories now save to `config/ferrite.properties` on every
+  toggle and reload at boot. The file stores only deviations from
+  defaults, so it stays empty (absent, in fact) until something is
+  changed, and reverting a toggle removes its line. Diagnostic and
+  experiment flags stay session-only on purpose, as does prewarm,
+  since enabling it during boot breaks spawn loading.
+
 - **Entity spatial query index** (opt-in,
   `-Dferrite.entityquery.cache=true`). Sections holding 32+ entities
-  get a per-section bitset grid (4-block cells over storage-list
-  indices); "which entities are in this box" queries visit only
-  candidate indices in vanilla iteration order instead of scanning
-  every entity in the section, so consumer order, abort semantics,
-  and mid-tick liveness are preserved exactly. Maintained
-  incrementally on the section-manager move callbacks (the
-  interleave probe showed 93% of queries follow a move, so lazy
-  rebuilds were ruled out by measurement). At a 1022-zombie farm:
-  query cost 14.4-16.8 down to 10.3 ms/tick (34% cut), whole-server
-  mspt 36-40 down to ~32.7, with a shadow oracle reporting zero
-  mismatches across 83,000+ sampled queries. A cheaper
-  position-filter variant was built first and measured neutral
-  (pruning intersect tests is free; not walking the list is the
-  win); it remains as the fallback path for small sections and the
-  typed overload. Default off pending broader soak; the oracle
-  (`-Dferrite.entityquery.oracle=<1-in-N>`) stays available for
-  field validation.
+  get a per-section bitset grid (4-block cells); box queries visit
+  only candidate entities in vanilla iteration order, so consumer
+  order, abort semantics, and mid-tick liveness are preserved
+  exactly. At a 1022-zombie farm: query cost 14.4-16.8 down to
+  10.3 ms/tick (34% cut), whole-server mspt 36-40 down to ~32.7,
+  zero oracle mismatches across 83,000+ sampled queries. Default
+  off pending broader soak; `-Dferrite.entityquery.oracle=<1-in-N>`
+  enables field validation.
 - **`-Dferrite.pregen.inflight=<n>`** sets the pre-gen inflight cap
   at boot (dedicated servers and headless benches; the runtime
   command still overrides). While adding it, the 200 default was

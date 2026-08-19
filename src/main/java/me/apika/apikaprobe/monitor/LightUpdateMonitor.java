@@ -15,7 +15,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
  *             not block ticks directly.
  *   backlog : lightTasks.size() sampled at runUpdate entry, window max.
  *
- * Cross-thread, so AtomicLong (ChunkSaveMonitor pattern). 5 s window
+ * Cross-thread, so AtomicLong (same AtomicLong pattern as the other monitors). 5 s window
  * drained from END_SERVER_TICK, line printed only when updates ran.
  */
 public final class LightUpdateMonitor {

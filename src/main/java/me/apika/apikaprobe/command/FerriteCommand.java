@@ -185,7 +185,24 @@ public final class FerriteCommand {
 				.then(Commands.literal("chunkforce")
 						.then(Commands.literal("on").executes(FerriteCommand::chunkForceOn))
 						.then(Commands.literal("off").executes(FerriteCommand::chunkForceOff))
-						.then(Commands.literal("status").executes(FerriteCommand::chunkForceStatus)))
+						.then(Commands.literal("status").executes(FerriteCommand::chunkForceStatus))
+						.then(Commands.literal("auto")
+								.then(Commands.literal("on").executes(FerriteCommand::chunkForceAutoOn))
+								.then(Commands.literal("off").executes(FerriteCommand::chunkForceAutoOff))))
+				.then(Commands.literal("arrival")
+						.then(Commands.literal("on").executes(FerriteCommand::arrivalOn))
+						.then(Commands.literal("off").executes(FerriteCommand::arrivalOff))
+						.then(Commands.literal("status").executes(FerriteCommand::arrivalStatus))
+						.then(Commands.literal("bench")
+								.then(Commands.literal("stop").executes(FerriteCommand::arrivalBenchStop))
+								.then(Commands.argument("blocksPerSec", IntegerArgumentType.integer(5, 300))
+										.then(Commands.argument("seconds", IntegerArgumentType.integer(5, 600))
+												.executes(FerriteCommand::arrivalBenchStart))))
+						.then(Commands.literal("suite")
+								.then(Commands.argument("blocksPerSec", IntegerArgumentType.integer(5, 300))
+										.then(Commands.argument("seconds", IntegerArgumentType.integer(5, 600))
+												.then(Commands.argument("runsPerArm", IntegerArgumentType.integer(1, 10))
+														.executes(FerriteCommand::arrivalSuiteStart))))))
 				.then(Commands.literal("pregen")
 						.then(Commands.argument("radius", IntegerArgumentType.integer(1, 50))
 								.executes(FerriteCommand::pregenStart))
@@ -244,7 +261,11 @@ public final class FerriteCommand {
 						.then(Commands.literal("monitors")
 								.then(Commands.literal("on").executes(FerriteCommand::logMonitorsOn))
 								.then(Commands.literal("off").executes(FerriteCommand::logMonitorsOff))
-								.then(Commands.literal("status").executes(FerriteCommand::logMonitorsStatus)))));
+								.then(Commands.literal("status").executes(FerriteCommand::logMonitorsStatus)))
+						.then(Commands.literal("status").executes(FerriteCommand::logCategoryStatus))
+						.then(Commands.argument("category", StringArgumentType.word())
+								.then(Commands.literal("on").executes(FerriteCommand::logCategoryOn))
+								.then(Commands.literal("off").executes(FerriteCommand::logCategoryOff)))));
 	}
 
 	/**
@@ -252,10 +273,12 @@ public final class FerriteCommand {
 	 * the cancel mixin no-ops and vanilla LivingEntity.tickCramming runs
 	 * unmodified — including vanilla cramming damage. Lets users A/B
 	 * the perf claim ("stable TPS at 1000+ mobs") in their own world.
-	 * Volatile, not persisted.
+	 * Persisted via FerriteConfig (#13).
 	 */
 	private static int enableCramming(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		CrammingDispatcher.ENABLED = true;
+		me.apika.apikaprobe.config.FerriteConfig.set(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_CRAMMING, true, true);
 		String msg = "[cramming] Ferrite cramming enabled — batched Rust path active (vanilla cramming damage NOT applied)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
@@ -264,6 +287,8 @@ public final class FerriteCommand {
 
 	private static int disableCramming(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		CrammingDispatcher.ENABLED = false;
+		me.apika.apikaprobe.config.FerriteConfig.set(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_CRAMMING, false, true);
 		String msg = "[cramming] Ferrite cramming disabled — vanilla path active (cramming damage will fire per maxEntityCramming gamerule)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
@@ -284,6 +309,8 @@ public final class FerriteCommand {
 		me.apika.apikaprobe.monitor.HopperHintMonitor.USE_HINT = true;
 		me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE = true;
 		me.apika.apikaprobe.hopper.HopperLaneRouteConfig.ENABLE = true;
+		me.apika.apikaprobe.config.FerriteConfig.setString(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_HOPPER, "true");
 		String msg = "[hopper] Ferrite hopper layer ENABLED (extract hint + per-slot fire + lane routing)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
@@ -294,6 +321,8 @@ public final class FerriteCommand {
 		me.apika.apikaprobe.monitor.HopperHintMonitor.USE_HINT = false;
 		me.apika.apikaprobe.hopper.PerSlotFireConfig.ENABLE = false;
 		me.apika.apikaprobe.hopper.HopperLaneRouteConfig.ENABLE = false;
+		me.apika.apikaprobe.config.FerriteConfig.setString(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_HOPPER, "false");
 		String msg = "[hopper] Ferrite hopper layer DISABLED, vanilla hopper paths active";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
@@ -314,20 +343,22 @@ public final class FerriteCommand {
 	}
 
 	/**
-	 * Enables the Alternate-Current wire algorithm for the current server
-	 * session only. Setting is held in a static volatile field, NOT
-	 * persisted, flips back to the default ({@code false}) on server
-	 * restart. Re-issue the command after each restart if you want it on.
+	 * Enables the Alternate-Current wire algorithm. Persisted via
+	 * FerriteConfig (#13), so it survives server restarts.
 	 */
 	private static int enableAc(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		FerriteWireConfig.ENABLED = true;
-		sendFeedback(ctx, "[redstone] Alternate-Current wire algorithm enabled (this session only)", true);
-		ExampleMod.LOGGER.info("[redstone] AC wire algorithm enabled (via /ferrite, this session only)");
+		me.apika.apikaprobe.config.FerriteConfig.set(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_REDSTONE_AC, true, false);
+		sendFeedback(ctx, "[redstone] Alternate-Current wire algorithm enabled (persisted)", true);
+		ExampleMod.LOGGER.info("[redstone] AC wire algorithm enabled (via /ferrite, persisted)");
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int disableAc(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		FerriteWireConfig.ENABLED = false;
+		me.apika.apikaprobe.config.FerriteConfig.set(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_REDSTONE_AC, false, false);
 		sendFeedback(ctx, "[redstone] Alternate-Current wire algorithm disabled (vanilla path)", true);
 		ExampleMod.LOGGER.info("[redstone] AC wire algorithm disabled (via /ferrite)");
 		return Command.SINGLE_SUCCESS;
@@ -1373,13 +1404,103 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
+	private static int chunkForceAutoOn(CommandContext<CommandSourceStack> ctx) {
+		ChunkForcer.AUTO = true;
+		sendFeedback(ctx, "[chunkforce] auto mode ON (engages above ~40 blocks/s sustained)", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int chunkForceAutoOff(CommandContext<CommandSourceStack> ctx) {
+		ChunkForcer.AUTO = false;
+		sendFeedback(ctx, "[chunkforce] auto mode OFF (manual on/off only)", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
 	private static int chunkForceStatus(CommandContext<CommandSourceStack> ctx) {
 		String line = String.format(
-				"[chunkforce] enabled=%s inflight=%d scheduled=%d completed=%d errored=%d",
-				ChunkForcer.ENABLED, ChunkForcer.inflightCount(),
+				"[chunkforce] enabled=%s auto=%s inflight=%d scheduled=%d completed=%d errored=%d",
+				ChunkForcer.ENABLED, ChunkForcer.AUTO, ChunkForcer.inflightCount(),
 				ChunkForcer.scheduledCount(), ChunkForcer.completedCount(),
 				ChunkForcer.erroredCount());
 		sendFeedback(ctx, line, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int arrivalOn(CommandContext<CommandSourceStack> ctx) {
+		me.apika.apikaprobe.monitor.ChunkArrivalMonitor.reset();
+		me.apika.apikaprobe.monitor.ChunkArrivalMonitor.ENABLED = true;
+		sendFeedback(ctx, "[chunk-arrival] ENABLED, deficit logged every 5 s", false);
+		if (!me.apika.apikaprobe.monitor.MonitorLog.ENABLED) {
+			sendFeedback(ctx, "[chunk-arrival] WARNING: monitor logging is OFF"
+					+ " (small heap default); run /ferrite log monitors on"
+					+ " or reports will be swallowed", false);
+		}
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int arrivalOff(CommandContext<CommandSourceStack> ctx) {
+		me.apika.apikaprobe.monitor.ChunkArrivalMonitor.ENABLED = false;
+		sendFeedback(ctx, "[chunk-arrival] disabled", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int arrivalStatus(CommandContext<CommandSourceStack> ctx) {
+		sendFeedback(ctx, "[chunk-arrival] enabled="
+				+ me.apika.apikaprobe.monitor.ChunkArrivalMonitor.ENABLED, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int arrivalBenchStart(CommandContext<CommandSourceStack> ctx) {
+		net.minecraft.server.level.ServerPlayer player;
+		try {
+			player = ctx.getSource().getPlayerOrException();
+		} catch (Exception e) {
+			sendFeedback(ctx, "[arrival-bench] needs a player (heading comes from your look direction)", false);
+			return 0;
+		}
+		int bps = IntegerArgumentType.getInteger(ctx, "blocksPerSec");
+		int secs = IntegerArgumentType.getInteger(ctx, "seconds");
+		if (!me.apika.apikaprobe.monitor.ArrivalFlightBench.start(player, bps, secs)) {
+			sendFeedback(ctx, "[arrival-bench] already running; /ferrite arrival bench stop first", false);
+			return 0;
+		}
+		sendFeedback(ctx, String.format(
+				"[arrival-bench] flying %d b/s for %d s along your look heading; summary at the end",
+				bps, secs), false);
+		if (!me.apika.apikaprobe.monitor.MonitorLog.ENABLED) {
+			sendFeedback(ctx, "[arrival-bench] note: per-5s report lines are muted"
+					+ " (small heap); the end summary still prints", false);
+		}
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int arrivalSuiteStart(CommandContext<CommandSourceStack> ctx) {
+		net.minecraft.server.level.ServerPlayer player;
+		try {
+			player = ctx.getSource().getPlayerOrException();
+		} catch (Exception e) {
+			sendFeedback(ctx, "[arrival-bench] needs a player (heading comes from your look direction)", false);
+			return 0;
+		}
+		int bps = IntegerArgumentType.getInteger(ctx, "blocksPerSec");
+		int secs = IntegerArgumentType.getInteger(ctx, "seconds");
+		int runs = IntegerArgumentType.getInteger(ctx, "runsPerArm");
+		if (!me.apika.apikaprobe.monitor.ArrivalFlightBench.startSuite(player, bps, secs, runs)) {
+			sendFeedback(ctx, "[arrival-bench] already running; /ferrite arrival bench stop first", false);
+			return 0;
+		}
+		sendFeedback(ctx, String.format(
+				"[arrival-bench] suite: %d baseline + %d auto runs, %d b/s x %d s each,"
+						+ " fresh strip per run; comparison prints at the end",
+				runs, runs, bps, secs), false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int arrivalBenchStop(CommandContext<CommandSourceStack> ctx) {
+		boolean stopped = me.apika.apikaprobe.monitor.ArrivalFlightBench.stop();
+		sendFeedback(ctx, stopped
+				? "[arrival-bench] stopping, summary follows"
+				: "[arrival-bench] no run active", false);
 		return Command.SINGLE_SUCCESS;
 	}
 
@@ -1615,6 +1736,8 @@ public final class FerriteCommand {
 	 */
 	private static int logMonitorsOn(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		me.apika.apikaprobe.monitor.MonitorLog.ENABLED = true;
+		me.apika.apikaprobe.config.FerriteConfig.setString(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_LOG_MONITORS, "true");
 		String msg = "[log] monitor reports ENABLED";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
@@ -1623,7 +1746,9 @@ public final class FerriteCommand {
 
 	private static int logMonitorsOff(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		me.apika.apikaprobe.monitor.MonitorLog.ENABLED = false;
-		String msg = "[log] monitor reports DISABLED (hot per-mob collection paused too; toggle on to resume)";
+		me.apika.apikaprobe.config.FerriteConfig.setString(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_LOG_MONITORS, "false");
+		String msg = "[log] monitor reports DISABLED (hot per-mob collection paused too; '/ferrite log monitors on' to resume)";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
@@ -1632,6 +1757,51 @@ public final class FerriteCommand {
 	private static int logMonitorsStatus(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = String.format("[log] monitors=%s",
 				me.apika.apikaprobe.monitor.MonitorLog.ENABLED ? "ENABLED" : "DISABLED");
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * Per-category mute for periodic monitor lines, e.g.
+	 * {@code /ferrite log cramming-dispatch off}.  The category is the
+	 * bracket tag each line starts with, without the brackets.  Only
+	 * affects lines routed through MonitorLog; one-shot bootstrap logs
+	 * and command output are untouched.  Persisted via FerriteConfig (#13).
+	 */
+	private static int logCategoryOff(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		String cat = StringArgumentType.getString(ctx, "category");
+		me.apika.apikaprobe.monitor.MonitorLog.mute(cat);
+		saveMutedCategories();
+		String msg = "[log] category [" + cat + "] MUTED (counters still tick; '/ferrite log " + cat + " on' to resume)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int logCategoryOn(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		String cat = StringArgumentType.getString(ctx, "category");
+		boolean was = me.apika.apikaprobe.monitor.MonitorLog.unmute(cat);
+		if (was) saveMutedCategories();
+		String msg = was
+				? "[log] category [" + cat + "] unmuted"
+				: "[log] category [" + cat + "] was not muted (check spelling against the bracket tag in latest.log)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static void saveMutedCategories() {
+		me.apika.apikaprobe.config.FerriteConfig.setString(
+				me.apika.apikaprobe.config.FerriteConfig.KEY_LOG_MUTED,
+				String.join(",", me.apika.apikaprobe.monitor.MonitorLog.mutedCategories()));
+	}
+
+	private static int logCategoryStatus(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		java.util.List<String> muted = me.apika.apikaprobe.monitor.MonitorLog.mutedCategories();
+		String msg = String.format("[log] monitors=%s muted=%s",
+				me.apika.apikaprobe.monitor.MonitorLog.ENABLED ? "ENABLED" : "DISABLED",
+				muted.isEmpty() ? "(none)" : String.join(", ", muted));
 		sendFeedback(ctx, msg, false);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;

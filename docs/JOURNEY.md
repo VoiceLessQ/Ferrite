@@ -1713,6 +1713,329 @@ hard-collidable, a single ambient strider in a lava ocean disarms
 the whole-level skip, and the per-section count stops being an
 upgrade path and becomes the design.
 
+## Moving day, then a purge (2026-08-13)
+
+The dev machine changed under the project. Ferrite was born on
+Windows, built through msys2 and a mingw cross target, pushed over
+HTTPS. Now it lives on Linux, and the migration announced itself in
+the pettiest way possible: 256 modified files in git status, none of
+them actually modified. Every one was a CRLF ghost, Windows line
+endings sitting in the working tree over LF content in the repo. One
+checkout swept them, one small commit (d6d8ada) normalized the two
+files that had slipped in as CRLF, and the tree went quiet. Leftovers
+remain and are welcome to: .cargo/config.toml still points at
+C:/msys64 paths that no Linux linker will ever read, and the mingw
+target still builds the Windows jar natives just fine.
+
+Same day, a different kind of housecleaning. The Moonrise crash (#12)
+had made a point worth hearing: every mixin we register is a promise
+that some vanilla method keeps existing, and two of ours crashed real
+users over injections that only fed a monitor line. So the whole
+mixin list got an audit, every class, target, and consumer, before
+deciding what deserved to keep making promises.
+
+The audit found something I had half forgotten. The json listed 82
+mixins, and 16 of them were empty. Bodies gutted during the 26.1.2
+mojmap port, "stubbed to keep the file in tree while build moves
+forward," said the javadoc, honestly, in files nobody reopened for
+seven months. The per-slot hopper probes, the old worldgen stage
+timers, all of them applying as no-ops every boot while still naming
+vanilla classes that any future rename could trip over. Six more
+files never made the json at all. Dead weight with a blast radius.
+
+Two commits took care of it. 4f98de9 removed the empty shells and
+the unregistered corpses; 170f15d retired five probes whose
+questions JOURNEY already answers: sign ticks, hopper scans, chunk
+save timing, the mob spawn census. Their numbers are recorded with
+their measurement conditions, and the probes themselves are one git
+show away if a question ever reopens. The compiler pushed back once,
+correctly: three accessor mixins I had judged dead turned out to be
+compile time dependencies of the default-off surface and
+bulk-density code, so they stayed with the parked work they serve.
+
+From 82 registered mixins to 61, about 1300 lines gone, zero
+behavior change, server boots clean in 0.676 seconds with no
+injection failures. The next vanilla bump has a third less surface
+to re-verify, and the next Moonrise-shaped mod has fewer promises of
+ours to break. Not glamorous work. The kind you only notice when it
+was never done.
+
+## Where the Piano came from (2026-08-17)
+
+The Piano model was not designed. It was extracted from the first
+failed ports in April 2026 and then confirmed by the later ones,
+six failures in all, each correct in isolation and slower in
+production, and all of them the same failure wearing different
+clothes.
+
+### Six ports, one wall
+
+The surface rule dispatcher went first. Architecture proven, 99.9%
+parity, regression anyway. It read vanilla's internal state via
+reflection mid-flow, and that exposure cost more than the Rust math
+saved. First hint that where the boundary sits matters more than
+how fast the kernel runs.
+
+Bulk density was the humbling one. 58x faster in an isolated JNI
+bench, regression in production. Vanilla's CacheOnce plus JIT
+inlining amortizes per-block density to roughly 20ns a cell, and an
+interpreter does not beat that without becoming a compiler, which
+is a multi-week project on its own. Stripping Rayon didn't close
+the gap either. The toggle stayed default-off and the lesson got
+filed: a JIT-defended hot path is not a target, no matter what the
+bench says.
+
+The rest fell faster. Aquifer wanted per-block boundary crossings
+and carried a parity gap besides, wrong granularity for a JNI
+handoff. Structure placement scoring passed the shape test (clean
+per-chunk pause, flat inputs, one bulk handoff) and failed on size,
+because vanilla spends too little there for any win to matter.
+Decoration turned out to be a write-loop, not a compute slice;
+there was nothing to hand to Rust at all. And the physics port
+died before any code was written, JNI cost over the per-mob win,
+below the 2x line on paper.
+
+### What the failures taught sideways
+
+Three findings cut across all six. JFR frame counts overstate
+recoverable cost by roughly 3x, confirmed enough times that only
+O(N)-reduction arguments sourced from reading the code are trusted
+now. Reflection is a measurable tax; swapping per-call reflection
+on MaterialRuleContext for an @Invoker bought a universal -3ms off
+the vanilla baseline, proof that reading vanilla's state mid-flow
+is never free. And ordering is part of correctness: Rust assuming
+sequential noise evaluation (1-2-3-4) diverged from vanilla's
+dependency-driven interpolator order (2-1-4-3 and worse) even with
+bit-exact math per sample. Vanilla's evaluation order is a
+specification, not an implementation detail.
+
+### The inversion
+
+Line the failures up and they say one thing: every one of them
+asked vanilla for data mid-computation. Reflection, broken JIT
+paths, crossings at the wrong granularity, all variants of
+interrupting the flow.
+
+The Piano model inverts that. Stop asking. Own the inputs from the
+seed, compute the whole sequence continuously, hand back identical
+results at vanilla's natural pause. The gating questions in
+[PIANO_STATUS.md](PIANO_STATUS.md) formalize exactly this
+post-mortem, roughly one question per failure mode above.
+
+One archaeological footnote, because the name itself went missing
+for a while. The word never appears in a single commit message; it
+lives in the docs and in three code comments that point at
+PIANO_STATUS.md. For months the memory said the name came from
+something read online, and a deliberate search found nothing, which
+looked like a dead end until the repo's own history answered. The
+earliest trace is PIANO_STATUS.md landing 2026-04-28 already fully
+formed, and a working note from the next day, preserved in git
+history, has the original rationale in full: "Ferrite plays piano
+inside vanilla's orchestra. It does not replace vanilla. Each Rust
+port is one instrument played faster, slotting into vanilla's
+existing flow at a clean boundary." The piano was never the seed
+handoff or a player piano. It is Ferrite itself, one instrument in
+the ensemble, and the whole orchestra framing survives today in
+[DOC_MAP.md](DOC_MAP.md). The components of the model have prior
+art (JNI batching, JVM safepoints, differential validation); the
+assembly, the gates, and the name are all in-project, and the
+lesson from the hunt is filed with the others: before crediting a
+half-remembered source, read your own history first.
+
+### On the word "slop"
+
+This entry documents six failed ports, three falsified hypotheses,
+a parity check that proved a design wrong across 81,445,189
+samples (PIANO_STATUS.md, surface noise routing), and a naming
+question that took a git blob to settle. At some point someone is
+going to look at this project, see the AI disclosure, type "slop,"
+and move on. Fine. But let the record state what the word is being
+applied to.
+
+Slop is generated once and uploaded. Nobody measures slop twice on
+a pinned 4-core affinity mask because the first number looked too
+good. Slop does not keep a default-off toggle for a feature that
+measured 7 ms worse than vanilla, and it does not write down that
+the JFR estimate was 3x optimistic, because slop does not know what
+its estimates were. Slop has no oracle logging zero mismatches
+across 149,669 cascades all night (the README's redstone table,
+sourced from REDSTONE_PORT_PLAN.md), because an oracle is what you
+build when you expect to be wrong and want to find out before your
+users do. Every number in this journal sits in a public repo where
+it can be re-run and refuted, and about half of the experiments
+behind those numbers failed. That half stayed in the doc.
+
+What no one sees either is the scaffolding it took to find any of
+this out. Minecraft is not obfuscated anymore, and that helps less
+than people assume: readable names tell you what a method is
+called, not when it runs, how often, or why it is slow. A sixth of
+the Java in this repo is monitors, probes, and diagnostic mixins
+built to catch vanilla in the act, per-bucket tick timers, caller
+attribution, interleave probes, shadow oracles. Most of it exists
+to answer one question each ("does the query follow the move?")
+and earns its keep in a single JOURNEY entry. That code is the
+flashlight, the features are just what it found.
+
+And one more thing the disclosure badge flattens. English is not
+my first language. Part of what the AI does here is what an editor
+does: it takes my drafts, my measurements, and my decisions, and
+turns them into prose that does not make readers stumble over my
+grammar. I have a degree in IT technology and management; nobody
+taught me to write English performance journals, so I use a tool
+for the part that is not my craft, the same way I use a compiler
+for the part that is not hand-written assembly. If polished
+English is what triggers the "slop" reflex, then the accusation
+punishes non-native speakers for being readable, and I am not
+going to write worse on purpose to look more authentic.
+
+The tools generated plenty of the code here. They also generated
+the six ports above that got measured, found slower, and closed,
+which is the part no one uploads because it looks like nothing.
+That invisible pile of correct, parity-validated, rejected work is
+the actual cost of the visible features, and it is the exact thing
+the word "slop" claims does not exist. Anyone who wants to check
+is welcome to: the benchmarks are described down to the CPU, the
+validators are in the jar you download, and every claim in the
+README has a flag that turns it off so you can watch the
+difference yourself. That last part is the tell, both ways. Slop
+cannot afford an off switch.
+
+
+## The win that sat in the tree for a month (2026-08-17)
+
+Today started with a complaint, not a plan: chunks are the big
+blocker. My first instinct was to design something new, a
+speculative directional pre-generator that watches player velocity
+and force-gens a cone ahead of flight. I wrote three paragraphs of
+scoping before actually reading the tree. ChunkForceTrigger already
+does all of it. Velocity-shifted ring centers, up to 12 chunks of
+lead at speed, one-shot tickets through the forcer. I built it on
+2026-07-12, validated its throughput and TPS behavior, marked it
+default-off, and forgot what question it was supposed to answer.
+
+The question it was supposed to answer had never been measured:
+does the player actually see fewer missing chunks? Throughput is a
+supply number. Pop-in is a demand number. Nobody had put them on
+the same chart.
+
+So the session became a measurement session. New monitor,
+ChunkArrivalMonitor, about a hundred lines: each tick, count the
+chunks inside each player view distance that are not loaded. Zero
+means the terrain was always there first. A sustained positive
+count is pop-in as the server sees it. Toggle is /ferrite arrival,
+cost is about 50 us per tick for 441 hasChunk probes at view
+distance 10, and the report prints its own scan cost so the
+observer effect stays visible.
+
+First flight was a false start twice over. The dev client boots a
+3 GB heap, which trips the small-heap default in MonitorLog, so the
+monitor ran for ninety seconds and logged nothing. My fault; the
+arrival command now warns when its reports would be muted. And at
+rocket-elytra cruise, about 34 blocks per second, the answer was a
+flat zero everywhere, vanilla included. At that speed there is
+nothing to win. Vanilla keeps up. Had I stopped there, this entry
+would be another closed-question note.
+
+Spectator mode at max scroll speed is a different world. At about
+88 blocks per second over virgin terrain, vanilla runs a standing
+hole of 43 to 159 missing chunks, peak 195, with literally every
+tick for 65 straight seconds missing part of the view area. Up to a
+third of what the player should see does not exist yet. Then the
+same flight with /ferrite chunkforce on: forty seconds of catch-up
+ramp starting 130 chunks behind, and then convergence. Zero point
+zero. Four consecutive report windows of exact zero at full speed,
+one brief blip of 13.8, TPS 20.00 the whole way, tick cost
+indistinguishable from the vanilla run.
+
+The arithmetic says the convergence is honest but tight. An
+88-block-per-second flight at view distance 10 sweeps roughly 115
+fresh chunks per second into view, and our pregen bench measured
+the vanilla generation ceiling at about 114 per second on this
+hardware. Chunkforce wins because it starts the work before the
+demand arrives; it has no headroom to spare. A dive-speed elytra or
+a bigger view distance would outrun it, and the deficit curve would
+show exactly where.
+
+What I like most about this one is what it is not. It is not a
+Rust port. It is not a kernel. It is a hundred lines of Java glue
+driving the vanilla ticket API, which means it never met the JIT
+wall, because it never raced the JIT at all. It moves work earlier
+instead of making work faster. That is the door the seed left open
+after every other one closed.
+
+Still open: whether it earns default-on. The honest costs are disk
+growth (every forced chunk persists) and worker contention with
+explicit pre-gen runs. The shape I favor is a speed gate, engage
+only above sustained fast flight, since below roughly 40 blocks per
+second the measurement says there is nothing to gain. That decision
+and a confirming run on a second seed are next-session work. One
+run per arm, one seed, singleplayer host: the numbers above carry
+those qualifiers.
+
+## The win that did not survive its own bench (2026-08-17, later that night)
+
+The entry above ends with a promotion pending and qualifiers
+attached. The qualifiers won.
+
+I promoted the speed gate to default-on, then built what the
+qualifiers demanded: an automated flight bench. One command
+teleports the pilot along a fixed heading at an exact speed,
+interleaves baseline and auto runs on fresh strips 3 km apart,
+warms each strip after the teleport so counting starts from a fully
+loaded view area, and prints the paired comparison. A headless
+gradle property runs the whole thing unattended and halts the
+server after. No hands, no mouse wheel, no faith.
+
+The bench then took the feature apart. Ten interleaved runs at 90
+blocks per second, view distance 16: vanilla alone held a mean
+deficit of 0.9 missing chunks; with auto forcing it was 8.1, worse
+in all five pairs. Ten more at view distance 10 on a fresh JVM
+boot, recreating the morning conditions as closely as I could:
+0.1 versus 0.2, both spotless. Vanilla does not drown. Not at 50,
+not at 90, not warm, not cold, not at either view distance. A
+Nether accident along the way (quickplay restores your logout
+dimension; the bench now forces the overworld) showed the same
+thing in a cheaper generator.
+
+So where did the morning drowning come from? The best explanation,
+inferred but consistent with every run: protocol contamination.
+Each drowning measurement teleported to virgin coordinates and
+began counting immediately, so the full 441-chunk initial fill
+rode along under the flight numbers. The bench warms first; the
+bench never saw vanilla lose. The dramatic convergence chunkforce
+showed in the morning was most plausibly a backlog of our own
+making being cleared, which vanilla would also have cleared had we
+stood still for ten seconds.
+
+Auto mode is back to default-off, in tree, one command away. The
+Rust cost-model planner sketched over the evening is not built;
+its gate was a reproducible benefit and there is none to plan for.
+The CHANGELOG says all of this plainly.
+
+What survives the day is worth more than the feature. Vanilla
+26.2's chunk pipeline keeps a fast player's view area full on this
+hardware, full stop, and anything we force on top of it just
+queues behind work it was already doing better. That is the JIT
+wall's quieter sibling: not "vanilla computes faster than your
+port" but "vanilla schedules better than your guess." And the
+bench that proved it cost about two hundred lines and one honest
+afternoon of being wrong in public. Every number in this entry
+came from a run nobody flew.
+
+## Victory without a victory (2026-08-17, coda)
+
+Naming it plainly for the record. Chunkforce works: 114 chunks a
+second through the vanilla pipeline, a speed gate that engages
+itself, TPS flat, backlogs cleared on demand. And none of it was
+needed, because vanilla was never behind. Every piece succeeded
+except the premise.
+
+The victory that is real: a measurement harness that flies its own
+runs, a false positive caught the same day it was born, and a
+closed question that stays closed for the price of one command.
+Losing the feature cost an afternoon. Keeping the wrong default
+would have cost every future user a little bit of interference,
+forever, invisibly. I will take this trade every time.
 
 ## The mod audits itself (2026-08-19)
 
