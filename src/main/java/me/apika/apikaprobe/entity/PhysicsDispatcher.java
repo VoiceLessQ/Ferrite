@@ -84,6 +84,18 @@ public final class PhysicsDispatcher {
 	private static int  diagMobsThisTick    = 0;
 	private static long diagLastLogNs       = System.nanoTime();
 
+	// Last rejected snapshot dimensions, written by PhysicsHandoff. Kept
+	// here so the disabled-path diag log never class-inits PhysicsHandoff.
+	private static volatile int lastRejectedSx = 0;
+	private static volatile int lastRejectedSy = 0;
+	private static volatile int lastRejectedSz = 0;
+
+	static void noteRejectedSnapshot(int sx, int sy, int sz) {
+		lastRejectedSx = sx;
+		lastRejectedSy = sy;
+		lastRejectedSz = sz;
+	}
+
 	private PhysicsDispatcher() {}
 
 	// =========================================================================
@@ -244,7 +256,7 @@ public final class PhysicsDispatcher {
 			diagBuildsOk, diagBuildsFailed,
 			diagRebuilds, diagBucketMisses,
 			diagDispatched, diagFallback,
-			PhysicsHandoff.LAST_REJECTED_SX, PhysicsHandoff.LAST_REJECTED_SY, PhysicsHandoff.LAST_REJECTED_SZ
+			lastRejectedSx, lastRejectedSy, lastRejectedSz
 		);
 		diagBuildsOk = 0;
 		diagBuildsFailed = 0;

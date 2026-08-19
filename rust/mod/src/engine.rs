@@ -6,6 +6,22 @@ use rosttasse::jni::sys::jint;
 use rosttasse::JNIEnv;
 
 static ENGINE: OnceLock<EngineConfig> = OnceLock::new();
+static POOL_INIT: std::sync::Once = std::sync::Once::new();
+
+/// Builds the sized global Rayon pool on first parallel use. Deferred out
+/// of initEngine so a session that never hits a parallel path (all Rayon
+/// consumers are default-off) spawns no worker threads. Must be called
+/// before any rayon:: use, or Rayon auto-builds an all-cores default pool.
+pub fn ensure_pool() {
+    POOL_INIT.call_once(|| {
+        let cores = available_parallelism().map(|n| n.get()).unwrap_or(1);
+        let threads = pick_thread_count(cores);
+        // If a pool was already set elsewhere this errors; first-writer-wins.
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build_global();
+    });
+}
 
 pub struct EngineConfig {
     pub thread_count: usize,
@@ -37,12 +53,6 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_initEngine<'local>(
     let cfg = ENGINE.get_or_init(|| {
         let cores = available_parallelism().map(|n| n.get()).unwrap_or(1);
         let threads = pick_thread_count(cores);
-
-        // Set the global Rayon pool size. If it was already set elsewhere this
-        // will error; we ignore that — first-writer-wins is the intended policy.
-        let _ = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .build_global();
 
         // Probe SIMD capability for the SIMD-noise port plan
         // (see docs/PIANO_STATUS.md → SIMD batch noise). Decides whether

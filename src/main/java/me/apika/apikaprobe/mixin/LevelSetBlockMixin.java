@@ -30,6 +30,10 @@ public abstract class LevelSetBlockMixin {
 	) {
 		Level self = (Level) (Object) this;
 		if (self.isClientSide()) return;
+		// Flag check here, not in onBlockChanged: skips the getBlockState
+		// below, which every server setBlock otherwise pays for a
+		// default-off feature.
+		if (!NavigationCacheBridge.WALK_CACHE_ENABLED) return;
 		BlockState oldState = self.getBlockState(pos);
 		if (oldState == newState) return;
 		NavigationCacheBridge.onBlockChanged(pos, oldState, newState);

@@ -44,8 +44,10 @@ public final class EntityTickMonitor {
 	private static final String[] CAT_NAMES = {"monster", "creature", "item", "misc"};
 
 	// Per-entity tick timer (server-thread, but ThreadLocal for safety).
-	private static final ThreadLocal<Long> TICK_START = ThreadLocal.withInitial(() -> 0L);
-	private static final ThreadLocal<Integer> TICK_CATEGORY = ThreadLocal.withInitial(() -> -1);
+	// long[] rather than boxed Long/Integer: this fires per entity per tick,
+	// and Long boxing at that rate is measurable young-gen churn.
+	// [0] = start ns (0 = no sample in flight), [1] = category.
+	private static final ThreadLocal<long[]> TICK_STATE = ThreadLocal.withInitial(() -> new long[2]);
 	private static final ThreadLocal<net.minecraft.world.entity.EntityType<?>> TICK_TYPE =
 			ThreadLocal.withInitial(() -> null);
 
@@ -82,20 +84,25 @@ public final class EntityTickMonitor {
 	}
 
 	public static void onEntityTickBegin(Entity entity) {
+		// Collect gate: when monitor logging is off, skip the nanoTime and
+		// ThreadLocal work entirely. The start sentinel keeps a mid-window
+		// toggle from producing a torn sample.
+		if (!MonitorLog.ENABLED) return;
+		long[] state = TICK_STATE.get();
 		int cat = categorize(entity);
-		TICK_CATEGORY.set(cat);
-		TICK_TYPE.set(cat == CAT_MISC ? entity.getType() : null);
-		TICK_START.set(System.nanoTime());
+		state[1] = cat;
+		if (cat == CAT_MISC) TICK_TYPE.set(entity.getType());
+		state[0] = System.nanoTime();
 	}
 
 	public static void onEntityTickEnd() {
-		long start = TICK_START.get();
+		long[] state = TICK_STATE.get();
+		long start = state[0];
 		if (start == 0L) {
 			return;
 		}
-		TICK_START.set(0L);
-		int cat = TICK_CATEGORY.get();
-		TICK_CATEGORY.set(-1);
+		state[0] = 0L;
+		int cat = (int) state[1];
 		if (cat < 0 || cat >= CAT_COUNT) {
 			return;
 		}

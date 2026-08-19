@@ -467,6 +467,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_findBiomeRegionRust<'
     // worth of independent work. par_chunks_mut on 4-byte cells gives row
     // granularity; Rayon distributes rows across worker threads.
     use rayon::prelude::*;
+    crate::engine::ensure_pool();
     out_slice
         .par_chunks_mut(side_x * 4)
         .enumerate()
@@ -526,6 +527,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_findBiomeRegion3DRust
     // per slab, ~1.5ms. With 96 slabs across N cores, Rayon has plenty to
     // chew on without per-task overhead dominating.
     use rayon::prelude::*;
+    crate::engine::ensure_pool();
     let slab_bytes = side_x * side_z * 4;
     out_slice
         .par_chunks_mut(slab_bytes)
@@ -599,6 +601,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_sampleDensityRegion3D
     };
 
     use rayon::prelude::*;
+    crate::engine::ensure_pool();
     let slab_bytes = side_x * side_z * 8;
     out_slice
         .par_chunks_mut(slab_bytes)
@@ -678,6 +681,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_sampleDensitySlicesRu
     // of perlin samples + opcodes, but with tight inner loops the
     // compiler can vectorize.
     use rayon::prelude::*;
+    crate::engine::ensure_pool();
     let slab_bytes = side_x * side_z * 8;
     let xz_count = side_x * side_z;
     out_slice
@@ -819,6 +823,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_populateNoiseBufferRu
     // ---- Step 2: per-block compose the outer tree with DI lerp ----
     let y_row_bytes = CHUNK * CHUNK * 8;
     use rayon::prelude::*;
+    crate::engine::ensure_pool();
     out_slice
         .par_chunks_mut(y_row_bytes)
         .enumerate()

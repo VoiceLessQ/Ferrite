@@ -87,6 +87,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_computeChunkTerrain<'
     let out: &mut [u16] =
         unsafe { std::slice::from_raw_parts_mut(out_ptr as *mut u16, CHUNK_X * CHUNK_Z * chunk_height) };
 
+    crate::engine::ensure_pool();
     out.par_chunks_mut(chunk_height)
         .enumerate()
         .for_each(|(col_idx, column)| {

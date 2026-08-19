@@ -22,7 +22,8 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 public final class TargetScanMonitor {
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 
-	private static final ThreadLocal<Long> SCAN_START = ThreadLocal.withInitial(() -> 0L);
+	// long[1] not boxed Long: fires per canStart scan.
+	private static final ThreadLocal<long[]> SCAN_START = ThreadLocal.withInitial(() -> new long[1]);
 
 	private static long thisTickCanStart = 0L;
 	private static long thisTickScanCount = 0L;
@@ -47,13 +48,15 @@ public final class TargetScanMonitor {
 	}
 
 	public static void onScanBegin() {
-		SCAN_START.set(System.nanoTime());
+		if (!MonitorLog.ENABLED) return;
+		SCAN_START.get()[0] = System.nanoTime();
 	}
 
 	public static void onScanEnd() {
-		long start = SCAN_START.get();
+		long[] s = SCAN_START.get();
+		long start = s[0];
 		if (start == 0L) return;
-		SCAN_START.set(0L);
+		s[0] = 0L;
 		thisTickScanCount++;
 		thisTickScanNs += System.nanoTime() - start;
 	}

@@ -72,6 +72,7 @@ public final class MovementInternalsMonitor {
 	// --- Phase hooks --------------------------------------------------------
 
 	public static void onCrammingBegin() {
+		if (!MonitorLog.ENABLED) return;
 		PHASE_START.get()[PHASE_CRAMMING] = System.nanoTime();
 	}
 
@@ -80,6 +81,7 @@ public final class MovementInternalsMonitor {
 	}
 
 	public static void onBlockCollisionBegin() {
+		if (!MonitorLog.ENABLED) return;
 		PHASE_START.get()[PHASE_BLOCK_COLLISION] = System.nanoTime();
 	}
 
@@ -88,6 +90,7 @@ public final class MovementInternalsMonitor {
 	}
 
 	public static void onNavigatorBegin() {
+		if (!MonitorLog.ENABLED) return;
 		PHASE_START.get()[PHASE_NAVIGATOR] = System.nanoTime();
 	}
 
@@ -96,6 +99,7 @@ public final class MovementInternalsMonitor {
 	}
 
 	public static void onMoveBegin() {
+		if (!MonitorLog.ENABLED) return;
 		PHASE_START.get()[PHASE_MOVE] = System.nanoTime();
 	}
 
@@ -104,6 +108,7 @@ public final class MovementInternalsMonitor {
 	}
 
 	public static void onTravelBegin() {
+		if (!MonitorLog.ENABLED) return;
 		PHASE_START.get()[PHASE_TRAVEL] = System.nanoTime();
 	}
 
@@ -112,6 +117,7 @@ public final class MovementInternalsMonitor {
 	}
 
 	public static void onGravityBegin() {
+		if (!MonitorLog.ENABLED) return;
 		PHASE_START.get()[PHASE_GRAVITY] = System.nanoTime();
 	}
 
@@ -120,6 +126,7 @@ public final class MovementInternalsMonitor {
 	}
 
 	public static void onAdjustCollisionsBegin() {
+		if (!MonitorLog.ENABLED) return;
 		PHASE_START.get()[PHASE_ADJUST_COLLISIONS] = System.nanoTime();
 	}
 
@@ -128,6 +135,7 @@ public final class MovementInternalsMonitor {
 	}
 
 	public static void onHandSwingBegin() {
+		if (!MonitorLog.ENABLED) return;
 		PHASE_START.get()[PHASE_HAND_SWING] = System.nanoTime();
 	}
 
@@ -136,6 +144,7 @@ public final class MovementInternalsMonitor {
 	}
 
 	public static void onTickNewAiBegin() {
+		if (!MonitorLog.ENABLED) return;
 		PHASE_START.get()[PHASE_TICK_NEW_AI] = System.nanoTime();
 	}
 

@@ -131,6 +131,13 @@ public class ExampleMod implements ModInitializer {
 			net.minecraft.world.level.ChunkPos pos = chunk.getPos();
 			ChunkPrewarmer.evict(pos.x(), pos.z());
 		});
+		// Parity capture mixins append per world load and would otherwise
+		// pin every RandomState / biome source graph across open/quit
+		// cycles in one JVM session.
+		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+			me.apika.apikaprobe.worldgen.WorldgenParity.clearCaptures();
+			me.apika.apikaprobe.worldgen.BiomeParity.clearCaptures();
+		});
 
 		if (!RustBridge.NATIVE_AVAILABLE) {
 			// Explicitly disable every Rust-backed dispatcher so vanilla

@@ -29,9 +29,9 @@ public final class GoalSelectorMonitor {
 	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 
-	private static final ThreadLocal<Long> TICK_START         = ThreadLocal.withInitial(() -> 0L);
-	private static final ThreadLocal<Long> TICK_GOALS_T_START = ThreadLocal.withInitial(() -> 0L);
-	private static final ThreadLocal<Long> TICK_GOALS_F_START = ThreadLocal.withInitial(() -> 0L);
+	// [0]=tick start, [1]=tickGoals(true) start, [2]=tickGoals(false) start.
+	// long[] not boxed Long: fires per mob per tick.
+	private static final ThreadLocal<long[]> STARTS = ThreadLocal.withInitial(() -> new long[3]);
 
 	private static long thisTickCallCount   = 0L;
 	private static long thisTickTotalNs     = 0L;
@@ -55,35 +55,33 @@ public final class GoalSelectorMonitor {
 	// --- Hooks ---------------------------------------------------------------
 
 	public static void onTickBegin() {
-		TICK_START.set(System.nanoTime());
+		if (!MonitorLog.ENABLED) return;
+		STARTS.get()[0] = System.nanoTime();
 	}
 
 	public static void onTickEnd() {
-		long start = TICK_START.get();
+		long[] starts = STARTS.get();
+		long start = starts[0];
 		if (start == 0L) return;
-		TICK_START.set(0L);
+		starts[0] = 0L;
 		thisTickCallCount++;
 		thisTickTotalNs += System.nanoTime() - start;
 	}
 
 	public static void onTickGoalsBegin(boolean tickAll) {
-		if (tickAll) {
-			TICK_GOALS_T_START.set(System.nanoTime());
-		} else {
-			TICK_GOALS_F_START.set(System.nanoTime());
-		}
+		if (!MonitorLog.ENABLED) return;
+		STARTS.get()[tickAll ? 1 : 2] = System.nanoTime();
 	}
 
 	public static void onTickGoalsEnd(boolean tickAll) {
+		long[] starts = STARTS.get();
+		int slot = tickAll ? 1 : 2;
+		long start = starts[slot];
+		if (start == 0L) return;
+		starts[slot] = 0L;
 		if (tickAll) {
-			long start = TICK_GOALS_T_START.get();
-			if (start == 0L) return;
-			TICK_GOALS_T_START.set(0L);
 			thisTickGoalsTrueNs += System.nanoTime() - start;
 		} else {
-			long start = TICK_GOALS_F_START.get();
-			if (start == 0L) return;
-			TICK_GOALS_F_START.set(0L);
 			thisTickGoalsFalseNs += System.nanoTime() - start;
 		}
 	}

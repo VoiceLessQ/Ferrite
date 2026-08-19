@@ -52,6 +52,13 @@ public final class BiomeParity {
 		allBiomeSources.add(biomeSource);
 	}
 
+	/** Server stopped: drop captures so the biome sources can be GC'd. */
+	public static void clearCaptures() {
+		allBiomeSources.clear();
+		lastBiomeSource.set(null);
+		climateSampler.set(null);
+	}
+
 	/** Pick the overworld source: its possibleBiomes contains plains.
 	 *  The nether source is constructed after the overworld one, so
 	 *  lastBiomeSource alone compares our overworld tree against nether

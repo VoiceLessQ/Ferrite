@@ -47,6 +47,11 @@ public final class WorldgenParity {
 		allNoiseConfigs.add(noiseConfig);
 	}
 
+	/** Server stopped: drop captures so each RandomState graph can be GC'd. */
+	public static void clearCaptures() {
+		allNoiseConfigs.clear();
+	}
+
 	/**
 	 * Walk the captured RandomState list and return the one whose root
 	 * positional-factory seeds match Rust's overworld state. Used by

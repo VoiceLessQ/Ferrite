@@ -7,7 +7,8 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 public final class LookControlMonitor {
 	private static final long REPORT_INTERVAL_NS = 5_000_000_000L;
 
-	private static final ThreadLocal<Long> TICK_START = ThreadLocal.withInitial(() -> 0L);
+	// long[1] not boxed Long: fires per mob per tick.
+	private static final ThreadLocal<long[]> TICK_START = ThreadLocal.withInitial(() -> new long[1]);
 
 	private static long thisTickCalls = 0L;
 	private static long thisTickNs    = 0L;
@@ -25,13 +26,15 @@ public final class LookControlMonitor {
 	}
 
 	public static void onTickBegin() {
-		TICK_START.set(System.nanoTime());
+		if (!MonitorLog.ENABLED) return;
+		TICK_START.get()[0] = System.nanoTime();
 	}
 
 	public static void onTickEnd() {
-		long start = TICK_START.get();
+		long[] s = TICK_START.get();
+		long start = s[0];
 		if (start == 0L) return;
-		TICK_START.set(0L);
+		s[0] = 0L;
 		thisTickCalls++;
 		thisTickNs += System.nanoTime() - start;
 	}

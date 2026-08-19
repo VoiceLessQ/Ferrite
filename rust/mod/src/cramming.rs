@@ -24,15 +24,84 @@
 use std::cell::RefCell;
 use fxhash::FxHashMap;
 
-// Reusable spatial-hash storage. compute_cramming is called once per server
-// tick from a single thread; thread_local + clear() keeps the HashMap and its
-// per-cell Vecs allocated across ticks instead of recreating ~hundreds of
-// allocations per call. Keys are pre-mixed u64s (see cell_hash) so FxHash
-// just hashes a primitive, and the mix function is project-specific so
-// blind binary reuse across mods would need to reverse-engineer it.
+// Reusable spatial-hash storage in CSR form. compute_cramming is called once
+// per server tick from a single thread; thread_local + clear() keeps every
+// backing allocation alive across ticks. The old HashMap<u64, Vec<u32>> shape
+// re-allocated each occupied cell's Vec every call (HashMap::clear drops the
+// values); CSR keeps flat Vecs whose capacity survives clear(). Keys are
+// pre-mixed u64s (see cell_hash) so FxHash just hashes a primitive, and the
+// mix function is project-specific so blind binary reuse across mods would
+// need to reverse-engineer it.
+struct CellCsr {
+    // cell key -> dense slot id
+    slots: FxHashMap<u64, u32>,
+    // per-entity slot id, index-aligned with inputs
+    cell_of: Vec<u32>,
+    // per-slot entry count, then reused as the fill cursor
+    counts: Vec<u32>,
+    // per-slot start offset into entries (len = slot count + 1)
+    starts: Vec<u32>,
+    // entity indices grouped by slot
+    entries: Vec<u32>,
+}
+
+impl CellCsr {
+    fn build(&mut self, inputs: &[CrammingInput], cell_size: f64) {
+        self.slots.clear();
+        self.cell_of.clear();
+        self.counts.clear();
+        self.starts.clear();
+        self.entries.clear();
+        for input in inputs {
+            let (cx, cz) = cell_coords(input.x, input.z, cell_size);
+            let key = cell_hash(cx, cz);
+            let next = self.counts.len() as u32;
+            let slot = *self.slots.entry(key).or_insert(next);
+            if slot == next {
+                self.counts.push(0);
+            }
+            self.counts[slot as usize] += 1;
+            self.cell_of.push(slot);
+        }
+        let mut acc = 0u32;
+        self.starts.push(0);
+        for c in &self.counts {
+            acc += c;
+            self.starts.push(acc);
+        }
+        self.entries.resize(inputs.len(), 0);
+        // counts becomes the per-slot fill cursor
+        for c in self.counts.iter_mut() {
+            *c = 0;
+        }
+        for (i, &slot) in self.cell_of.iter().enumerate() {
+            let at = self.starts[slot as usize] + self.counts[slot as usize];
+            self.entries[at as usize] = i as u32;
+            self.counts[slot as usize] += 1;
+        }
+    }
+
+    #[inline]
+    fn cell_entries(&self, key: u64) -> &[u32] {
+        match self.slots.get(&key) {
+            Some(&slot) => {
+                let s = self.starts[slot as usize] as usize;
+                let e = self.starts[slot as usize + 1] as usize;
+                &self.entries[s..e]
+            }
+            None => &[],
+        }
+    }
+}
+
 thread_local! {
-    static CELL_HASH: RefCell<FxHashMap<u64, Vec<u32>>> =
-        RefCell::new(FxHashMap::default());
+    static CELL_HASH: RefCell<CellCsr> = RefCell::new(CellCsr {
+        slots: FxHashMap::default(),
+        cell_of: Vec::new(),
+        counts: Vec::new(),
+        starts: Vec::new(),
+        entries: Vec::new(),
+    });
 }
 
 // Below this entity count, the spatial hash overhead (build + lookup) costs
@@ -186,16 +255,7 @@ pub fn compute_cramming(inputs: &[CrammingInput], results: &mut [CrammingResult]
 
     CELL_HASH.with(|cell_ref| {
         let mut cells = cell_ref.borrow_mut();
-        // Mobs move every tick, so we can't reuse keyed buckets — but the
-        // map's bucket array and hasher state survive across calls, which is
-        // where the alloc churn lived.
-        cells.clear();
-
-        for (i, input) in inputs.iter().enumerate() {
-            let (cx, cz) = cell_coords(input.x, input.z, cell_size);
-            let key = cell_hash(cx, cz);
-            cells.entry(key).or_insert_with(|| Vec::with_capacity(8)).push(i as u32);
-        }
+        cells.build(inputs, cell_size);
 
         for i in 0..n {
             let a = inputs[i];
@@ -207,11 +267,7 @@ pub fn compute_cramming(inputs: &[CrammingInput], results: &mut [CrammingResult]
             for dcx in -1..=1i32 {
                 for dcz in -1..=1i32 {
                     let neighbor_key = cell_hash(cx + dcx, cz + dcz);
-                    let indices = match cells.get(&neighbor_key) {
-                        Some(v) => v,
-                        None => continue,
-                    };
-                    for &j_u32 in indices {
+                    for &j_u32 in cells.cell_entries(neighbor_key) {
                         let j = j_u32 as usize;
                         if j <= i {
                             continue;

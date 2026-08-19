@@ -115,6 +115,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_computeEntityPhysics<
     // --- Dispatch ----------------------------------------------------------
 
     if count >= RAYON_THRESHOLD {
+        crate::engine::ensure_pool();
         results
             .par_iter_mut()
             .zip(requests.par_iter())

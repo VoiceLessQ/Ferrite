@@ -73,10 +73,9 @@ public final class PhysicsHandoff {
 	public static final int MAX_PALETTE_ENTRIES = 1024;
 	public static final int MAX_AABBS_IN_PALETTE = 4096;
 
-	/** Last rejected dimensions, for diagnostics. */
-	public static volatile int LAST_REJECTED_SX = 0;
-	public static volatile int LAST_REJECTED_SY = 0;
-	public static volatile int LAST_REJECTED_SZ = 0;
+	// Reject diagnostics live on PhysicsDispatcher so reading them for the
+	// disabled-path diag log does not class-init this class's ~4.4 MB of
+	// direct buffers.
 
 	// --- Strides (must match Rust) -----------------------------------------
 
@@ -185,16 +184,12 @@ public final class PhysicsHandoff {
 		// knockback) — that mob falls back to vanilla rather than growing
 		// the snapshot unbounded.
 		if (sx > 24 || sz > 24 || sy > 384) {
-			LAST_REJECTED_SX = sx;
-			LAST_REJECTED_SY = sy;
-			LAST_REJECTED_SZ = sz;
+			PhysicsDispatcher.noteRejectedSnapshot(sx, sy, sz);
 			return false;
 		}
 
 		if ((long) sx * sy * sz > MAX_SNAPSHOT_CELLS) {
-			LAST_REJECTED_SX = sx;
-			LAST_REJECTED_SY = sy;
-			LAST_REJECTED_SZ = sz;
+			PhysicsDispatcher.noteRejectedSnapshot(sx, sy, sz);
 			return false;
 		}
 

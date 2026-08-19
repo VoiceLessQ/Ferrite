@@ -259,6 +259,7 @@ pub extern "system" fn Java_me_apika_apikaprobe_RustBridge_evaluateSurfaceRuleBa
 
     // Per-column eval, parallelised across columns. Each closure reads
     // its column's slice from each parallel array; no allocations inside.
+    crate::engine::ensure_pool();
     results.par_iter_mut().enumerate().for_each(|(col, out)| {
         let bits_start = col * bsc;
         let noise_start = col * ncc;

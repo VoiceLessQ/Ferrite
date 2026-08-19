@@ -82,6 +82,7 @@ public final class EntityQueryMonitor {
 	}
 
 	public static void onQueryBegin() {
+		if (!MonitorLog.ENABLED) return;
 		if (Thread.currentThread() != serverThread) return;
 		if (depth++ == 0) {
 			if (movedSinceQuery) {
