@@ -1713,3 +1713,55 @@ hard-collidable, a single ambient strider in a lava ocean disarms
 the whole-level skip, and the per-section count stops being an
 upgrade path and becomes the design.
 
+
+## The mod audits itself (2026-08-19)
+
+The HDD moved to a Linux machine in August, and the first session on
+it turned into something we had never done: pointing the measurement
+discipline at Ferrite instead of at vanilla. Every prior arc asked
+what vanilla wastes. Nobody had asked what we waste.
+
+The answer was embarrassing in the specific way that ends well. The
+monitors, the very tools that earned every win in this journal, were
+the biggest CPU item the mod adds to an ordinary session. MonitorLog's
+off switch silenced the log lines and nothing else; every entity tick
+still paid two nanoTime calls, five ThreadLocal operations, and a
+boxed Long, on the order of 100k allocations per second at horde
+scale, all measured and thrown away. The physics handoff was worse in
+RAM: its disabled path read three volatile ints for a diagnostic
+line, and that read class-initialized ~4.4 MB of direct buffers
+within seconds of the first tick. Physics has been default-off since
+April. Every player paid for it anyway.
+
+The fix list ran two commits (`18f3573`, `5fc6e7a`): collection now
+gates with the reports, the reject diagnostics moved so the buffer
+class never loads, the Rayon pool defers to first parallel use
+instead of spawning six threads at the title screen, cramming's
+spatial hash went CSR so it stops re-allocating a Vec per occupied
+cell per tick, and two leaks closed (parity captures pinning every
+opened world's RandomState until quit; the nav cache growing 16 KB
+per section with an evict function that no JNI export ever called).
+Re-measured after: the two trap classes do not load at all, zero
+Rayon threads of 78, direct buffers 144 down to 100. The honest
+number cuts the other way too: /tick query read 34.7 ms with
+monitors on and 34.7 ms off at a 1,000-mob pile on the 24-core box.
+The gating buys GC pressure and slow-CPU time, not desktop mspt, and
+the changelog says exactly that.
+
+Same evening, the closed threads got a fresh interrogation: extract
+each kill mechanism, ask what changed since. Mostly nothing changed.
+FFM does not rescue bulk-density (fill drops to ~30 ms against a
++25-50 ms deficit). But one cheap probe was sitting there unasked:
+what does the physics reopener have left to win once the collider
+skip exists? One session at the 1,022-mob pile answered it. With
+grid and skip on, adjustColl fell from 19.2 to 4.2 ms/tick, monster
+tick from 33 to 16.5, and the old dispatcher's +15 ms plateau has no
+business against a 4.2 ms residual. Physics is not just closed now;
+it is closed twice, from both sides of the boundary.
+
+One thread opened as two others shut. Both arms of the pile session
+show a single 111-370 ms tick once per window, flags on or off,
+client fps smooth throughout. G1 young pauses measure 3 ms, old gen
+sits at 91%. Next session runs the pile on ZGC with the oracle off;
+if the spikes survive that, they are tick content, and a JFR gets
+the last word.
