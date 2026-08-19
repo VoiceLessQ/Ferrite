@@ -653,3 +653,85 @@ The discipline here matters because the prior bulk-path attempts each
 shipped with parity confirmed but perf regressed — and the toggle
 existing default-off is fine, but flipping to default-on without live
 measurement is the failure mode this doc exists to prevent.
+
+## Self-footprint pass (2026-08-19): what Ferrite itself costs, and how to check
+
+Every earlier section measures vanilla subsystems. This one measures
+the mod. The audit and fixes landed as commits `18f3573` and `5fc6e7a`
+on 26.2.x; conditions for all numbers: Linux, JDK 25, 26.2.x dev
+build, default config unless stated. Each claim comes with the command
+that produced it, so anyone can re-check on their own machine.
+
+### RAM
+
+Off-heap buffers for disabled features: gone. The physics handoff
+class holds ~4.4 MB of direct ByteBuffers sized for a 2048-entity
+dispatch. It used to class-load within seconds of the first world tick
+even with physics off. Now it loads only when physics actually
+dispatches. Check on a live default session:
+
+    jcmd <pid> VM.class_hierarchy me.apika.apikaprobe.entity.PhysicsHandoff
+
+Empty output means the class, and its buffers, do not exist in your
+JVM. Same check works for `navigation.NavigationCacheBridge` (~82 KB).
+
+Native worker threads: 6 to 0. The Rayon pool used to spawn at the
+title screen for features that are all opt-in. Count them yourself:
+
+    jstack <pid> | grep -c rayon
+
+Zero on a default session. The boot log still prints
+`Rayon pool size = 6`; that line reports the size the pool will use if
+a parallel path ever runs, not threads that exist.
+
+Direct buffer population, whole JVM including vanilla: 100 instances
+after the pass against 144 recorded on 2026-07-29 with the same
+method. Mostly the physics buffers plus per-chunk churn that two JNI
+call sites no longer produce:
+
+    jcmd <pid> GC.class_histogram | grep DirectByteBuffer
+
+Leaks with no cap: two closed. Worldgen parity captures used to pin
+every opened world's RandomState graph until the game quit (several MB
+per world open/quit cycle); they clear on server stop now. The opt-in
+nav cache (`-Dferrite.nav.cache=true`) used to grow ~16 KB per cached
+section with no eviction ever reaching the native side; it now frees
+on chunk unload and drops everything on server stop.
+
+Live mod heap stayed tiny throughout: 194 objects, 3,320 bytes
+(jcmd GC.run then GC.class_histogram, grep me.apika). It was 3,384
+bytes before the pass. The wins were never on the Java heap.
+
+### CPU
+
+Monitor collection now gates with monitor reports. Before, every
+entity tick paid two nanoTime calls, five ThreadLocal operations, and
+one boxed Long even when nothing would ever be printed; at horde scale
+that is on the order of 100k allocations per second feeding the GC.
+After, `/ferrite log monitors off` stops the collection itself.
+
+Measured honestly: at a ~1,000-mob pile on a 24-core desktop,
+`/tick query` reads 34.7 ms with monitors on and 34.7 ms with them
+off. The saving is below that command's 0.1 ms resolution on this
+hardware. The claim is therefore not "your mspt drops"; it is that a
+default small-heap boot (reports off) no longer pays an invisible
+per-mob tax, which is GC pressure on any machine and real time on
+slow ones. Re-run the A/B anywhere with:
+
+    /tick query
+    /ferrite log monitors off      (wait 30 s)
+    /tick query
+
+Cramming batch allocation: zero steady-state. The spatial hash
+re-allocated one Vec per occupied cell per tick (roughly 100 per tick
+at pile density). It now reuses flat arrays whose capacity survives
+across ticks, with pair-processing order preserved bit-for-bit, so
+the existing 50/50 parity suite still passes. Watched live at
+~89,000-119,000 crammed mob-entries per 5 s window, `damaged=0`
+anomalies, monster tick steady at 32-35 ms.
+
+One extra `getBlockState` per server-side `setBlock` is gone (it fed
+the shelved nav cache before the enable check ran). Physics and the
+aquifer/flat-cache JNI sites also stopped allocating per call, but
+those paths are default-off, so their numbers only matter if the
+flags come on.
