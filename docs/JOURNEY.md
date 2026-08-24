@@ -2288,3 +2288,81 @@ Distribution barely factors into it. The jars live on GitHub
 releases either way, so whether a build also lands on Modrinth is
 a visibility decision, not a readiness one. Beta is earned in the
 log lines, not in the storefront.
+
+## The wrong axis (2026-08-23)
+
+Four days since the stock-taking and the empty candidate list would
+not sit still. Empty was supposed to feel like an ending. It kept
+feeling like a question i had asked badly.
+
+So i went back over the inventory, which i know cold by now. Noise
+stack ported and bit-exact. Climate tree at 1000/1000. The density
+interpreter at 50/50 on 26.2. A prewarm cache that fills off the
+chunkgen thread, a pre-gen driver that walks its own annulus and
+holds TPS 20.00 while it does it. Nothing missing on the shelf.
+Everything on it measured, and most of it measured into a
+default-off flag.
+
+That is the part that kept nagging. You do not end up with a shelf
+full of correct, fast, switched-off code by accident. Six ports died
+against the same wall and i wrote that wall down as HotSpot: vanilla's
+JIT gets there first, steady-state per-call costs land in the low
+nanoseconds, the port is dead on arrival. It was true every time i
+checked. I stopped checking whether it was the whole answer.
+
+This week i stopped listing what i have and went to read what vanilla
+does with it. 26.2, the chunk pipeline, top to bottom.
+
+`ChunkMap` builds the worldgen dispatcher as a `ConsecutiveExecutor`,
+so one thread runs it at a time, draining behind a single CAS. Then in
+`ChunkStatusTasks`, eight of the thirteen stages return
+`CompletableFuture.completedFuture(chunk)`, which means they ran
+inline on that one thread. Five do not. `generateBiomes` and
+`generateNoise` hand off to the background pool by way of the
+generator's `createBiomes` and `fillFromNoise`. `initializeLight` and
+`light` return light-engine futures, which drain on a second
+`ConsecutiveExecutor` that is also one thread wide. `full` goes
+through `supplyAsync`. Everything else, structure starts, structure
+references, surface, carvers, features, spawn, walks one thread deep
+while the pool waits on it.
+
+I have had the confirming number since July 12 and read it as
+something else entirely. Pregen inflight at 50 gave 90-96 chunks/s on
+26.1.2, whose dispatcher is built the same way. At 200 it gave
+114-118. At 400, nothing at all. I logged that as
+"200 is the right cap" and moved on, which is the reading you reach
+for when you already believe the bottleneck is arithmetic. Doubling
+the work in flight from 200 to 400 bought nothing, because the thing
+running out was never the queue.
+
+Then the ranking came apart too. JFR counts samples per thread.
+Biomes and noise fan out across the whole pool and pile up samples
+fast, while the stages pinned to one thread accumulate one sample per
+unit of wall clock. So the percentages i have been sorting candidates
+by were never comparable to each other, and the order they produced
+may be backwards where it matters most.
+
+Which means the list was not empty. I had been sorting along an axis
+that flattens the one thing standing in the way.
+
+The uncomfortable part is what kind of problem this turns out to be.
+Every previous no was cheap, because every previous no was a
+measurement telling me the math was already fast enough. This one does
+not have that shape. The math being fast is the whole point, and what
+is in the way is arrangement. Arrangement is where this project has
+drawn its hardest line: Ferrite plays inside vanilla's orchestra
+rather than rearranging it.
+
+So the blocker got bigger this week instead of smaller, which is not
+how the last few months have gone. The honest reading is that the next
+real step may be larger than anything attempted here so far, and it
+may be larger than the constraint allows. That would still be an
+answer. It would just be a different kind of no than the ones already
+on record.
+
+The prewarm cache turned out to need an audit of its own before it can
+answer any of this, which i did not expect to be on the list this
+week. The profile that would settle the rest takes an evening. I have
+not run it. Some of that is scheduling. Most of it is that i think i
+already know what it says, and i would rather not find out the answer
+is a rewrite.
