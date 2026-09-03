@@ -2453,20 +2453,24 @@ rule between steps: a chunk's surface needs the ring around it
 through noise, its features need the ring through surface, and so on
 outward. That ordering is vanilla's and Ferrite leaves it alone.
 
-One experiment is still inside the line, and a small one. The pregen
-driver currently asks for chunks in an expanding annulus. A
-front-sweeping order that keeps the next chunk's neighbours warm
-might give the workers more they can start on at once. It would help
-pregen only, since a player exploring gets vanilla's request order.
-If the rate moves, the order stays. If it does not, the chunkgen
-lane closes.
+One experiment is still inside the line, and a small one.
+`PregenDriver` asks for chunks through `ConcentricChunkIterator`, an
+expanding annulus, 200 in flight, radius 30 for the 3721-chunk runs.
+A row scan or an anti-diagonal front that keeps the next chunk's
+neighbours warm might give the three workers more they can start on
+at once. It would help `/ferrite pregen` only, since a player
+exploring gets vanilla's request order. If the rate moves off 30.8,
+the order stays. If it does not, the chunkgen lane closes.
 
 ## Closing the chunkgen lane (2026-09-03, night)
 
-The order experiment ran unattended: six pregens on fresh worlds,
-three asking for chunks row by row and three along anti-diagonals so
-each new chunk already had a warm neighbour on two sides. Same 3721
-chunks and the same craftymc setup as every run today.
+The order experiment (`/ferrite pregen order scan|diag`, commit
+`fd66bfa`) ran unattended: six pregens on fresh worlds named
+ab_scan1 through ab_diag3, three asking for chunks row by row and
+three along anti-diagonals so each new chunk already had a warm
+neighbour on two sides. Same 3721 chunks at radius 30 around chunk
+(400, 400), 200 in flight, 4G heap, prewarm off, the same craftymc
+setup as every run today.
 
 Row scan measured 34.5, 31.5 and 30.0 chunks a second. Diagonal
 measured 33.2, 30.3 and 30.3. The ring walk had done 30.8 to 34
@@ -2477,22 +2481,29 @@ default, as measured-dead code does in this project, and i do not
 expect to turn it on.
 
 So the lane is closed. On this hardware the worldgen workers spend
-about a third of their time waiting on neighbours. Neither the disk,
-nor the request order, nor any stage i could have ported changes
-that fraction, because each of them was measured today and none of
-them moved it. Generating dependent chunks side by side would change
+about a third of their time waiting on neighbours: 49 ms of CPU per
+chunk across three workers, 14 ms of it in the serial stages, which
+is 47 percent of one worker, and the process never above 2.4 of 4
+cores. Neither the disk (run 4, tmpfs), nor the request order (runs
+5 to 10), nor any stage i could have ported changes that fraction,
+because each of them was measured today and none of them moved it. Generating dependent chunks side by side would change
 it, and that is the trade Ferrite decided against at the start,
 since features write into neighbouring chunks and parallel
 generation changes what comes out. The invariant was tested against
 a real number for the first time and it held.
 
 I expected to feel worse about this. Mostly i am relieved to have an
-answer where there used to be a question i kept postponing. The
-candidate list is empty, the chunkgen lane is closed, and the
-alpha-exit checklist is the only lane still open.
+answer where there used to be a question i kept postponing, from the
+stock-taking on 2026-08-19 through the wrong-axis entry on
+2026-08-23 to today. The candidate list is empty, the chunkgen lane
+is closed, and the alpha-exit checklist is the only lane still open:
+the cramming CSR A/B at horde load, the 1999/2000 biome miss, the
+IntervalSelect and MulOrAdd gaps in DeepMarkerWalker, and one
+default-on field soak with no oracle mismatch.
 
-For anyone reading this later with a fresh idea: short of writing a
-scheduler that generates dependent chunks in parallel, there is
-nothing left to do for chunkgen speed on this hardware, and that
-scheduler would be a different mod with a promise Ferrite does not
-make.
+For anyone reading this later with a fresh idea: on a 4-core
+i5-8300H LXC with a 3-thread worker pool, ten runs between 30.0 and
+34.5 chunks a second, short of writing a scheduler that generates
+dependent chunks in parallel there is nothing left to do for chunkgen
+speed, and that scheduler would be a different mod with a promise
+Ferrite does not make.
