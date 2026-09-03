@@ -2461,33 +2461,34 @@ entry that closes it will be short.
 
 ## Closing the chunkgen lane (2026-09-03, night)
 
-The last experiment ran while i was doing other things, six pregens
-on fresh worlds with nobody watching. Three asked for chunks row by
-row, three along anti-diagonals so each new chunk had a warm
-neighbour on two sides. Same 3721 chunks, same craftymc, same flags.
+The last experiment ran on its own while i did other things: six
+pregens on fresh worlds, nobody watching. Three asked for chunks row
+by row. Three went along anti-diagonals, so each new chunk already
+had a warm neighbour on two sides. Same 3721 chunks as before, same
+craftymc, same flags.
 
-Row scan: 34.5, 31.5, 30.0 chunks a second. Diagonal: 33.2, 30.3,
-30.3. The ring walk, four runs earlier today: 30.8 to 34. Every
-number in one band, and the workers at 63 to 66 percent busy no
-matter which way the chunks were asked for. The order flag stays in
-the tree, default ring, because measured-dead code stays in this
-project, but it is not going to be turned on.
+Row scan came out at 34.5, 31.5 and 30.0 chunks a second. Diagonal
+at 33.2, 30.3 and 30.3. The ring walk had done 30.8 to 34 across
+four runs earlier in the day. All ten sit in one band, and the
+workers were 63 to 66 percent busy whichever way the chunks were
+asked for. The order flag stays in the tree on the ring default,
+since measured-dead code stays in this project, but nothing will
+turn it on.
 
-So that is the lane. On this hardware the worldgen workers spend a
-third of their time waiting on neighbours, and neither the disk nor
-the request order nor any stage i could port changes that. What
-would change it is running dependent chunks side by side, and that
-is the trade Ferrite declined on the first page. The invariant held
-against a real number, which is the only kind of holding that
-counts.
+That is the whole lane, then. On this hardware the worldgen workers
+spend about a third of their time waiting on neighbours, and neither
+the disk, nor the request order, nor any stage i could have ported
+changes that fraction. Generating dependent chunks side by side
+would change it, and that is the trade Ferrite turned down on page
+one. The invariant met a real number today and held.
 
-I expected to feel worse about it. Mostly what i feel is that the
-question is finally answered instead of avoided. The candidate list
-is empty, the chunkgen lane is closed, and the alpha-exit checklist
-is the only lane left open. Back to trust.
+I expected to feel worse. What i mostly feel is that the question
+has an answer now instead of a place i kept walking around. The
+candidate list is empty, the chunkgen lane is closed, and the
+alpha-exit checklist is the only lane still open.
 
-For the record, so nobody reopens this from intuition: short of
-writing a new scheduler that generates dependent chunks side by side,
-there is nothing left to do for chunkgen speed on this hardware. Not
-a port, not a cache, not an order. That scheduler would be a
-different mod with a different promise, and it is not on the list.
+One more line, so nobody reopens this from a hunch. Short of writing
+a scheduler that generates dependent chunks in parallel, there is
+nothing left to do for chunkgen speed on this hardware, and that
+scheduler would be a different mod making a promise Ferrite does not
+make.
