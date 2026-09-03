@@ -63,6 +63,7 @@
 		"CacheRouteCaptureMixin",
 		"BulkChunkDensityMixin",
 		"FerriteDispatcherProbeMixin",
+		"ChunkStageTimingMixin",
 		"AbstractConsecutiveExecutorDurationMixin",
 		"AquiferRouteMixin"
 	],

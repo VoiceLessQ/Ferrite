@@ -39,6 +39,7 @@ import me.apika.apikaprobe.surface.ColumnContext;
 import me.apika.apikaprobe.surface.SurfaceRuleEvaluator;
 import me.apika.apikaprobe.surface.SurfaceValidator;
 import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
+import me.apika.apikaprobe.monitor.ChunkStageTiming;
 
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.CommandSourceStack;
@@ -256,7 +257,12 @@ public final class FerriteCommand {
 								.then(Commands.literal("on").executes(FerriteCommand::dispatcherProbeOn))
 								.then(Commands.literal("off").executes(FerriteCommand::dispatcherProbeOff))
 								.then(Commands.literal("status").executes(FerriteCommand::dispatcherProbeStatus))
-								.then(Commands.literal("reset").executes(FerriteCommand::dispatcherProbeReset))))
+								.then(Commands.literal("reset").executes(FerriteCommand::dispatcherProbeReset)))
+						.then(Commands.literal("stages")
+								.then(Commands.literal("on").executes(FerriteCommand::stageProbeOn))
+								.then(Commands.literal("off").executes(FerriteCommand::stageProbeOff))
+								.then(Commands.literal("report").executes(FerriteCommand::stageProbeReport))
+								.then(Commands.literal("reset").executes(FerriteCommand::stageProbeReset))))
 				.then(Commands.literal("log")
 						.then(Commands.literal("monitors")
 								.then(Commands.literal("on").executes(FerriteCommand::logMonitorsOn))
@@ -1712,6 +1718,42 @@ public final class FerriteCommand {
 			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = FerriteDispatcherProbe.diagSummary();
 		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int stageProbeOn(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		ChunkStageTiming.ENABLED = true;
+		ChunkStageTiming.reset();
+		String msg = "[ferrite/stage-probe] enabled (samples reset; report with /ferrite probe stages report)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int stageProbeOff(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		ChunkStageTiming.ENABLED = false;
+		String msg = "[ferrite/stage-probe] disabled";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int stageProbeReport(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		String msg = ChunkStageTiming.report();
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int stageProbeReset(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		ChunkStageTiming.reset();
+		String msg = "[ferrite/stage-probe] reset";
+		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
 	}

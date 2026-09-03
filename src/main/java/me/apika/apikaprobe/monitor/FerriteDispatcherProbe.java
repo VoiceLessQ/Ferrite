@@ -126,7 +126,7 @@ public final class FerriteDispatcherProbe {
 	}
 
 	/** Power-of-two log buckets covering 1ns..~9.2e18ns. Lock-free. */
-	private static final class Stats {
+	static final class Stats {
 		static final int BUCKETS = 64;
 		final AtomicLong count = new AtomicLong();
 		final AtomicLong sumNanos = new AtomicLong();
