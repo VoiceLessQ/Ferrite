@@ -2486,8 +2486,9 @@ chunk across three workers, 14 ms of it in the serial stages, which
 is 47 percent of one worker, and the process never above 2.4 of 4
 cores. Neither the disk (run 4, tmpfs), nor the request order (runs
 5 to 10), nor any stage i could have ported changes that fraction,
-because each of them was measured today and none of them moved it. Generating dependent chunks side by side would change
-it, and that is the trade Ferrite decided against at the start,
+because each of them was measured today and none of them moved it.
+Generating dependent chunks side by side would change it, and that
+is the trade Ferrite decided against at the start,
 since features write into neighbouring chunks and parallel
 generation changes what comes out. The invariant was tested against
 a real number for the first time and it held.
