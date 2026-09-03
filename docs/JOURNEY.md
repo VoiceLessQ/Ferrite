@@ -2439,3 +2439,22 @@ player flying gets vanilla's request order, not mine.
 
 The candidate list stays empty. The chunkgen lane has one experiment
 left and then a decision, and it is probably the other kind of no.
+
+## The tmpfs run (2026-09-03, later)
+
+Ran it. Same 3721 chunks, same craftymc, world folder pointed at the
+container's tmpfs so no region file ever touched the disk. 3721
+chunks in 121 seconds, 30.8 a second, which is the disk number to
+the decimal. Workers at 60 percent each, process on 2.4 of 4 cores.
+
+So it was never the disk. The workers wait on each other, on the
+neighbour rule that says surface needs the ring through noise and
+features need the ring through surface. That is the arrangement, and
+the arrangement stays vanilla's.
+
+One in-bounds experiment is left, and it is a small one: the pregen
+driver asks for chunks in an annulus, and a front-sweeping order that
+keeps the next chunk's neighbours warm might hand the workers more
+they can start. It would help pregen and nothing else. If it moves
+the rate, it lands. If it does not, the chunkgen lane closes, and the
+entry that closes it will be short.
