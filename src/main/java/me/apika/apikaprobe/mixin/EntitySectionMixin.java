@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.AbortableIterationConsumer;
+import net.minecraft.util.Continuation;
 import net.minecraft.util.ClassInstanceMultiMap;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.entity.EntityAccess;
@@ -121,10 +122,10 @@ public abstract class EntitySectionMixin implements SectionExtents {
 		return ((ClassInstanceMultiMapAccessor<EntityAccess>) (Object) storage).ferrite$allInstances();
 	}
 
-	@Inject(method = "getEntities(Lnet/minecraft/world/phys/AABB;Lnet/minecraft/util/AbortableIterationConsumer;)Lnet/minecraft/util/AbortableIterationConsumer$Continuation;",
+	@Inject(method = "getEntities(Lnet/minecraft/world/phys/AABB;Lnet/minecraft/util/AbortableIterationConsumer;)Lnet/minecraft/util/Continuation;",
 			at = @At("HEAD"), cancellable = true)
 	private void ferrite$filteredPlain(AABB bb, AbortableIterationConsumer<EntityAccess> consumer,
-			CallbackInfoReturnable<AbortableIterationConsumer.Continuation> cir) {
+			CallbackInfoReturnable<Continuation> cir) {
 		if (!EntityCellIndex.ENABLED) return;
 		java.util.List<EntityAccess> list = ferrite$list();
 		if (ferrite$grid == null && list.size() >= GRID_MIN) {
@@ -160,7 +161,7 @@ public abstract class EntitySectionMixin implements SectionExtents {
 	/** Grid-backed plain query: visit only candidate indices, vanilla order. */
 	@SuppressWarnings({"unchecked", "rawtypes"})
 	@Unique
-	private AbortableIterationConsumer.Continuation ferrite$gridRun(java.util.List<EntityAccess> list,
+	private Continuation ferrite$gridRun(java.util.List<EntityAccess> list,
 			AABB bb, AbortableIterationConsumer consumer) {
 		boolean oracle = EntityCellIndex.ORACLE_RATE > 0
 				&& ++EntityCellIndex.queryCounter % EntityCellIndex.ORACLE_RATE == 0;
@@ -197,10 +198,10 @@ public abstract class EntitySectionMixin implements SectionExtents {
 			for (EntityAccess e : expected) {
 				EntityCellIndex.delivered++;
 				if (consumer.accept(e).shouldAbort()) {
-					return AbortableIterationConsumer.Continuation.ABORT;
+					return Continuation.ABORT;
 				}
 			}
-			return AbortableIterationConsumer.Continuation.CONTINUE;
+			return Continuation.CONTINUE;
 		}
 
 		boolean completed = ferrite$grid.query(minX, minY, minZ, maxX, maxY, maxZ, idx -> {
@@ -213,20 +214,20 @@ public abstract class EntitySectionMixin implements SectionExtents {
 			return true;
 		});
 		return completed
-				? AbortableIterationConsumer.Continuation.CONTINUE
-				: AbortableIterationConsumer.Continuation.ABORT;
+				? Continuation.CONTINUE
+				: Continuation.ABORT;
 	}
 
 	@SuppressWarnings({"unchecked", "rawtypes"})
-	@Inject(method = "getEntities(Lnet/minecraft/world/level/entity/EntityTypeTest;Lnet/minecraft/world/phys/AABB;Lnet/minecraft/util/AbortableIterationConsumer;)Lnet/minecraft/util/AbortableIterationConsumer$Continuation;",
+	@Inject(method = "getEntities(Lnet/minecraft/world/level/entity/EntityTypeTest;Lnet/minecraft/world/phys/AABB;Lnet/minecraft/util/AbortableIterationConsumer;)Lnet/minecraft/util/Continuation;",
 			at = @At("HEAD"), cancellable = true)
 	private void ferrite$filteredTyped(EntityTypeTest type, AABB bb, AbortableIterationConsumer consumer,
-			CallbackInfoReturnable<AbortableIterationConsumer.Continuation> cir) {
+			CallbackInfoReturnable<Continuation> cir) {
 		if (!EntityCellIndex.ENABLED) return;
 		Collection<? extends EntityAccess> found = storage.find(type.getBaseClass());
 		EntityCellIndex.typedQueries++;
 		if (found.isEmpty()) {
-			cir.setReturnValue(AbortableIterationConsumer.Continuation.CONTINUE);
+			cir.setReturnValue(Continuation.CONTINUE);
 			return;
 		}
 		EntityCellIndex.typedScanned += found.size();
@@ -241,7 +242,7 @@ public abstract class EntitySectionMixin implements SectionExtents {
 	 */
 	@SuppressWarnings({"unchecked", "rawtypes"})
 	@Unique
-	private AbortableIterationConsumer.Continuation ferrite$run(Collection<? extends EntityAccess> list,
+	private Continuation ferrite$run(Collection<? extends EntityAccess> list,
 			EntityTypeTest type, AABB bb, AbortableIterationConsumer consumer) {
 		boolean oracle = EntityCellIndex.ORACLE_RATE > 0
 				&& ++EntityCellIndex.queryCounter % EntityCellIndex.ORACLE_RATE == 0;
@@ -285,16 +286,16 @@ public abstract class EntitySectionMixin implements SectionExtents {
 				if (entity.getBoundingBox().intersects(bb)) {
 					EntityCellIndex.delivered++;
 					if (consumer.accept(cast).shouldAbort()) {
-						return AbortableIterationConsumer.Continuation.ABORT;
+						return Continuation.ABORT;
 					}
 				}
 			} else if (entity.getBoundingBox().intersects(bb)) {
 				EntityCellIndex.delivered++;
 				if (consumer.accept(entity).shouldAbort()) {
-					return AbortableIterationConsumer.Continuation.ABORT;
+					return Continuation.ABORT;
 				}
 			}
 		}
-		return AbortableIterationConsumer.Continuation.CONTINUE;
+		return Continuation.CONTINUE;
 	}
 }

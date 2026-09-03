@@ -12,7 +12,7 @@ import java.util.WeakHashMap;
 
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.world.level.block.RedstoneWireBlock;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator;
@@ -23,7 +23,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Extends {@link DefaultRedstoneWireEvaluator} so that the
- * {@link RedStoneWireBlock#redstoneController} field — which the
+ * {@link RedstoneWireBlock#redstoneController} field — which the
  * installation mixin intercepts via {@code @Redirect(value = NEW)} —
  * gets a drop-in replacement that can either delegate to AC's
  * {@link WireHandler} (when {@link FerriteWireConfig#ENABLED}) or
@@ -40,7 +40,7 @@ public class FerriteRedstoneController extends DefaultRedstoneWireEvaluator {
 	/** One handler per world. Weak keys so unloaded worlds don't leak. */
 	private final Map<ServerLevel, WireHandler> handlers = new WeakHashMap<>();
 
-	public FerriteRedstoneController(RedStoneWireBlock wire) {
+	public FerriteRedstoneController(RedstoneWireBlock wire) {
 		super(wire);
 	}
 

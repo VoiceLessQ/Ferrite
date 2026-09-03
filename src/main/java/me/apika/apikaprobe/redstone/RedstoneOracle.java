@@ -9,7 +9,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.world.level.block.RedstoneWireBlock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator;
@@ -50,14 +50,14 @@ import org.slf4j.LoggerFactory;
  *       surface within seconds.
  *
  * Critical mixin-target trap (flagged 2026-04-20):
- *   At RETURN of RedStoneWireBlock.update, the `state` parameter still
+ *   At RETURN of RedstoneWireBlock.update, the `state` parameter still
  *   references the OLD BlockState. Authoritative post-write power is
  *   `world.getBlockState(pos).get(POWER)`. The BFS reads world state,
  *   so this is handled for the center node; the only place we use the
  *   parameter's old power is the mismatch-log preWrite field (for
  *   debugging context).
  *
- * Recursion handling: only the OUTERMOST RedStoneWireBlock.update entry
+ * Recursion handling: only the OUTERMOST RedstoneWireBlock.update entry
  * triggers a BFS run. Inner recursive calls decrement the depth counter
  * and skip — they'd see mid-cascade state which isn't a valid oracle
  * input.
@@ -120,7 +120,7 @@ public final class RedstoneOracle {
 			// and disable the oracle for the rest of the session rather than
 			// rethrowing into the cascade hot path.
 			try {
-				c = new DefaultRedstoneWireEvaluator((RedStoneWireBlock) Blocks.REDSTONE_WIRE);
+				c = new DefaultRedstoneWireEvaluator((RedstoneWireBlock) Blocks.REDSTONE_WIRE);
 				oracleController = c;
 			} catch (RuntimeException e) {
 				controllerInitFailed = true;
@@ -151,7 +151,7 @@ public final class RedstoneOracle {
 		if (depth[0]++ != 0) return;
 		Snapshot snap = SNAPSHOT.get();
 		// Experimental-redstone worlds run ExperimentalRedstoneWireEvaluator
-		// (RedStoneWireBlock.useExperimentalEvaluator); this oracle predicts
+		// (RedstoneWireBlock.useExperimentalEvaluator); this oracle predicts
 		// with the default evaluator's math, so every comparison there is a
 		// false positive. Skip the snapshot; onWireUpdateEnd sees pos==null.
 		if (world.enabledFeatures().contains(net.minecraft.world.flag.FeatureFlags.REDSTONE_EXPERIMENTS)) {
@@ -160,7 +160,7 @@ public final class RedstoneOracle {
 		}
 		snap.pos = pos.immutable();
 		snap.preWritePower = state.is(Blocks.REDSTONE_WIRE)
-				? state.getValue(RedStoneWireBlock.POWER)
+				? state.getValue(RedstoneWireBlock.POWER)
 				: -1;
 		snap.blockAdded = blockAdded;
 		snap.orientation = orientation;
@@ -215,7 +215,7 @@ public final class RedstoneOracle {
 			BlockState state = world.getBlockState(pos);
 			if (!state.is(Blocks.REDSTONE_WIRE)) continue;
 
-			int actual = state.getValue(RedStoneWireBlock.POWER);
+			int actual = state.getValue(RedstoneWireBlock.POWER);
 			int expected = computePowerAt(inv, world, pos);
 			NODE_CHECKS.incrementAndGet();
 			if (actual != expected) {

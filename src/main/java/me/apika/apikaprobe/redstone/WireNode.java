@@ -7,7 +7,7 @@
  *   net.minecraft.server.level.ServerLevel -> net.minecraft.server.level.ServerLevel
  *   net.minecraft.util.Mth               -> net.minecraft.util.Mth
  *   net.minecraft.world.level.block.*    -> net.minecraft.world.level.block.*
- *   RedStoneWireBlock                    -> RedStoneWireBlock
+ *   RedstoneWireBlock                    -> RedstoneWireBlock
  *   state.is(Blocks.X)                   -> state.is(Blocks.X)
  *   state.getValue / setValue            -> state.get / with
  *   Redstone.SIGNAL_MIN / MAX            -> WireConstants.SIGNAL_MIN / MAX (inlined 0 / 15)
@@ -20,7 +20,7 @@ package me.apika.apikaprobe.redstone;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.world.level.block.RedstoneWireBlock;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
@@ -90,7 +90,7 @@ public class WireNode extends Node {
 
 		this.connections = new WireConnectionManager(this);
 
-		this.virtualPower = this.currentPower = this.state.getValue(RedStoneWireBlock.POWER);
+		this.virtualPower = this.currentPower = this.state.getValue(RedstoneWireBlock.POWER);
 		this.priority = priority();
 	}
 
@@ -163,7 +163,7 @@ public class WireNode extends Node {
 		}
 
 		currentPower = Mth.clamp(virtualPower, WireConstants.SIGNAL_MIN, WireConstants.SIGNAL_MAX);
-		state = state.setValue(RedStoneWireBlock.POWER, currentPower);
+		state = state.setValue(RedstoneWireBlock.POWER, currentPower);
 
 		return LevelHelper.setWireState(world, pos, state, added);
 	}

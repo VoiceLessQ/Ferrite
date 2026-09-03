@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import me.apika.apikaprobe.monitor.RedstonePhaseMonitor;
 
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.world.level.block.RedstoneWireBlock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.redstone.Orientation;
@@ -16,7 +16,7 @@ import net.minecraft.world.level.redstone.Orientation;
 /**
  * Times every wire-power propagation cascade.
  *
- * RedStoneWireBlock.update is the single private dispatcher that routes
+ * RedstoneWireBlock.update is the single private dispatcher that routes
  * to DefaultRedstoneWireEvaluator or ExperimentalRedstoneWireEvaluator — so
  * one mixin target catches both feature-flag branches. The method is
  * private but mixin targets it by name + descriptor.
@@ -30,7 +30,7 @@ import net.minecraft.world.level.redstone.Orientation;
  * it could theoretically run on the integrated client. We gate on
  * `!world.isClientSide()` to keep metrics server-side only.
  */
-@Mixin(RedStoneWireBlock.class)
+@Mixin(RedstoneWireBlock.class)
 public abstract class RedstoneWireMixin {
 
 	@Inject(

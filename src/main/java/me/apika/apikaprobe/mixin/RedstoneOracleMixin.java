@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import me.apika.apikaprobe.redstone.RedstoneOracle;
 
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.world.level.block.RedstoneWireBlock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.redstone.Orientation;
@@ -23,7 +23,7 @@ import net.minecraft.world.level.redstone.Orientation;
  * HEAD/RETURN handlers stitched in by the mixin processor. Neither
  * modifies behavior.
  */
-@Mixin(RedStoneWireBlock.class)
+@Mixin(RedstoneWireBlock.class)
 public abstract class RedstoneOracleMixin {
 
 	@Inject(
