@@ -6,6 +6,7 @@ A performance mod for Minecraft 26.2 (Fabric, JDK 25). Java handles integration 
 **Headline numbers, all measured on real worlds:**
 
 * **Cramming** (default on): ~65% entity-tick reduction at 1000+ packed mobs. Bit-for-bit vanilla push math.
+* **Entity queries** (default on since 0.7.3): a spatial index in front of vanilla's entity lookups, plus a collider skip that fires only when the answer is provably empty. A 1022-zombie farm on a shared 4-core server went from 15.5 TPS at 64 ms/tick to a locked 20 TPS at 31 ms. Zero mismatches across 10.8M oracle checks; the oracle keeps sampling at 1 in 16 during alpha. Kill switches: `-Dferrite.entityquery.cache=false` and `-Dferrite.entityquery.colliderskip=false`.
 * **Redstone** (`/ferrite redstone ac on`): Alternate Current algorithm plus a Rust BFS kernel. A lag machine that held vanilla at 1.4-1.8 TPS recovered to a flat 20.00 TPS. Zero mismatches across 150,000+ oracle checks. Off by default so contraptions tuned to vanilla update order keep working.
 * **Hoppers** (default on): extract loops skip drained slots, up to ~85% cheaper on partially-emptied chests. Opt-in hopper highway multiplies chain throughput ~3x for storage systems.
 * **Idle sign and furnace tickers suppressed** (default on): ~70% block-entity tick reduction at scale, self-healing, mod-subclass safe.

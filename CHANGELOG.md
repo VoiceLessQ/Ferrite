@@ -7,6 +7,8 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.7.3-alpha] - 2026-09-03
+
 ### Added
 
 - **Chunkforce auto mode, default off.** Forced chunk generation can
@@ -31,6 +33,14 @@ marks pre-release research builds.
   server-side signature of terrain pop-in. About 50 us/tick at view
   distance 10; warns if monitor logging is muted so runs cannot
   silently produce nothing.
+
+- **`/ferrite probe stages` and `/ferrite pregen order`.** Per-stage
+  wall timer on the chunk pipeline (default off) and a selectable
+  pregen request order (ring, scan, diag). Both are diagnostics from
+  the serial-thread investigation; docs/JOURNEY.md has the readings.
+  On a 4-core dedicated host the six inline stages sum to 14-17 ms
+  per chunk and the request order changes nothing, so neither is a
+  speedup on its own.
 
 ### Fixed
 
