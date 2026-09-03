@@ -2485,3 +2485,9 @@ I expected to feel worse about it. Mostly what i feel is that the
 question is finally answered instead of avoided. The candidate list
 is empty, the chunkgen lane is closed, and the alpha-exit checklist
 is the only lane left open. Back to trust.
+
+For the record, so nobody reopens this from intuition: short of
+writing a new scheduler that generates dependent chunks side by side,
+there is nothing left to do for chunkgen speed on this hardware. Not
+a port, not a cache, not an order. That scheduler would be a
+different mod with a different promise, and it is not on the list.
