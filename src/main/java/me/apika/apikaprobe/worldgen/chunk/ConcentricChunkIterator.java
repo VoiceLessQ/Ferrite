@@ -19,6 +19,7 @@ public final class ConcentricChunkIterator implements Iterator<ChunkPos> {
 	private final int centerZ;
 	private final int radius;
 	private final int total;
+	private final int[] flat;
 
 	private int currentRing = 0;
 	private int side = 0;     // 0=top, 1=right, 2=bottom, 3=left
@@ -26,12 +27,18 @@ public final class ConcentricChunkIterator implements Iterator<ChunkPos> {
 	private int emitted = 0;
 
 	public ConcentricChunkIterator(int centerX, int centerZ, int radius) {
+		this(centerX, centerZ, radius, ChunkOrder.RING);
+	}
+
+	// Non-RING orders are index-driven and not resumable; only the manual command uses them.
+	public ConcentricChunkIterator(int centerX, int centerZ, int radius, ChunkOrder order) {
 		if (radius < 0) throw new IllegalArgumentException("radius must be >= 0");
 		this.centerX = centerX;
 		this.centerZ = centerZ;
 		this.radius = radius;
 		final int diameter = 2 * radius + 1;
 		this.total = diameter * diameter;
+		this.flat = order == ChunkOrder.RING ? null : order.sequence(centerX, centerZ, radius);
 	}
 
 	public ConcentricChunkIterator(int centerX, int centerZ, int radius, State state) {
@@ -62,6 +69,11 @@ public final class ConcentricChunkIterator implements Iterator<ChunkPos> {
 	@Override
 	public ChunkPos next() {
 		if (!hasNext()) throw new NoSuchElementException();
+		if (flat != null) {
+			ChunkPos p = new ChunkPos(flat[2 * emitted], flat[2 * emitted + 1]);
+			emitted++;
+			return p;
+		}
 		final ChunkPos pos;
 		if (currentRing == 0) {
 			pos = new ChunkPos(centerX, centerZ);

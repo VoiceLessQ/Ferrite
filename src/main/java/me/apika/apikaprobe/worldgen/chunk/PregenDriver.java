@@ -36,6 +36,8 @@ public final class PregenDriver {
 	public static volatile int maxInflight =
 			Integer.getInteger("ferrite.pregen.inflight", 200);
 	public static final int CHECKPOINT_INTERVAL = 100;
+	// Applies to the next manual run only; lifecycle and resume stay RING.
+	public static volatile ChunkOrder order = ChunkOrder.RING;
 
 	private static final AtomicReference<PregenDriver> ACTIVE = new AtomicReference<>();
 
@@ -77,6 +79,12 @@ public final class PregenDriver {
 	public static CompletableFuture<Void> run(ServerLevel world, int centerX, int centerZ,
 			int radius, PregenProgressListener progress) {
 		return run(world, centerX, centerZ, radius, progress, null);
+	}
+
+	public static CompletableFuture<Void> runOrdered(ServerLevel world, int centerX, int centerZ,
+			int radius, ChunkOrder order, PregenProgressListener progress) {
+		ConcentricChunkIterator iter = new ConcentricChunkIterator(centerX, centerZ, radius, order);
+		return start(new PregenDriver(world, centerX, centerZ, radius, iter, progress, null));
 	}
 
 	public static CompletableFuture<Void> run(ServerLevel world, int centerX, int centerZ,

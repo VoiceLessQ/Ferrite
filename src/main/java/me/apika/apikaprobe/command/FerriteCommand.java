@@ -216,7 +216,10 @@ public final class FerriteCommand {
 						.then(Commands.literal("status").executes(FerriteCommand::pregenStatus))
 						.then(Commands.literal("inflight")
 								.then(Commands.argument("n", IntegerArgumentType.integer(1, 1000))
-										.executes(FerriteCommand::pregenInflight))))
+										.executes(FerriteCommand::pregenInflight)))
+						.then(Commands.literal("order")
+								.then(Commands.argument("order", StringArgumentType.word())
+										.executes(FerriteCommand::pregenOrder))))
 				.then(Commands.literal("noise")
 						.then(Commands.literal("rust")
 								.then(Commands.literal("on").executes(FerriteCommand::noiseRustOn))
@@ -1547,15 +1550,16 @@ public final class FerriteCommand {
 			}
 		};
 
-		CompletableFuture<Void> f = PregenDriver.run(world, cx, cz, radius, listener);
+		CompletableFuture<Void> f = PregenDriver.runOrdered(world, cx, cz, radius,
+				PregenDriver.order, listener);
 		if (f.isCompletedExceptionally()) {
 			sendFeedback(ctx, "[pregen] another pre-gen is already running -- /ferrite pregen cancel first", false);
 			return 0;
 		}
 		int total = (2 * radius + 1) * (2 * radius + 1);
 		String msg = String.format(
-				"[pregen] started @ chunk (%d, %d) radius=%d (%d chunks) -- watch [ferrite-pregen] in latest.log",
-				cx, cz, radius, total);
+				"[pregen] started @ chunk (%d, %d) radius=%d (%d chunks) order=%s -- watch [ferrite-pregen] in latest.log",
+				cx, cz, radius, total, PregenDriver.order.name().toLowerCase());
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
@@ -1574,6 +1578,20 @@ public final class FerriteCommand {
 		int n = IntegerArgumentType.getInteger(ctx, "n");
 		PregenDriver.maxInflight = n;
 		sendFeedback(ctx, "[pregen] inflight cap set to " + n + " (applies to the next run)", false);
+		return 1;
+	}
+
+	private static int pregenOrder(CommandContext<CommandSourceStack> ctx) {
+		String name = StringArgumentType.getString(ctx, "order");
+		me.apika.apikaprobe.worldgen.chunk.ChunkOrder o =
+				me.apika.apikaprobe.worldgen.chunk.ChunkOrder.parse(name);
+		if (o == null) {
+			sendFeedback(ctx, "[pregen] unknown order '" + name + "', use ring, scan or diag", false);
+			return 0;
+		}
+		PregenDriver.order = o;
+		sendFeedback(ctx, "[pregen] request order set to " + o.name().toLowerCase()
+				+ " (applies to the next /ferrite pregen run)", false);
 		return 1;
 	}
 
