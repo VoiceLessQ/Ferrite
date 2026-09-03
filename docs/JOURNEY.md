@@ -2442,53 +2442,57 @@ left and then a decision, and it is probably the other kind of no.
 
 ## The tmpfs run (2026-09-03, later)
 
-Ran it. Same 3721 chunks, same craftymc, world folder pointed at the
-container's tmpfs so no region file ever touched the disk. 3721
-chunks in 121 seconds, 30.8 a second, which is the disk number to
-the decimal. Workers at 60 percent each, process on 2.4 of 4 cores.
+I ran the tmpfs check the same evening. Same 3721 chunks on the same
+craftymc, with the world folder pointed at the container's tmpfs so
+no region file touched the disk at any point. It took 121 seconds,
+30.8 chunks a second, which is the disk figure to the decimal.
+Workers sat at 60 percent each and the process used 2.4 of 4 cores.
 
-So it was never the disk. The workers wait on each other, on the
-neighbour rule that says surface needs the ring through noise and
-features need the ring through surface. That is the arrangement, and
-the arrangement stays vanilla's.
+The disk was not the problem. What holds the workers is the neighbour
+rule between steps: a chunk's surface needs the ring around it
+through noise, its features need the ring through surface, and so on
+outward. That ordering is vanilla's and Ferrite leaves it alone.
 
-One in-bounds experiment is left, and it is a small one: the pregen
-driver asks for chunks in an annulus, and a front-sweeping order that
-keeps the next chunk's neighbours warm might hand the workers more
-they can start. It would help pregen and nothing else. If it moves
-the rate, it lands. If it does not, the chunkgen lane closes, and the
-entry that closes it will be short.
+One experiment is still inside the line, and a small one. The pregen
+driver currently asks for chunks in an expanding annulus. A
+front-sweeping order that keeps the next chunk's neighbours warm
+might give the workers more they can start on at once. It would help
+pregen only, since a player exploring gets vanilla's request order.
+If the rate moves, the order stays. If it does not, the chunkgen
+lane closes.
 
 ## Closing the chunkgen lane (2026-09-03, night)
 
-The last experiment ran on its own while i did other things: six
-pregens on fresh worlds, nobody watching. Three asked for chunks row
-by row. Three went along anti-diagonals, so each new chunk already
-had a warm neighbour on two sides. Same 3721 chunks as before, same
-craftymc, same flags.
+The order experiment ran unattended: six pregens on fresh worlds,
+three asking for chunks row by row and three along anti-diagonals so
+each new chunk already had a warm neighbour on two sides. Same 3721
+chunks and the same craftymc setup as every run today.
 
-Row scan came out at 34.5, 31.5 and 30.0 chunks a second. Diagonal
-at 33.2, 30.3 and 30.3. The ring walk had done 30.8 to 34 across
-four runs earlier in the day. All ten sit in one band, and the
-workers were 63 to 66 percent busy whichever way the chunks were
-asked for. The order flag stays in the tree on the ring default,
-since measured-dead code stays in this project, but nothing will
-turn it on.
+Row scan measured 34.5, 31.5 and 30.0 chunks a second. Diagonal
+measured 33.2, 30.3 and 30.3. The ring walk had done 30.8 to 34
+across four runs earlier in the day. All ten results sit in one
+band, and the workers were 63 to 66 percent busy no matter how the
+chunks were requested. The order flag stays in the tree on the ring
+default, as measured-dead code does in this project, and i do not
+expect to turn it on.
 
-That is the whole lane, then. On this hardware the worldgen workers
-spend about a third of their time waiting on neighbours, and neither
-the disk, nor the request order, nor any stage i could have ported
-changes that fraction. Generating dependent chunks side by side
-would change it, and that is the trade Ferrite turned down on page
-one. The invariant met a real number today and held.
+So the lane is closed. On this hardware the worldgen workers spend
+about a third of their time waiting on neighbours. Neither the disk,
+nor the request order, nor any stage i could have ported changes
+that fraction, because each of them was measured today and none of
+them moved it. Generating dependent chunks side by side would change
+it, and that is the trade Ferrite decided against at the start,
+since features write into neighbouring chunks and parallel
+generation changes what comes out. The invariant was tested against
+a real number for the first time and it held.
 
-I expected to feel worse. What i mostly feel is that the question
-has an answer now instead of a place i kept walking around. The
+I expected to feel worse about this. Mostly i am relieved to have an
+answer where there used to be a question i kept postponing. The
 candidate list is empty, the chunkgen lane is closed, and the
 alpha-exit checklist is the only lane still open.
 
-One more line, so nobody reopens this from a hunch. Short of writing
-a scheduler that generates dependent chunks in parallel, there is
+For anyone reading this later with a fresh idea: short of writing a
+scheduler that generates dependent chunks in parallel, there is
 nothing left to do for chunkgen speed on this hardware, and that
-scheduler would be a different mod making a promise Ferrite does not
+scheduler would be a different mod with a promise Ferrite does not
 make.
