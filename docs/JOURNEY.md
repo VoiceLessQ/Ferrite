@@ -2366,3 +2366,76 @@ week. The profile that would settle the rest takes an evening. I have
 not run it. Some of that is scheduling. Most of it is that i think i
 already know what it says, and i would rather not find out the answer
 is a rewrite.
+
+## The idle workers (2026-09-03)
+
+I ran the profile. It took the one evening the last entry guessed at,
+and it did not say what i expected.
+
+The hook is one mixin on `ChunkStatusTasks` that times each stage
+from entry to return on whatever thread runs it, with
+`/ferrite probe stages report` to print the totals. Six of the stages
+hand back an already-completed future, so for those the measured
+time is the serial cost. Biomes and noise return real futures, so
+only their handoff gets timed, and that came out at a few
+microseconds, which is what the source reading in August said it
+would be.
+
+Desk machine first. Fresh overworld, nobody logged in, a thousand
+force-loaded chunks far from spawn. Surface 3.8 ms, features 3.7,
+carvers 0.6, everything else under a quarter of a millisecond, for a
+serial sum of 8.4 ms per chunk. The model turns that into 119 chunks
+a second, and the July pregen had measured 114 to 118. I sat with
+that for about a minute before remembering the July run was on
+different hardware, so the match proved less than it looked like.
+
+Then craftymc. Three pregens of 3721 chunks each, inflight 200,
+prewarm off, every Ferrite chunkgen flag off. The serial sum landed
+between 14 and 17 ms, which predicts 58 to 73 chunks a second, and
+the runs measured 31, 31 and 34. The model was off by a factor of
+two on every run, always in the same direction, so whatever it was
+missing was not small.
+
+Run 2 also had the dispatcher probe on. The worldgen executor was
+busy 62 percent of the wall clock and the light executor 6 percent,
+so neither was close to pegged. For run 3 i read per-thread CPU out
+of `ps -L` at two points 32 seconds apart and subtracted. Three
+Worker-Main threads at around 55 percent each, the whole process on
+2.1 of 4 cores, and no thread called worldgen anywhere, because on
+26.2 both consecutive executors drain on the shared pool and a
+four-core box gets a pool three threads wide.
+
+From those numbers the serial lane is 47 percent of one worker.
+Total CPU per chunk is 49 ms, 14 of it serial. If every portable
+stage cost nothing the packing model would go from 61 to 88 chunks a
+second, and the observed rate would move less than that, because the
+workers already sit idle nearly half the time and nothing i port
+changes that.
+
+So what do they wait on. Two candidates. The disk is one: 13 percent
+iowait during the run, sync chunk writes on, two full minutes to save
+the world after stop. The other is each other. A chunk's surface
+stage needs its neighbours through noise, its features need
+neighbours through surface, and with three workers and a spiral
+request order a lot of chunks sit blocked on a neighbour nobody has
+started yet. One pregen with the world on tmpfs would tell the two
+apart. I have not run it. My money is on the second.
+
+The wrong-axis entry had the axis right; what it had wrong was where
+the wall stands. The serial thread is real, it just is not what
+binds on weak hardware. Arrangement binds, and arrangement is the
+thing this project said it would not touch. The reason still holds:
+features write into neighbouring chunks, and running that in
+parallel changes what generates. The mods that beat vanilla here
+take that trade, and Ferrite does not, which is why on this box
+Ferrite does not beat vanilla at chunkgen. At least now the reason
+is measured.
+
+One lever is left inside the line. Vanilla decides how a chunk
+generates, but Ferrite's pregen driver decides which chunk to ask
+for next, and a front-sweeping order that keeps neighbours warm might
+feed the workers without touching a stage. That only helps pregen. A
+player flying gets vanilla's request order, not mine.
+
+The candidate list stays empty. The chunkgen lane has one experiment
+left and then a decision, and it is probably the other kind of no.
