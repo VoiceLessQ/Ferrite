@@ -11,94 +11,47 @@ marks pre-release research builds.
 
 ### Added
 
-- **Chunkforce auto mode, default off.** Forced chunk generation can
-  engage by itself when a player sustains roughly 40 blocks/s and
-  stand down below that; `/ferrite chunkforce auto on` enables it.
-  It stays off by default because the 10-run interleaved bench came
-  back negative: at 90 blocks/s over virgin terrain, vanilla alone
-  held a mean deficit of 0.9 missing chunks while auto mode measured
-  8.1, worse in all five paired runs; the forced tickets compete
-  with the urgent loads vanilla already prioritizes well. An earlier
-  single-run comparison had suggested a large win; it did not
-  survive repetition.
-- **`/ferrite arrival bench` and headless autobench.** Automated
-  straight-line flight at a fixed speed with the arrival monitor
-  running, single runs or interleaved baseline/auto suites on fresh
-  strips (`/ferrite arrival suite`), and a
-  `-Pferrite.autobench=x,z,speed,seconds,runs` gradle property that
-  runs a suite unattended and halts. This is the harness that caught
-  the auto-mode regression.
-- **`/ferrite arrival` monitor.** Counts chunks inside each player
-  view distance that are not loaded, logged every 5 s: the
-  server-side signature of terrain pop-in. About 50 us/tick at view
-  distance 10; warns if monitor logging is muted so runs cannot
-  silently produce nothing.
-
+- **Chunkforce auto mode, default off.** Engages forced generation
+  when a player sustains ~40 blocks/s; `/ferrite chunkforce auto on`.
+  Off by default: a 10-run interleaved bench at 90 blocks/s measured
+  8.1 missing chunks against vanilla's 0.9, worse in every pair.
+- **`/ferrite arrival` monitor, `/ferrite arrival bench` and
+  `/ferrite arrival suite`.** Counts unloaded chunks inside each view
+  distance every 5 s (~50 us/tick at view distance 10), plus an
+  automated flight bench. `-Pferrite.autobench=x,z,speed,seconds,runs`
+  runs a suite headless.
 - **`/ferrite probe stages` and `/ferrite pregen order`.** Per-stage
-  wall timer on the chunk pipeline (default off) and a selectable
-  pregen request order (ring, scan, diag). Both are diagnostics from
-  the serial-thread investigation; docs/JOURNEY.md has the readings.
-  On a 4-core dedicated host the six inline stages sum to 14-17 ms
-  per chunk and the request order changes nothing, so neither is a
-  speedup on its own.
+  wall timer on the chunk pipeline and a selectable pregen request
+  order (ring, scan, diag). Diagnostics only, default off; readings
+  are in docs/JOURNEY.md.
 
 ### Fixed
 
 - **Own nametag missing in F5 with nametag mods** (#15). A leftover
-  client mixin blanked the local player display name; mods that
-  render your own nametag (Third Person Nametags, Animatium) drew an
-  empty background. Removed.
+  client mixin blanked the local player display name. Removed.
 
 ### Changed
 
-- **Entity query index and collider skip are now default on.** Both
-  were opt-in flags since 0.7.0. The evidence pile got deep enough:
-  10.8M oracle checks with zero mismatches in the desktop soak, a
-  dedicated-server A/B on a shared 4-core host that went from 15.5
-  TPS at 64.3 ms/tick to a locked 20 TPS at 31.5 ms (1022-zombie
-  farm, measured in the nether), and a fresh-overworld accuracy run
-  the same evening: 5,198 sampled query checks and 197,025
-  collider-skip verification walks, zero divergence in either.
-  Kill switches: `-Dferrite.entityquery.cache=false` and
-  `-Dferrite.entityquery.colliderskip=false`. One known overlap:
-  Lithium's caller rewrites already collapse query volume, so with
-  Lithium installed the gain here is smaller; the two coexist
-  cleanly in testing.
-- **Ferrite's own default-config footprint went down.** First audit
-  of what the mod itself costs, not the vanilla systems it speeds
-  up. All numbers: 26.2.x dev build, 2026-08-19, JDK 25, jcmd on a
-  live client. docs/PIANO_STATUS.md has the exact command behind
-  each claim if you want to re-check on your own machine.
-  - **~4.4 MB of off-heap buffers gone.** The physics handoff
-    buffers allocated within seconds of the first tick even with
-    physics off (its default). The class holding them no longer
-    loads at all in a default session.
-  - **Zero idle native threads, was 6.** The Rust worker pool used
-    to spawn at the title screen. It now starts on first use of a
-    parallel path, and every parallel path is opt-in.
-  - **Cramming stopped re-allocating per tick.** Its spatial hash
-    buckets now survive across ticks. Tested against a sustained
-    ~1,000-mob pile: push counts matched mob counts across 15+
-    report windows, tick time steady at 32-35 ms, and pair order is
-    unchanged, so the parity suite still passes.
-  - **Two leaks closed.** Parity-capture lists cleared on server
-    stop (they pinned every opened world's noise state until the
-    game quit). The opt-in nav cache frees native memory on chunk
-    unload and server stop; before, it could only grow, about 16 KB
-    per cached section.
-  - **Monitors stop measuring when reports are off.** They used to
-    time every entity tick and throw the result away: two nanoTime
-    calls, five ThreadLocal ops, and a boxed Long per entity, near
-    100k allocations/s at horde scale. On a 24-core desktop the
-    mspt delta is below `/tick query` resolution (34.7 ms either
-    way), so the honest claim is less GC pressure everywhere and
-    real time saved on slow CPUs, not a lower desktop mspt.
-    Pi-class servers boot with reports off, so they get this by
-    default.
-- **Monitors pause hot collection while reports are off.** The
-  0.7.2 small-heap default silenced the log lines; as of this build
-  the per-mob timing collection itself stops too, so the default-off
-  state no longer pays the measurement cost either.
+- **Entity query index and collider skip are now default on.** Opt-in
+  since 0.7.0. Evidence: 10.8M oracle checks with zero mismatches, and
+  a 1022-zombie farm on a shared 4-core server going from 15.5 TPS to
+  a locked 20 TPS. Kill switches: `-Dferrite.entityquery.cache=false`
+  and `-Dferrite.entityquery.colliderskip=false`. With Lithium
+  installed the gain is smaller; the two coexist.
+- **Lower default-config footprint** (26.2.x dev build, JDK 25, jcmd;
+  commands in docs/PIANO_STATUS.md):
+  - ~4.4 MB of off-heap physics buffers no longer allocate while
+    physics is off.
+  - Rust worker pool starts on first use instead of at the title
+    screen: zero idle native threads, was 6.
+  - Cramming reuses its spatial hash buckets across ticks.
+  - Two leaks closed: parity-capture lists cleared on server stop, and
+    the opt-in nav cache frees native memory on chunk unload.
+  - Monitors stop timing entities while reports are off, removing
+    ~100k allocations/s at horde scale. No measurable mspt change on a
+    24-core desktop; the saving is GC pressure and slow-CPU time.
+- **Fabric Loader 0.19.5** in the dev and CI build. Minimum stays
+  0.18.4.
 
 ## [Released]
 
