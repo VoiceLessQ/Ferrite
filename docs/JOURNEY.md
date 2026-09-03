@@ -2458,3 +2458,30 @@ keeps the next chunk's neighbours warm might hand the workers more
 they can start. It would help pregen and nothing else. If it moves
 the rate, it lands. If it does not, the chunkgen lane closes, and the
 entry that closes it will be short.
+
+## Closing the chunkgen lane (2026-09-03, night)
+
+The last experiment ran while i was doing other things, six pregens
+on fresh worlds with nobody watching. Three asked for chunks row by
+row, three along anti-diagonals so each new chunk had a warm
+neighbour on two sides. Same 3721 chunks, same craftymc, same flags.
+
+Row scan: 34.5, 31.5, 30.0 chunks a second. Diagonal: 33.2, 30.3,
+30.3. The ring walk, four runs earlier today: 30.8 to 34. Every
+number in one band, and the workers at 63 to 66 percent busy no
+matter which way the chunks were asked for. The order flag stays in
+the tree, default ring, because measured-dead code stays in this
+project, but it is not going to be turned on.
+
+So that is the lane. On this hardware the worldgen workers spend a
+third of their time waiting on neighbours, and neither the disk nor
+the request order nor any stage i could port changes that. What
+would change it is running dependent chunks side by side, and that
+is the trade Ferrite declined on the first page. The invariant held
+against a real number, which is the only kind of holding that
+counts.
+
+I expected to feel worse about it. Mostly what i feel is that the
+question is finally answered instead of avoided. The candidate list
+is empty, the chunkgen lane is closed, and the alpha-exit checklist
+is the only lane left open. Back to trust.
