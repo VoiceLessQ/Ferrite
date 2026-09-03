@@ -14,11 +14,11 @@ public final class ChunkStageTiming {
 
 	// Stages that return completedFuture: their whole cost is serial.
 	public static final String[] SERIAL_STAGES = {
-			"generateStructureStarts", "generateStructureReferences", "generateSurface",
-			"generateCarvers", "generateFeatures", "generateSpawn" };
+			"generateStructureStarts", "generateStructureReferences",
+			"generateFeatures", "generateSpawn" };
 
 	// Async stages: only the synchronous handoff part is measured.
-	public static final String[] HANDOFF_STAGES = { "generateBiomes", "generateNoise" };
+	public static final String[] HANDOFF_STAGES = { "generateBiomes", "buildTerrain" };
 
 	private static final ConcurrentHashMap<String, Stats> byStage = new ConcurrentHashMap<>();
 	private static final ThreadLocal<long[]> START = ThreadLocal.withInitial(() -> new long[1]);

@@ -48,6 +48,28 @@ if (hostOs.isWindows()) {
 def rustLibPath = "target/${nativeTarget}/release/${nativeLibName}"
 def nativesDir = "src/main/resources/assets/ferrite/natives/${nativeOsDir}"
 
+// 26.3-pre-1 rewrote density functions; these default-off DF ports target
+// the old DensityFunction.compute shape and stay out of the build until
+// the 26.3 final port. Mirrors efae14b (mixins gated, files kept).
+sourceSets.main.java.exclude(
+	'me/apika/apikaprobe/worldgen/RustFinalDensityBufferWrapper.java',
+	'me/apika/apikaprobe/worldgen/RustFlatCache.java',
+	'me/apika/apikaprobe/worldgen/RustBlendedNoiseWrapper.java',
+	'me/apika/apikaprobe/worldgen/TerrainBulkHandoff.java',
+	'me/apika/apikaprobe/worldgen/RustAquiferSampler.java',
+	'me/apika/apikaprobe/tools/SimplexNoiseFixtureCapture.java',
+	'me/apika/apikaprobe/mixin/ChunkNoiseSamplerMixin.java',
+	'me/apika/apikaprobe/mixin/CacheRouteCaptureMixin.java',
+	'me/apika/apikaprobe/mixin/BulkChunkDensityMixin.java',
+	'me/apika/apikaprobe/mixin/DensityInterpolatorAccessor.java',
+	'me/apika/apikaprobe/mixin/AquiferRouteMixin.java',
+	'me/apika/apikaprobe/mixin/ChunkNoiseSamplerAccessor.java',
+	'me/apika/apikaprobe/worldgen/CacheRouteStats.java',
+	'me/apika/apikaprobe/worldgen/BulkInterpolatorFill.java',
+	'me/apika/apikaprobe/worldgen/BulkChunkDensityFill.java',
+	'me/apika/apikaprobe/worldgen/InterpolatorNameRegistry.java'
+)
+
 loom {
 	splitEnvironmentSourceSets()
 

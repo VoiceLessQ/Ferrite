@@ -18,7 +18,6 @@ import me.apika.apikaprobe.command.FerriteCommand;
 import me.apika.apikaprobe.entity.CrammingDispatcher;
 import me.apika.apikaprobe.entity.PhysicsDispatcher;
 import me.apika.apikaprobe.entity.PhysicsOracle;
-import me.apika.apikaprobe.worldgen.TerrainBulkHandoff;
 import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
 import me.apika.apikaprobe.monitor.AquiferMonitor;
 import me.apika.apikaprobe.monitor.ChunkGenMonitor;
@@ -72,7 +71,7 @@ public class ExampleMod implements ModInitializer {
 		// pre-reset.
 		NoiseStageMonitor.register();
 		AquiferMonitor.register();
-		TerrainBulkHandoff.register();
+		// TerrainBulkHandoff gated out on 26.3 (DF rewrite), see build.gradle.
 		ChunkGenMonitor.register();
 		LightUpdateMonitor.register();
 		SurfacePhaseMonitor.register();

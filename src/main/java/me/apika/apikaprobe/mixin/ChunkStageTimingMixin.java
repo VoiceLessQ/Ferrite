@@ -17,11 +17,12 @@ import net.minecraft.world.level.chunk.status.WorldGenContext;
 import me.apika.apikaprobe.monitor.ChunkStageTiming;
 
 // Times each ChunkStatusTasks stage HEAD to RETURN; async stages capture only their handoff.
+// 26.3 merged noise, surface and carvers into buildTerrain.
 @Mixin(ChunkStatusTasks.class)
 public abstract class ChunkStageTimingMixin {
 
 	@Inject(method = { "generateStructureStarts", "generateStructureReferences", "generateBiomes",
-			"generateNoise", "generateSurface", "generateCarvers", "generateFeatures", "generateSpawn" },
+			"buildTerrain", "generateFeatures", "generateSpawn" },
 			at = @At("HEAD"))
 	private static void ferrite$begin(WorldGenContext context, ChunkStep step,
 			StaticCache2D<GenerationChunkHolder> chunks, ChunkAccess chunk,
@@ -50,25 +51,11 @@ public abstract class ChunkStageTimingMixin {
 		ChunkStageTiming.end("generateBiomes");
 	}
 
-	@Inject(method = "generateNoise", at = @At("RETURN"))
-	private static void ferrite$endNoise(WorldGenContext context, ChunkStep step,
+	@Inject(method = "buildTerrain", at = @At("RETURN"))
+	private static void ferrite$endTerrain(WorldGenContext context, ChunkStep step,
 			StaticCache2D<GenerationChunkHolder> chunks, ChunkAccess chunk,
 			CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
-		ChunkStageTiming.end("generateNoise");
-	}
-
-	@Inject(method = "generateSurface", at = @At("RETURN"))
-	private static void ferrite$endSurface(WorldGenContext context, ChunkStep step,
-			StaticCache2D<GenerationChunkHolder> chunks, ChunkAccess chunk,
-			CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
-		ChunkStageTiming.end("generateSurface");
-	}
-
-	@Inject(method = "generateCarvers", at = @At("RETURN"))
-	private static void ferrite$endCarvers(WorldGenContext context, ChunkStep step,
-			StaticCache2D<GenerationChunkHolder> chunks, ChunkAccess chunk,
-			CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
-		ChunkStageTiming.end("generateCarvers");
+		ChunkStageTiming.end("buildTerrain");
 	}
 
 	@Inject(method = "generateFeatures", at = @At("RETURN"))

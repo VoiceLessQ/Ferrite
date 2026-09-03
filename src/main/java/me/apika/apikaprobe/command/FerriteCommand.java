@@ -23,8 +23,6 @@ import me.apika.apikaprobe.bridge.ExampleMod;
 import me.apika.apikaprobe.worldgen.RustAquiferDispatch;
 import me.apika.apikaprobe.worldgen.RustBiomeRouter;
 import me.apika.apikaprobe.RustBridge;
-import me.apika.apikaprobe.worldgen.RustFinalDensityBufferWrapper;
-import me.apika.apikaprobe.worldgen.RustFlatCache;
 import me.apika.apikaprobe.worldgen.WorldgenParity;
 import me.apika.apikaprobe.worldgen.WorldgenStateBootstrap;
 import me.apika.apikaprobe.redstone.FerriteWireConfig;
@@ -222,11 +220,11 @@ public final class FerriteCommand {
 										.executes(FerriteCommand::pregenOrder))))
 				.then(Commands.literal("noise")
 						.then(Commands.literal("rust")
-								.then(Commands.literal("on").executes(FerriteCommand::noiseRustOn))
-								.then(Commands.literal("off").executes(FerriteCommand::noiseRustOff))
-								.then(Commands.literal("status").executes(FerriteCommand::noiseRustStatus))
-								.then(Commands.literal("diag").executes(FerriteCommand::noiseRustDiag))
-								.then(Commands.literal("reset").executes(FerriteCommand::noiseRustReset))))
+								.then(Commands.literal("on").executes(FerriteCommand::noiseRustGated))
+								.then(Commands.literal("off").executes(FerriteCommand::noiseRustGated))
+								.then(Commands.literal("status").executes(FerriteCommand::noiseRustGated))
+								.then(Commands.literal("diag").executes(FerriteCommand::noiseRustGated))
+								.then(Commands.literal("reset").executes(FerriteCommand::noiseRustGated))))
 				.then(Commands.literal("surface")
 						.then(Commands.literal("compile").executes(FerriteCommand::surfaceCompile))
 						.then(Commands.literal("stats").executes(FerriteCommand::surfaceStats))
@@ -1608,37 +1606,9 @@ public final class FerriteCommand {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int noiseRustOn(CommandContext<CommandSourceStack> ctx) {
-		RustFinalDensityBufferWrapper.ENABLED = true;
-		sendFeedback(ctx, "[noise-rust] ENABLED — newly-generated chunks bulk-prefill density via Rust (Phase 2). Existing chunks unaffected. Math may drift ~0.02 at sub-cell positions; toggle off if visual artifacts appear.", false);
-		return Command.SINGLE_SUCCESS;
-	}
-
-	private static int noiseRustOff(CommandContext<CommandSourceStack> ctx) {
-		RustFinalDensityBufferWrapper.ENABLED = false;
-		sendFeedback(ctx, "[noise-rust] disabled — newly-generated chunks use vanilla finalDensity.", false);
-		return Command.SINGLE_SUCCESS;
-	}
-
-	private static int noiseRustStatus(CommandContext<CommandSourceStack> ctx) {
-		sendFeedback(ctx, "[noise-rust] enabled=" + RustFinalDensityBufferWrapper.ENABLED, false);
-		return Command.SINGLE_SUCCESS;
-	}
-
-	private static int noiseRustDiag(CommandContext<CommandSourceStack> ctx) {
-		String bufferLine = RustFinalDensityBufferWrapper.diagSummary();
-		String flatLine = RustFlatCache.diagSummary();
-		ExampleMod.LOGGER.info(bufferLine);
-		ExampleMod.LOGGER.info(flatLine);
-		sendFeedback(ctx, bufferLine, false);
-		sendFeedback(ctx, flatLine, false);
-		return Command.SINGLE_SUCCESS;
-	}
-
-	private static int noiseRustReset(CommandContext<CommandSourceStack> ctx) {
-		RustFinalDensityBufferWrapper.resetDiag();
-		RustFlatCache.resetDiag();
-		sendFeedback(ctx, "[noise-rust] diagnostic counters reset", false);
+	// Bulk density ports are gated out until the 26.3 DF port lands.
+	private static int noiseRustGated(CommandContext<CommandSourceStack> ctx) {
+		sendFeedback(ctx, "[noise-rust] unavailable on 26.3: density function ports are gated pending the 26.3 rewrite port", false);
 		return Command.SINGLE_SUCCESS;
 	}
 

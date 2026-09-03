@@ -4,7 +4,6 @@
 	"plugin": "me.apika.apikaprobe.FerriteMixinPlugin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"ChunkNoiseSamplerAccessor",
 		"WorldTickMixin",
 		"WorldChunkInvoker",
 		"WorldChunkBlockEntityTickerGateMixin",
@@ -28,7 +27,6 @@
 		"TravelMixin",
 		"GravityMixin",
 		"AdjustCollisionsMixin",
-		"TickHandSwingMixin",
 		"TickNewAiMixin",
 		"ActiveTargetGoalMixin",
 		"ClassInstanceMultiMapAccessor",
@@ -59,13 +57,9 @@
 		"MultiNoiseBiomeSourceRouteMixin",
 		"ChunkDecoratorTimingMixin",
 		"LightTimingMixin",
-		"ChunkNoiseSamplerMixin",
-		"CacheRouteCaptureMixin",
-		"BulkChunkDensityMixin",
 		"FerriteDispatcherProbeMixin",
 		"ChunkStageTimingMixin",
-		"AbstractConsecutiveExecutorDurationMixin",
-		"AquiferRouteMixin"
+		"AbstractConsecutiveExecutorDurationMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
