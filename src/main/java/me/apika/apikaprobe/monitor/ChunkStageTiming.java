@@ -21,7 +21,8 @@ public final class ChunkStageTiming {
 	public static final String[] HANDOFF_STAGES = { "generateBiomes", "buildTerrain" };
 
 	// Pool-side work inside buildTerrain's async lambda (26.3), timed on the worker thread.
-	public static final String[] POOL_STAGES = { "doFill", "sampleVolume", "buildSurface", "generateCarvers" };
+	public static final String[] POOL_STAGES = { "doFill", "sampleVolume", "interp.sampleVolume",
+			"perlin.addToVolume", "smeared.addToVolume", "buildSurface", "generateCarvers" };
 
 	private static final ConcurrentHashMap<String, Stats> byStage = new ConcurrentHashMap<>();
 	// Per-thread start stack so nested timers (sampleVolume inside doFill) do not clobber each other.
