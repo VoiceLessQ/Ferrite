@@ -20,20 +20,29 @@ public final class ChunkStageTiming {
 	// Async stages: only the synchronous handoff part is measured.
 	public static final String[] HANDOFF_STAGES = { "generateBiomes", "buildTerrain" };
 
+	// Pool-side work inside buildTerrain's async lambda (26.3), timed on the worker thread.
+	public static final String[] POOL_STAGES = { "doFill", "sampleVolume", "buildSurface", "generateCarvers" };
+
 	private static final ConcurrentHashMap<String, Stats> byStage = new ConcurrentHashMap<>();
-	private static final ThreadLocal<long[]> START = ThreadLocal.withInitial(() -> new long[1]);
+	// Per-thread start stack so nested timers (sampleVolume inside doFill) do not clobber each other.
+	private static final ThreadLocal<long[]> START = ThreadLocal.withInitial(() -> new long[9]);
 
 	public static void begin() {
 		if (!ENABLED) return;
-		START.get()[0] = System.nanoTime();
+		long[] st = START.get();
+		int depth = (int) st[0];
+		if (depth >= 8) return;
+		st[1 + depth] = System.nanoTime();
+		st[0] = depth + 1;
 	}
 
 	public static void end(String stage) {
 		if (!ENABLED) return;
-		long start = START.get()[0];
-		if (start == 0) return;
-		byStage.computeIfAbsent(stage, k -> new Stats()).record(System.nanoTime() - start);
-		START.get()[0] = 0;
+		long[] st = START.get();
+		int depth = (int) st[0];
+		if (depth == 0) return;
+		st[0] = depth - 1;
+		byStage.computeIfAbsent(stage, k -> new Stats()).record(System.nanoTime() - st[depth]);
 	}
 
 	public static void reset() {
@@ -51,6 +60,7 @@ public final class ChunkStageTiming {
 				ENABLED, serialSumMs, serialSumMs > 0 ? 1000.0 / serialSumMs : 0.0));
 		for (String stage : SERIAL_STAGES) appendLine(sb, stage, serialSumMs);
 		for (String stage : HANDOFF_STAGES) appendLine(sb, stage, 0);
+		for (String stage : POOL_STAGES) appendLine(sb, stage, 0);
 		return sb.toString();
 	}
 
@@ -65,7 +75,13 @@ public final class ChunkStageTiming {
 				s.percentileNanos(0.99) / 1_000_000.0,
 				s.maxNanos.get() / 1_000_000.0));
 		if (serialSumMs > 0) sb.append(String.format(" share=%5.1f%%", 100.0 * meanMs / serialSumMs));
+		else if (isPoolStage(stage)) sb.append(" (pool thread)");
 		else sb.append(" (handoff only)");
+	}
+
+	private static boolean isPoolStage(String stage) {
+		for (String p : POOL_STAGES) if (p.equals(stage)) return true;
+		return false;
 	}
 
 	private static double meanMs(String stage) {

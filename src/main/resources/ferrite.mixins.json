@@ -59,6 +59,8 @@
 		"LightTimingMixin",
 		"FerriteDispatcherProbeMixin",
 		"ChunkStageTimingMixin",
+		"TerrainPoolTimingMixin",
+		"DensityVolumeTimingMixin",
 		"AbstractConsecutiveExecutorDurationMixin"
 	],
 	"injectors": {
