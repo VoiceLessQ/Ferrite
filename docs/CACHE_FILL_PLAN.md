@@ -1,5 +1,14 @@
 # Cache-Fill Plan — Phase 2.5 redux
 
+**Status (2026-09-06): superseded.** Steps 2 to 4 never landed and will
+not. The full takeover (step 4) measured a 25 to 50 ms per chunk
+regression, which is why "bulk-chunk-density stays closed" is an
+invariant in CLAUDE.md. On 26.3 Mojang replaced per-block evaluation
+with a volume fill (`DensitySampler.sampleVolume`), so the seam this
+plan tried to build now exists in vanilla; any future Rust density work
+targets that seam through the compile rule, not the markers below.
+Kept as the record of what was tried.
+
 **Status (2026-04-25):** step 1 (deep router walk + Marker identity map) implemented and pushed. Steps 2–4 (cache fill mixins, batched JNI, parity validation) pending.
 
 **Update (2026-04-28):** `CacheRouteCaptureMixin` is now **gated behind
