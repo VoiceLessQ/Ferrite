@@ -2607,19 +2607,21 @@ than the one i was bracing for.
 
 ## A hundred features, none of them the one (2026-09-06)
 
-The research pass left one row nobody else holds: feature placement,
-nine tenths of what is left on the serial chunk thread on 26.3. The
-idea on file was a dead-work skip in the collider-skip shape, a cheap
-check that proves a placement will do nothing before the expensive
-part runs, with an oracle at 1 in N. The measurement that decides it
-is a histogram: which placed features cost what, and how often each
-one ends without writing a block.
+Yesterday's research pass ended on one row nobody else in the field
+has touched: feature placement. Lithium leaves it alone, C2ME runs it
+in parallel instead of making it cheaper, Noisium never got there.
+And on 26.3 it is nine tenths of what still runs on the serial chunk
+thread. I had a shape for it too, the collider-skip shape: find a
+cheap check that proves a placement is about to do nothing, skip the
+expensive part, keep an oracle at 1 in N to catch me lying. All I
+needed was the histogram. Which features cost what, and how often does
+each one finish without writing a single block.
 
-So `/ferrite probe features` now times every `placeWithBiomeCheck`
-call by registry id and counts the true returns. Same recipe as the
-stage probe: fresh world on 26.3-pre-1, four forceloaded 256-chunk
-squares to warm, reset, four more for the measured minute. Local
-desktop, 44a9329 plus the probe.
+That took an evening. `/ferrite probe features` wraps
+`placeWithBiomeCheck`, keys on the registry id, counts the true
+returns. Same drill as the stage probe: fresh world on 26.3-pre-1,
+four forceloaded 256-chunk squares to warm up, reset, four more for
+the minute that counts. Desktop, 44a9329 plus the probe.
 
 | | measured run |
 |---|---|
@@ -2633,22 +2635,31 @@ desktop, 44a9329 plus the probe.
 | top ten | 57.9% |
 | time in features that never placed | 2.4% |
 
-The distribution is flat. The biggest row is a geode that places in
-3.3 percent of chunks and spends its mean on those rare placements,
-p99 6.3 ms; skipping the other 97 percent saves nothing because they
-already cost nothing. The bulk is ore veins that place almost every
-time, real block writes, no dead work in them. The candidates for a
-skip are the rows with a high call cost and a low placed rate:
-ore_iron_upper at 0.7 percent placed and 105 µs a call, coal_upper,
-the two monster rooms. Together they are 10.5 percent of feature
-time, about 0.2 ms a chunk, on a serial lane that was already under
-half of one worker on craftymc.
+Flat. I kept scrolling the report looking for the fat row and there
+isn't one.
 
-That is the third branch of the decision table written on 2026-09-03:
-cost spread evenly, none over a third, close it. The features
-dead-work skip is not a lane. Chunkgen on the serial side is done
-until Mojang moves something again, and the pool numbers in the same
-report (doFill 8.9 ms, buildSurface 9.8 ms mean per chunk) are the
-only chunkgen figures worth re-reading on 26.3 final.
+The geode sits on top, and for a moment it looked like the candidate:
+places in 3.3 percent of chunks, so surely the other 97 percent are
+waste. No. Its mean is made entirely of the rare chunks where it does
+place (p99 6.3 ms); the misses already cost nothing, so a skip saves
+nothing. Below it, four ore veins for the stone variants, placing 97
+to 99 times in a hundred. Real block writes. Nothing to skip there
+either. The rows that fit my shape do exist: ore_iron_upper places in
+0.7 percent of chunks yet burns 105 µs a call, coal_upper is similar,
+so are the two monster rooms. Add them up and you get 10.5 percent of
+feature time. About 0.2 ms a chunk. On a serial lane that craftymc
+already showed at under half of one worker.
+
+I wrote the decision table for this on the 3rd, three branches, and
+this is the third one: cost spread evenly, none over a third, close
+it. So the features skip is not a lane. The serial side of chunkgen is
+finished until Mojang moves something again, and the only chunkgen
+numbers I still want to look at on 26.3 final are the pool ones from
+the same report, doFill at 8.9 ms and buildSurface at 9.8 ms mean per
+chunk.
+
+Slight sting, honestly. It was the last unoccupied row. But an empty
+row that stays empty because the number said so is the whole point of
+keeping the list this way.
 
 The probe stays in tree, default off, forty lines and a mixin.
