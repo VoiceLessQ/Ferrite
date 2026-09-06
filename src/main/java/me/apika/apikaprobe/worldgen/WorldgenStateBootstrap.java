@@ -19,6 +19,10 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.synth.NormalNoise;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.mojang.serialization.JsonOps;
 
 /**
  * One-shot world-load handler that builds the Rust-side seed-derived
@@ -913,13 +917,28 @@ public final class WorldgenStateBootstrap {
 		return null;
 	}
 
-	/**
-	 * Read {@code firstOctave} and {@code amplitudes} from a
-	 * {@code DoublePerlinNoiseSampler.NoiseParameters} record via
-	 * reflection. Returns null if either accessor is missing — caller
-	 * logs and skips that entry.
-	 */
+	// 26.3: registry entries are NormalNoise with a private Parameters record; read it through the public codec.
+	// Old-shape mapping: firstOctave = base_octave, amplitudes = amplitude_modifiers (or octave_count ones).
+	// base_amplitude is dropped: vanilla's createParity chose it to reproduce the old normalization.
 	private static NoiseParamsView readNoiseParameters(Object params) {
+		if (params instanceof NormalNoise noise) {
+			var encoded = NormalNoise.DIRECT_CODEC.encodeStart(JsonOps.INSTANCE, noise).result();
+			if (encoded.isEmpty() || !encoded.get().isJsonObject()) {
+				ExampleMod.LOGGER.warn("[worldgen-init] NormalNoise did not encode to a JSON object");
+				return null;
+			}
+			JsonObject json = encoded.get().getAsJsonObject();
+			int baseOctave = json.get("base_octave").getAsInt();
+			int octaveCount = json.has("octave_count") ? json.get("octave_count").getAsInt() : 1;
+			double[] amps = new double[octaveCount];
+			if (json.has("amplitude_modifiers")) {
+				JsonArray mods = json.getAsJsonArray("amplitude_modifiers");
+				for (int i = 0; i < octaveCount && i < mods.size(); i++) amps[i] = mods.get(i).getAsDouble();
+			} else {
+				java.util.Arrays.fill(amps, 1.0);
+			}
+			return new NoiseParamsView(baseOctave, amps);
+		}
 		try {
 			Method firstOctaveMethod = params.getClass().getMethod("firstOctave");
 			Method amplitudesMethod = params.getClass().getMethod("amplitudes");

@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CopyOnWriteArrayList;
+import net.minecraft.world.level.levelgen.synth.Noise;
 
 /**
  * Rust↔Java noise parity validator.
@@ -173,6 +174,7 @@ public final class WorldgenParity {
 			nameBuf.flip();
 
 			double maxDiffThis = 0.0;
+			int compared = 0;
 			double dRust = 0, dYarn = 0, dx = 0, dy = 0, dz = 0;
 			for (int i = 0; i < sampleCount; i++) {
 				double x = (rng.nextDouble() * 2.0 - 1.0) * boxRadius;
@@ -186,12 +188,18 @@ public final class WorldgenParity {
 				if (Double.isNaN(yarnValue)) {
 					continue;
 				}
+				compared++;
 				double diff = Math.abs(rustValue - yarnValue);
 				if (diff > maxDiffThis) {
 					maxDiffThis = diff;
 					dRust = rustValue; dYarn = yarnValue;
 					dx = x; dy = y; dz = z;
 				}
+			}
+			if (compared == 0) {
+				fail++;
+				failures.add(fullName + " (no comparable samples)");
+				continue;
 			}
 			if (maxDiffThis <= PARITY_EPSILON) {
 				pass++;
@@ -373,7 +381,7 @@ public final class WorldgenParity {
 				// 26.1.2: NormalNoise.getValue (was sample in older yarn).
 				Method sampleMethod = pickMethod(probeSampler.getClass(),
 						new Class<?>[]{double.class, double.class, double.class},
-						"getValue", "sample");
+						"getValue", "sample", "get");
 				if (sampleMethod == null) {
 					ExampleMod.LOGGER.warn("[parity] no sample method on {}",
 							probeSampler.getClass().getName());
@@ -413,9 +421,12 @@ public final class WorldgenParity {
 		}
 
 		double sample(Object sampler, double x, double y, double z) {
+			// 26.3: samplers are Noise implementations, often package-private classes; call the public interface.
+			if (sampler instanceof Noise noise) return noise.get(x, y, z);
 			try {
 				Object result = sampleMethod.invoke(sampler, x, y, z);
-				return result instanceof Double d ? d : Double.NaN;
+				if (result instanceof Double d) return d;
+				return result instanceof Float f ? f.doubleValue() : Double.NaN;
 			} catch (ReflectiveOperationException e) {
 				return Double.NaN;
 			}

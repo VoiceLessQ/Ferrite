@@ -2563,3 +2563,44 @@ rough generator is their product, not ours. The candidate list is
 empty again, this time with a row in the stage probe
 (`iterateNoiseColumn`, per call, default off) so nobody has to
 re-derive it.
+
+## Mojang kept the seeds (2026-09-06)
+
+The 26.3 pre-release rewrote how a `NormalNoise` describes itself. The
+old record was a first octave and a list of amplitudes. The new one is
+a base amplitude, a base octave, an octave count, a normalization mode
+and a list of amplitude modifiers, expanded into per-octave entries
+with their own frequency and amplitude, and the kernel returns `float`.
+When i read that off the jar on 2026-09-04 i wrote it down as the trap
+of the whole port: new seeding means every bit-exact result we have is
+about a version that no longer exists.
+
+With the source decompiled tonight the trap turned out to be smaller.
+The seed path is the same. Each noise is created from the root factory
+hashed on its identifier, then two positional forks, then one
+`PerlinNoise` per octave seeded from `fromHashOf("octave_" + index)`
+on each fork, which is what the Rust side has done since the first
+noise port. The permutation constructor is the old one line for line.
+What moved is the amplitude arithmetic, and the base amplitudes Mojang
+put in the data files were computed by a method literally named
+`createParity`, to make the new arithmetic land where the old one did.
+
+So i registered the 64 noises to Rust in the old shape, base octave
+and modifiers, base amplitude dropped, and compared against vanilla at
+a thousand points each across a 20 km box. Worst difference 3.0e-6,
+most near 1e-6, on values of order one. Rust computes in `double` and
+vanilla now computes in `float`, and that gap is exactly what float
+rounding of the same function looks like. Nothing passed the 1e-10 rule
+the validators were built on, and nothing should have.
+
+One thing bit on the way there. The first run said 64 pass, worst
+0.000. The reflective sampler call had landed on a package-private
+class and thrown, the loop treated a throw as "skip this sample", and a
+noise with no samples compared as a perfect one. The validator now
+fails a noise that compared nothing. A pass has to be earned by at
+least one number.
+
+What this changes in the plan: the seeding port is gone from the list.
+What remains for noise is a float kernel path and a float-bits target
+for the validator, which was already item 3. That is a smaller 26.3
+than the one i was bracing for.
