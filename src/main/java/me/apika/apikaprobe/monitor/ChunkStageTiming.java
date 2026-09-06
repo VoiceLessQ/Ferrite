@@ -24,9 +24,6 @@ public final class ChunkStageTiming {
 	public static final String[] POOL_STAGES = { "doFill", "sampleVolume", "interp.sampleVolume",
 			"perlin.addToVolume", "smeared.addToVolume", "buildSurface", "generateCarvers" };
 
-	// Point queries nested inside a serial stage; n over the stage's n gives calls per chunk.
-	public static final String[] POINT_STAGES = { "iterateNoiseColumn" };
-
 	private static final ConcurrentHashMap<String, Stats> byStage = new ConcurrentHashMap<>();
 	// Per-thread start stack so nested timers (sampleVolume inside doFill) do not clobber each other.
 	private static final ThreadLocal<long[]> START = ThreadLocal.withInitial(() -> new long[9]);
@@ -65,7 +62,6 @@ public final class ChunkStageTiming {
 		for (String stage : SERIAL_STAGES) appendLine(sb, stage, serialSumMs);
 		for (String stage : HANDOFF_STAGES) appendLine(sb, stage, 0);
 		for (String stage : POOL_STAGES) appendLine(sb, stage, 0);
-		for (String stage : POINT_STAGES) appendLine(sb, stage, 0);
 		return sb.toString();
 	}
 
@@ -81,17 +77,11 @@ public final class ChunkStageTiming {
 				s.maxNanos.get() / 1_000_000.0));
 		if (serialSumMs > 0) sb.append(String.format(" share=%5.1f%%", 100.0 * meanMs / serialSumMs));
 		else if (isPoolStage(stage)) sb.append(" (pool thread)");
-		else if (isPointStage(stage)) sb.append(" (per call, inside generateStructureStarts)");
 		else sb.append(" (handoff only)");
 	}
 
 	private static boolean isPoolStage(String stage) {
 		for (String p : POOL_STAGES) if (p.equals(stage)) return true;
-		return false;
-	}
-
-	private static boolean isPointStage(String stage) {
-		for (String p : POINT_STAGES) if (p.equals(stage)) return true;
 		return false;
 	}
 
