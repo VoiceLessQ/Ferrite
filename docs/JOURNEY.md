@@ -2508,3 +2508,58 @@ i5-8300H LXC with a 3-thread worker pool, ten runs between 30.0 and
 dependent chunks in parallel there is nothing left to do for chunkgen
 speed, and that scheduler would be a different mod with a promise
 Ferrite does not make.
+
+## The column that structures ask for (2026-09-05)
+
+Distant Horizons landed a rough surface generator this week: no
+chunks, just vanilla's `finalDensity` asked "solid or air" one point
+at a time, a binary search per column, biomes from the sampler at the
+found height. It is plain Java and has nothing to do with Ferrite, but
+it named a workload shape i had not measured. Point-sampled density
+is the one place where vanilla's chunk-level cell caches cannot help,
+and the Rust interpreter was measured at about 5 ns per cell before
+the JNI fill buried bulk-chunk-density. A point query has no fill.
+
+So the question was narrow: does vanilla itself run hot point queries
+inside real chunkgen? The 26.2 source says the family is
+`iterateNoiseColumn` in `NoiseBasedChunkGenerator`, reached through
+`getBaseHeight` and `getBaseColumn`, and its callers are structure
+placement only: `Structure.onTopOfChunkCenter`, the four corner
+heights behind `getMeanFirstOccupiedHeight`, jigsaw
+`projectStartToHeightmap`, mineshaft, ruined portal, nether fossil.
+Each call builds a one-cell `NoiseChunk`, wraps the whole router,
+creates an aquifer, and walks the column from the top until the
+tester hits. That is not a 50 ns path. It is also only reached after
+`isStructureChunk` has said yes, which most chunks never hear.
+
+Timer on `iterateNoiseColumn` HEAD to RETURN, `26.3.x`, desktop dev
+server, the same recipe as every stage-probe run: four 256-chunk
+forceload squares to warm for 60 s, reset, four more at about 5000
+for the measured minute, no player, all chunkgen flags off.
+
+| | warm-up minute | measured minute |
+|---|---|---|
+| calls | 544 | 657 |
+| mean per call | 0.393 ms | 0.341 ms |
+| p99 per call | 0.79 ms | 0.79 ms |
+| chunks through structure starts | 7079 | 7056 |
+| calls per chunk | 0.077 | 0.093 |
+| cost per chunk | 0.030 ms | 0.032 ms |
+| share of the serial sum | 0.8% | 1.2% |
+
+The serial sum was 2.75 ms per chunk in the measured minute and the
+pool carried about 20 ms more in fill, surface and carvers, so the
+column walks are near 0.14 percent of the work a chunk costs. The
+decision rule i wrote before the number said under 2 percent closes
+it. Closed. The per-call cost is real, 341 microseconds is a lot for
+one height, and it does not matter, because a chunk asks for it a
+tenth of a time.
+
+What survives is the shape. Vanilla pays a whole `NoiseChunk`
+construction for one column and Distant Horizons pays about 5
+microseconds a sample against the bare router, seventy times less,
+and neither number is a Ferrite task: the callers are cold, and the
+rough generator is their product, not ours. The candidate list is
+empty again, this time with a row in the stage probe
+(`iterateNoiseColumn`, per call, default off) so nobody has to
+re-derive it.

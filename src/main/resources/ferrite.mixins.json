@@ -60,6 +60,7 @@
 		"FerriteDispatcherProbeMixin",
 		"ChunkStageTimingMixin",
 		"TerrainPoolTimingMixin",
+		"NoiseColumnTimingMixin",
 		"DensityVolumeTimingMixin",
 		"PerlinVolumeTimingMixin",
 		"SmearedPerlinVolumeTimingMixin",
