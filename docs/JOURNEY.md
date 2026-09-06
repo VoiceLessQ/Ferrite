@@ -2663,3 +2663,13 @@ row that stays empty because the number said so is the whole point of
 keeping the list this way.
 
 The probe stays in tree, default off, forty lines and a mixin.
+
+I wish I could do more here. I could: C2ME parallelizes this exact
+stage and gets away with it, Moonrise swaps the whole chunk system
+out from under vanilla, and both post numbers I look at with
+something close to envy on nights like this one. But rules are
+rules. Ferrite stays as true to vanilla as it can, and features
+write into neighbouring chunks, which is the determinism reason
+Mojang keeps them serial in the first place. Owning that would mean
+owning the scheduler, and I closed that door on purpose. So the envy
+is real, and so is the door.
