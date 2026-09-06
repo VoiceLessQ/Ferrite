@@ -38,6 +38,7 @@ import me.apika.apikaprobe.surface.SurfaceRuleEvaluator;
 import me.apika.apikaprobe.surface.SurfaceValidator;
 import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
 import me.apika.apikaprobe.monitor.ChunkStageTiming;
+import me.apika.apikaprobe.monitor.FeatureTiming;
 
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.CommandSourceStack;
@@ -263,7 +264,12 @@ public final class FerriteCommand {
 								.then(Commands.literal("on").executes(FerriteCommand::stageProbeOn))
 								.then(Commands.literal("off").executes(FerriteCommand::stageProbeOff))
 								.then(Commands.literal("report").executes(FerriteCommand::stageProbeReport))
-								.then(Commands.literal("reset").executes(FerriteCommand::stageProbeReset))))
+								.then(Commands.literal("reset").executes(FerriteCommand::stageProbeReset)))
+						.then(Commands.literal("features")
+								.then(Commands.literal("on").executes(FerriteCommand::featureProbeOn))
+								.then(Commands.literal("off").executes(FerriteCommand::featureProbeOff))
+								.then(Commands.literal("report").executes(FerriteCommand::featureProbeReport))
+								.then(Commands.literal("reset").executes(FerriteCommand::featureProbeReset))))
 				.then(Commands.literal("log")
 						.then(Commands.literal("monitors")
 								.then(Commands.literal("on").executes(FerriteCommand::logMonitorsOn))
@@ -1741,6 +1747,44 @@ public final class FerriteCommand {
 			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		ChunkStageTiming.reset();
 		String msg = "[ferrite/stage-probe] reset";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int featureProbeOn(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		FeatureTiming.ENABLED = true;
+		FeatureTiming.reset();
+		String msg = "[ferrite/feature-probe] enabled (samples reset; report with /ferrite probe features report)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int featureProbeOff(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		FeatureTiming.ENABLED = false;
+		String msg = "[ferrite/feature-probe] disabled";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int featureProbeReport(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		var registry = ctx.getSource().getServer().registryAccess()
+				.lookupOrThrow(net.minecraft.core.registries.Registries.PLACED_FEATURE);
+		String msg = FeatureTiming.report(registry, 40);
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int featureProbeReset(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		FeatureTiming.reset();
+		String msg = "[ferrite/feature-probe] reset";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;

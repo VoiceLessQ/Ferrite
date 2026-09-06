@@ -2604,3 +2604,51 @@ What this changes in the plan: the seeding port is gone from the list.
 What remains for noise is a float kernel path and a float-bits target
 for the validator, which was already item 3. That is a smaller 26.3
 than the one i was bracing for.
+
+## A hundred features, none of them the one (2026-09-06)
+
+The research pass left one row nobody else holds: feature placement,
+nine tenths of what is left on the serial chunk thread on 26.3. The
+idea on file was a dead-work skip in the collider-skip shape, a cheap
+check that proves a placement will do nothing before the expensive
+part runs, with an oracle at 1 in N. The measurement that decides it
+is a histogram: which placed features cost what, and how often each
+one ends without writing a block.
+
+So `/ferrite probe features` now times every `placeWithBiomeCheck`
+call by registry id and counts the true returns. Same recipe as the
+stage probe: fresh world on 26.3-pre-1, four forceloaded 256-chunk
+squares to warm, reset, four more for the measured minute. Local
+desktop, 44a9329 plus the probe.
+
+| | measured run |
+|---|---|
+| chunks decorated | 1936 |
+| placed features seen | 100 |
+| placement calls | 102,557 (53 per chunk) |
+| calls that placed something | 43.5% |
+| feature time per chunk | 1.99 ms of a 2.31 ms generateFeatures |
+| largest single feature | amethyst_geode, 8.2% |
+| top five | 35.6%, four of them stone-variant ores at 97-99% placed |
+| top ten | 57.9% |
+| time in features that never placed | 2.4% |
+
+The distribution is flat. The biggest row is a geode that places in
+3.3 percent of chunks and spends its mean on those rare placements,
+p99 6.3 ms; skipping the other 97 percent saves nothing because they
+already cost nothing. The bulk is ore veins that place almost every
+time, real block writes, no dead work in them. The candidates for a
+skip are the rows with a high call cost and a low placed rate:
+ore_iron_upper at 0.7 percent placed and 105 µs a call, coal_upper,
+the two monster rooms. Together they are 10.5 percent of feature
+time, about 0.2 ms a chunk, on a serial lane that was already under
+half of one worker on craftymc.
+
+That is the third branch of the decision table written on 2026-09-03:
+cost spread evenly, none over a third, close it. The features
+dead-work skip is not a lane. Chunkgen on the serial side is done
+until Mojang moves something again, and the pool numbers in the same
+report (doFill 8.9 ms, buildSurface 9.8 ms mean per chunk) are the
+only chunkgen figures worth re-reading on 26.3 final.
+
+The probe stays in tree, default off, forty lines and a mixin.
