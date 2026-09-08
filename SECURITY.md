@@ -38,6 +38,16 @@ released one while doing the same thing.
 
 ## Checking it yourself
 
+Every GitHub Release carries a `SHA256SUMS` file and a signed build
+provenance attestation. With the GitHub CLI installed:
+
+```
+gh attestation verify ferrite-<version>.jar --owner VoiceLessQ
+```
+
+A pass means that exact jar was produced by `build.yml` in this
+repository at the tagged commit. Nothing hand-built passes.
+
 Build from source and compare behaviour:
 
 ```
