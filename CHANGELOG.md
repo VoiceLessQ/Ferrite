@@ -7,6 +7,8 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.7.4-alpha] - 2026-09-07
+
 ### Fixed
 - **Declared loader minimum was wrong** (#17). 0.7.3 was built against
   Fabric Mixin 0.17.4, which compiles every `@Redirect` `at` as an
