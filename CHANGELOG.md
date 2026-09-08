@@ -7,6 +7,16 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Fixed
+- **Declared loader minimum was wrong** (#17). 0.7.3 was built against
+  Fabric Mixin 0.17.4, which compiles every `@Redirect` `at` as an
+  array. MixinExtras 0.5.4, bundled in Loader 0.19.3 and 0.19.4, cannot
+  read that shape and the game crashed at launch with a
+  ClassCastException on the first Entity mixin. Loader 0.19.5 bundles
+  MixinExtras 0.5.5, which reads it. The manifest now requires
+  `fabricloader >=0.19.5`, so an older loader reports a dependency
+  error instead of crashing.
+
 ## [0.7.3-alpha] - 2026-09-03
 
 ### Added
@@ -50,8 +60,9 @@ marks pre-release research builds.
   - Monitors stop timing entities while reports are off, removing
     ~100k allocations/s at horde scale. No measurable mspt change on a
     24-core desktop; the saving is GC pressure and slow-CPU time.
-- **Fabric Loader 0.19.5** in the dev and CI build. Minimum stays
-  0.18.4.
+- **Fabric Loader 0.19.5** in the dev and CI build. This entry
+  originally said the minimum stays 0.18.4; that was wrong, see the
+  Unreleased fix above.
 
 ## [Released]
 

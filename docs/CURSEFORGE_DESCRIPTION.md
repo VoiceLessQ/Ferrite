@@ -19,7 +19,7 @@ Worldgen math (noise, biomes, density functions) is ported bit-exact and validat
 ## Requirements
 
 * Minecraft 26.2 (26.1.2 and 1.21.11 builds available as older releases)
-* Java 25, Fabric Loader 0.19.3+, Fabric API 0.154.2+26.2
+* Java 25, Fabric Loader 0.19.5+, Fabric API 0.154.2+26.2
 * Singleplayer and multiplayer
 
 ## Platforms
