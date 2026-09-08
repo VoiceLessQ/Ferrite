@@ -162,10 +162,11 @@ jobs:
   # Bypass: don't push a tag and this job never runs. Manual releases
   # via the web UI still work the same way.
   #
-  # Modrinth and CurseForge uploads run only when the repo variable
+  # The Modrinth upload runs only when the repo variable
   # PUBLISH_MOD_PLATFORMS is "true" (gh variable set PUBLISH_MOD_PLATFORMS
-  # --body true). Leave it unset for GitHub-only releases. Tokens live in
-  # the MODRINTH_TOKEN and CURSEFORGE_TOKEN secrets.
+  # --body true). Leave it unset for GitHub-only releases. Token lives in
+  # the MODRINTH_TOKEN secret. CurseForge is skipped on purpose: it does
+  # not accept mods that bundle native libraries.
   #
   # Each jar gets a SHA256SUMS entry attached to the release and a signed
   # build provenance attestation. Verify a download with
@@ -203,18 +204,16 @@ jobs:
             jars/SHA256SUMS
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
           fail_on_unmatched_files: true
-      - name: publish to modrinth and curseforge
+      - name: publish to modrinth
         if: vars.PUBLISH_MOD_PLATFORMS == 'true'
         uses: Kira-NT/mc-publish@v3
         with:
           modrinth-id: c2DHmFvV
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          curseforge-id: 1518238
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
           files: jars/!(*-sources).jar
           name: "Ferrite ${{ github.ref_name }}"
           changelog-file: docs/CURSEFORGE_DESCRIPTION.md
           loaders: fabric
           dependencies: |
-            fabric-api(required){modrinth:P7dR8mSH}{curseforge:306612}
+            fabric-api(required){modrinth:P7dR8mSH}
           fail-mode: fail
