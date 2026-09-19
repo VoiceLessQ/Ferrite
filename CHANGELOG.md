@@ -7,6 +7,8 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.7.4-alpha] - 2026-09-19
+
 ### Changed
 - **Targets Minecraft 26.3.** Built against 26.3 final with Fabric API
   0.161.0 and Loader 0.19.5. The density function stack that 26.3

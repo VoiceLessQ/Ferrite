@@ -1,7 +1,7 @@
 
 ## Ferrite
 
-A performance mod for Minecraft 26.2 (Fabric, JDK 25). Java handles integration and mixins; native Rust does the heavy per-tick math where crossing the JNI boundary actually pays. Server-side compatible: install on a server, players don't need it.
+A performance mod for Minecraft 26.3 (Fabric, JDK 25). Java handles integration and mixins; native Rust does the heavy per-tick math where crossing the JNI boundary actually pays. Server-side compatible: install on a server, players don't need it.
 
 **Headline numbers, all measured on real worlds:**
 
@@ -12,14 +12,14 @@ A performance mod for Minecraft 26.2 (Fabric, JDK 25). Java handles integration 
 * **Idle sign and furnace tickers suppressed** (default on): ~70% block-entity tick reduction at scale, self-healing, mod-subclass safe.
 * **Pre-gen and predictive chunk forcing** (opt-in): 90-118 chunks/s spawn pre-generation with resume, and a generation ring that leads your flight path, so terrain is usually already generated ahead of you.
 
-Worldgen math (noise, biomes, density functions) is ported bit-exact and validated every release; parity checks run 63/63 noise and 50/50 density on 26.2.
+Worldgen math (noise, biomes, density functions) is ported bit-exact and validated every release; parity checks run 63/63 noise and 50/50 density on 26.2; on 26.3 the density validator is pending the rewrite and noise and biome checks still pass.
 
 **Every 5 seconds the mod logs where your tick time goes**, so optimization targets real bottlenecks. Runtime toggle: `/ferrite log monitors off`.
 
 ## Requirements
 
-* Minecraft 26.2 (26.1.2 and 1.21.11 builds available as older releases)
-* Java 25, Fabric Loader 0.19.5+, Fabric API 0.154.2+26.2
+* Minecraft 26.3 (26.2, 26.1.2 and 1.21.11 builds available as older releases)
+* Java 25, Fabric Loader 0.19.5+, Fabric API 0.161.0+26.3
 * Singleplayer and multiplayer
 
 ## Platforms
