@@ -214,6 +214,7 @@ jobs:
           name: "Ferrite ${{ github.ref_name }}"
           changelog-file: docs/CURSEFORGE_DESCRIPTION.md
           loaders: fabric
+          game-versions: "26.3"
           dependencies: |
             fabric-api(required){modrinth:P7dR8mSH}
           fail-mode: fail
