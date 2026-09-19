@@ -155,9 +155,9 @@ jobs:
           path: build/libs/
 
   # Auto-publishes a GitHub Release when a tag matching v* is pushed.
-  # Body is taken from docs/CURSEFORGE_DESCRIPTION.md at the tag's commit
-  # (always describes what shipped at that version). Pre-release flag is
-  # auto-set if the tag name contains "alpha" or "beta".
+  # Body is the newest versioned section of CHANGELOG.md at the tag's
+  # commit (the first "## [x.y.z]" block, Unreleased skipped). Pre-release
+  # flag is auto-set if the tag name contains "alpha" or "beta".
   #
   # Bypass: don't push a tag and this job never runs. Manual releases
   # via the web UI still work the same way.
@@ -180,8 +180,14 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - name: checkout (need docs/CURSEFORGE_DESCRIPTION.md at tag commit)
+      - name: checkout (need CHANGELOG.md at tag commit)
         uses: actions/checkout@v4
+      - name: extract release notes from CHANGELOG.md
+        shell: bash
+        run: |
+          awk '/^## \[[0-9]/{if(f)exit; f=1} f' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
+          cat release-notes.md
       - name: download jar artifact
         uses: actions/download-artifact@v4
         with:
@@ -198,7 +204,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "Ferrite ${{ github.ref_name }}"
-          body_path: docs/CURSEFORGE_DESCRIPTION.md
+          body_path: release-notes.md
           files: |
             jars/ferrite-*.jar
             jars/SHA256SUMS
@@ -212,7 +218,7 @@ jobs:
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
           files: jars/!(*-sources).jar
           name: "Ferrite ${{ github.ref_name }}"
-          changelog-file: docs/CURSEFORGE_DESCRIPTION.md
+          changelog-file: release-notes.md
           loaders: fabric
           game-versions: "26.3"
           dependencies: |
