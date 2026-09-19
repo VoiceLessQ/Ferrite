@@ -7,6 +7,17 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Changed
+- **Targets Minecraft 26.3.** Built against 26.3 final with Fabric API
+  0.161.0 and Loader 0.19.5. The density function stack that 26.3
+  rewrote stays gated out at build time, which changes nothing at
+  runtime since every Rust chunkgen path was already default off.
+  Measured on 26.3: a 1021-zombie nether farm on a 4-core dedicated
+  server holds 20 TPS at 17 ms/tick mean over 3.5 min, and cramming
+  reads 10.3 ms against 16.4 ms with the Rust path off at 1106
+  zombies on a desktop dedicated server. Entity query and collider
+  oracles report zero mismatches on both.
+
 ### Fixed
 - **Declared loader minimum was wrong** (#17). 0.7.3 was built against
   Fabric Mixin 0.17.4, which compiles every `@Redirect` `at` as an
