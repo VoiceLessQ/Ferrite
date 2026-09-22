@@ -1,15 +1,15 @@
 ## Ferrite
 
-**What you get:** a performance mod for Minecraft 26.2. It is a Fabric (Java) mod that calls into native Rust via JNI for the hot paths. Java handles Minecraft integration and mixins; Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary.
+**What you get:** a performance mod for Minecraft 26.3. It is a Fabric (Java) mod that calls into native Rust via JNI for the hot paths. Java handles Minecraft integration and mixins; Rust does the heavy per-tick math where the win is big enough to justify crossing the JNI boundary.
 
 **Working today:**
 
 - **Cramming (active by default, toggle with `/ferrite cramming on|off|status`).** A Rust reimplementation of the mob-vs-mob cramming loop. Cuts the server's entity-tick cost by roughly 65% at high mob density. It applies to every MobEntity subclass, so a villager trading hall with 50+ villagers gets the same spatial-hash win as a mob farm, and you keep stable TPS standing next to a 1000+ mob farm. Vanilla 1:1 parity: same push math, same `isPassengerOfSameVehicle` skip, same cramming-damage application (gated by `maxEntityCramming` gamerule and per-entity 1-in-4 random, identical to vanilla). For unbounded farms, set `/gamerule maxEntityCramming 0` like you would in vanilla; Ferrite keeps that scenario at 20 TPS. To A/B the perf claim, `/ferrite cramming off` falls back to vanilla without a restart.
+- **Entity query index and collider skip (active by default since 0.7.3).** A spatial index answers entity lookups in front of vanilla, and the collider skip fires only when the answer is provably empty. A 1022-zombie farm on a shared 4-core server went from 15.5 TPS at 64 ms/tick to a locked 20 TPS at 31 ms, with zero mismatches across 10.8M oracle checks; the oracle keeps sampling at 1 in 16 during alpha. Kill switches: `-Dferrite.entityquery.cache=false` and `-Dferrite.entityquery.colliderskip=false`.
 - **Redstone (`/ferrite redstone ac on`, default off).** Adapts [Space Walker's Alternate Current](https://github.com/SpaceWalkerRS/alternate-current) algorithm into Ferrite. On the reference lag machine: ~15x fewer wire cascades and ~4x gate throughput at equivalent server load, with zero mismatches across ~150,000 oracle checks. No world migration needed; turn it on per world with the command. It stays off by default so contraptions tuned to vanilla wire-update order behave identically out of the box. While AC is on, each cascade's power propagation also runs through a Rust kernel (one batched JNI call per cascade) for another ~30% wire-cost reduction on heavy contraptions; `/ferrite redstone bfs off` disables that part.
 - **Sign + furnace ticker hygiene (active by default, no toggle).** Vanilla registers a `BlockEntityTicker` for every sign and every furnace at chunk load and ticks all of them every server tick, even though the body does nothing useful 99%+ of the time (no one is editing the sign, the furnace is empty). Ferrite suppresses the ticker for vanilla `SignBlockEntity` / `HangingSignBlockEntity` with no active editor (re-registers the moment a player opens the edit screen) and for vanilla `FurnaceBlockEntity` / `BlastFurnaceBlockEntity` / `SmokerBlockEntity` when empty, not burning, and with no recipe in progress (re-registers on `setStack`, so a hopper insert wakes the furnace immediately). Measured: ~70% BE-tick cost reduction at 961 placed signs (0.20 ms to 0.06 ms / tick), and zero measurable BE-tick cost at 500 idle furnaces within the measurement noise floor. A strict-class check preserves mod subclass behavior, so modded sign or furnace types with non-trivial tick bodies keep their tickers. Self-heals from persisted-editor state within 2 ticks of chunk load.
 - **Hopper extract hint (active by default, no toggle).** Skip-empty-prefix on extract: when a hopper pulls from a partially-drained source (a chest with the front slots emptied), the loop starts at the first known non-empty slot instead of slot 0. Saves ~23 µs/call at avgStartIdx=16, up to ~110 µs/call at avgStartIdx=53 (~85% reduction). The vanilla 1-item-per-fire contract is preserved: same cooldown=8, same comparator output formula, same hopper-to-hopper chain timing. Parity was proven across 450+ validator-checked extracts before release; opt-in validator at `-Dferrite.hopper.extract.validate=true`. See [docs/HOPPER_HIGHWAY.md](docs/HOPPER_HIGHWAY.md).
 - **Hopper highway (opt-in, default off).** `/ferrite hopper highway on` activates per-slot independent cooldowns plus round-robin destination routing in `transfer()`. Each of a hopper's 5 slots fires at vanilla 8-tick speed, but staggered, so a single hopper moves up to 5 items per 8 ticks instead of 1. Measured ~3.1x chain throughput under steady-state flow with `tickViolations=0` and `staggerCollapses=0` across 20K+ validator-checked fires. Items distribute across all 5 destination slots instead of always landing in slot 0, so chain hoppers visibly use lanes 1-4 in their UIs. It is default off because aggregate throughput is a 5x rate change that downstream redstone tuned to vanilla pace can saturate; turn it on for hopper-heavy storage where speed wins, leave it off for sorters timed to vanilla 8-tick clocks.
-- **Surface rule dispatcher (opt-in, default off).** `/ferrite surface dispatch on` runs surface rule evaluation in Rust with a batched per-column heightmap update. It currently measures ~13.4 ms ON vs ~6.4 ms vanilla baseline, a ~7 ms structural gap; useful for A/B measurement but not recommended for production until the gap closes. Parity-clean (100% match across 23K+ chunks). See [Commands](#commands) below for the full setup sequence.
 
 Every 5 seconds the mod also logs where your game is spending time, so the next optimization can target the next real bottleneck.
 
@@ -17,7 +17,7 @@ Every 5 seconds the mod also logs where your game is spending time, so the next 
 
 ## Status: consolidation cycle
 
-Six features are live across cramming, redstone, hoppers, world-creation pre-gen, chunkgen baselines, and density functions. The next stretch is not adding more, it is deepening what already works. Some internals may change as we revisit the assumptions baked in during their first ports, and a few default-off paths exist because their current shape did not beat vanilla and want a structural rethink. User-facing toggles and parity validators stay; the implementations underneath get better.
+Six features are live across cramming, entity queries, redstone, hoppers, world-creation pre-gen, and chunkgen baselines. The next stretch is not adding more, it is deepening what already works. Some internals may change as we revisit the assumptions baked in during their first ports, and a few default-off paths exist because their current shape did not beat vanilla and want a structural rethink. User-facing toggles and parity validators stay; the implementations underneath get better.
 
 The hopper highway and world-creation pre-gen are default-off opt-ins. They work, and their oracles and shadow-validators show parity, but they need real-server validation across player setups before flipping default-on. Operators who enable them are helping validate the current shape, not guinea-pigging an unknown.
 
@@ -112,35 +112,16 @@ All Ferrite toggles live under `/ferrite`. Default state is in the rightmost col
 | `/ferrite redstone bfs-min <int>` | Minimum cascade size (in wires) before dispatching through Rust. Raise this to skip small cascades where JNI overhead exceeds the win. | 1 |
 | `/ferrite redstone bench` | Run a built-in lag-machine benchmark in the current world. | n/a |
 
-### Surface dispatcher (opt-in, debug / measurement)
+### Surface dispatcher (inactive on 26.x builds)
 
-The surface rule dispatcher runs vanilla's `BlockStateRule.tryApply` in a Rust evaluator with a batched heightmap update. Default OFF, currently ~7 ms above vanilla baseline (see lead). Useful for A/B measurement and as a foundation for future architectural work. Setup sequence:
-
-```
-/ferrite surface validate            # compile this world's surface rule into a bytecode tree
-/ferrite surface dispatch on         # turn the dispatcher on (requires a tree from validate)
-... fly through fresh chunks ...
-/ferrite surface validate-stats      # print rolling parity + perf statistics
-/ferrite surface dispatch off        # back to vanilla
-/ferrite surface validate-off        # release the tree
-```
-
-Full reference:
-
-| Command | Effect |
-|---|---|
-| `/ferrite surface validate` | Compile the active world's surface rule into a bytecode tree. Required before `dispatch on` can do anything. |
-| `/ferrite surface validate-off` | Clear the installed tree. |
-| `/ferrite surface validate-stats` | Print rolling validator stats (sample count, vanilla-vs-eval match %, java-vs-rust agreement %). |
-| `/ferrite surface dispatch on\|off\|status` | Toggle the batched dispatcher. |
-| `/ferrite surface heightmap-parity on\|off\|stats\|reset` | Diff the batched heightmap update against vanilla's per-write `trackUpdate` reference. Regression check; ~1 ms/chunk overhead when on. Validated 100% match across 23K+ chunks; turn on if you have changed surface rules and want to confirm the predicate-preserving assumption still holds. |
+The `/ferrite surface` commands still register on 26.x builds, but they change nothing. The dispatcher lost its hooks in the 26.1 port, when vanilla restructured the surface rule classes. When it was active it was parity-clean across 23K+ chunks but slower than vanilla, ~13.4 ms against ~6.4 ms, so it stayed off by default.
 
 ### Other opt-ins (default off, measurement / experimental)
 
 | Command / flag | Effect |
 |---|---|
-| `/ferrite aquifer rust on\|off\|status` | Toggle the Rust aquifer port. Currently disabled, with a fine-grain parity gap against vanilla unresolved. |
-| `-Dferrite.bulkChunkDensity=true` (JVM flag) | Enable the bulk chunk density Rust kernel for benchmarking. Confirmed JIT-wall regression at realistic load; use for measurement only. |
+| `/ferrite aquifer rust on\|off\|status` | Toggle the Rust aquifer port. Currently disabled, with a fine-grain parity gap against vanilla unresolved. Not in the 26.3 build. |
+| `-Dferrite.bulkChunkDensity=true` (JVM flag) | Enable the bulk chunk density Rust kernel for benchmarking. Confirmed JIT-wall regression at realistic load; use for measurement only. Not in the 26.3 build. |
 
 ### What runs invisibly (no toggle needed)
 
@@ -152,7 +133,7 @@ This runs for everyone with no opt-in required, because it purely reduces overhe
 
 ## What's still in progress
 
-* **Chunk generation.** The Rust bulk-compute kernel measured ~7x faster than vanilla's noise-sync on equivalent work. The speedup is real but blocked at the density-function layer: vanilla evaluates DFs interleaved with interpolation inside `NoiseChunkGenerator` (marked `final`), so there is no clean intermediate cell-corner grid to hand to Rust without reimplementing the full DF tree. We pivoted to surface rule batch evaluation, which runs after density resolves with a clean boundary and still captures a realistic end-to-end chunkgen win.
+* **Chunk generation.** In isolation the Rust worldgen kernels compute faster than vanilla. In a real chunk they come out slower: the JNI handoff costs time, and vanilla caches and inlines the same work. That is why every Rust chunkgen path is off by default. 26.3 rewrote density functions, which leaves the density and aquifer ports out of the 26.3 build until they are redone.
 * **`adjustMovementForCollisions` port.** Attempted, then set aside. The AABB sweep math runs correctly in Rust, but snapshot materialization cost exceeded the sweep savings at realistic mob counts. Retained as disabled infrastructure for a future invalidation-cache redesign.
 
 ---
@@ -164,7 +145,7 @@ If you run mob farms, crowded multiplayer servers, or singleplayer worlds with l
 1. Install Ferrite + Fabric API
 2. Play normally for 10+ minutes
 3. Open `.minecraft/logs/latest.log`, search for `[ferrite]`
-4. Share representative `[cramming-dispatch]` and `[movement-internals]` lines in a GitHub issue or CurseForge comment
+4. Share representative `[cramming-dispatch]` and `[movement-internals]` lines in a GitHub issue or discussion
 
 Low-end hardware (4-core CPU, integrated graphics) is especially useful: the `[chunkgen]` and `[client-lag]` logs on that profile decide what gets optimized next.
 
@@ -172,9 +153,9 @@ Low-end hardware (4-core CPU, integrated graphics) is especially useful: the `[c
 
 ## Requirements
 
-- Minecraft 26.2 (JDK 25 required, provided automatically with most modern launchers); 26.1.2 and 1.21.11 builds available as older releases
-- Fabric Loader 0.19.3+
-- Fabric API 0.154.2+26.2 or newer
+- Minecraft 26.3 (JDK 25 required, provided automatically with most modern launchers); 26.2, 26.1.2 and 1.21.11 builds available as older releases
+- Fabric Loader 0.19.5+
+- Fabric API 0.161.0+26.3 or newer
 - Works in **singleplayer and multiplayer**
 - **Server-side compatible**, can be installed on a server without requiring players to have the mod
 
@@ -187,7 +168,7 @@ A field-proven recipe for small servers (Raspberry Pi class, 2-4 GB RAM), based 
 1. **Pre-generate the world on a stronger machine.** Run Ferrite's pre-gen (`/ferrite pregen <radius>`) on your desktop, then copy the world folder to the small server. The weak CPU then reads finished chunks from disk instead of generating them. Re-running pre-gen skips already-generated chunks, so topping up the border later is cheap. If you must pre-gen on the small server itself while players are online, lower the concurrency with `/ferrite pregen inflight 50` (or boot with `-Dferrite.pregen.inflight=50`) and restore 200 for dedicated pre-gen sessions; in a constrained 4-core test the 200 default generated fastest, but that was measured without players competing for the cores. Real-hardware reports on this trade-off are welcome.
 2. **Let a chunk-parallelism mod handle stragglers.** For players wandering past the pre-generated border, a mod like C2ME spreads the remaining generation across cores. Ferrite shapes what gets requested; that mod makes the requests execute faster. The two do not overlap. (One caveat: with C2ME loaded, Ferrite's `/ferrite density validate` diagnostic reports false failures. Gameplay is unaffected.)
 3. **Use a small heap and a lean JVM.** The reference setup runs OpenJ9 on DietPi at well under a 2 GB footprint. On HotSpot with a small heap, prefer ZGC (`-XX:+UseZGC`): in a 4-core / 2 GB test at 1022 zombies, G1 froze for up to 640 ms per collection while ZGC held a flat 20 TPS with worst ticks around 60 ms. On heaps of 3 GB or less, Ferrite automatically silences its periodic monitor logging so slow SD-card I/O is not paying for log lines; `/ferrite log monitors on` re-enables it when you want to collect numbers.
-4. **Keep an eye on entities, not chunks.** On weak CPUs the tick budget goes to mobs long before terrain. Ferrite's default-on features (cramming, block-entity ticker gates, hopper hint) target exactly that, and the `[entity-tick]` log line tells you where the remaining time goes.
+4. **Keep an eye on entities, not chunks.** On weak CPUs the tick budget goes to mobs long before terrain. Ferrite's default-on features (cramming, the entity query index, block-entity ticker gates, hopper hint) target exactly that, and the `[entity-tick]` log line tells you where the remaining time goes.
 
 Ferrite's own memory cost is negligible: a heap census on a loaded world (JDK 25, post-GC class histogram) measured about 3.4 KB of live Ferrite objects on the Java heap; adding class metadata, the Rust worldgen state (noise tables, biome tree, density bytecode) and the per-tick native buffers (which scale with mob count, roughly 50 KB per 1000 mobs) puts the total on the order of a few megabytes. A field report measured the same conclusion from the other side: swapping a popular alternative for the Ferrite + C2ME pairing freed about 400 MB on a 2 GB Raspberry Pi.
 
@@ -212,7 +193,7 @@ The native library is bundled for Windows, Linux (x86_64 and aarch64), and macOS
 
 ## Building from source
 
-If you'd rather build the jar yourself than download it from Modrinth or CurseForge:
+If you'd rather build the jar yourself than download it from Modrinth or GitHub releases:
 
 **Prerequisites**
 

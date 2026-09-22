@@ -10,25 +10,19 @@ marks pre-release research builds.
 ## [0.7.4-alpha] - 2026-09-19
 
 ### Changed
-- **Targets Minecraft 26.3.** Built against 26.3 final with Fabric API
-  0.161.0 and Loader 0.19.5. The density function stack that 26.3
-  rewrote stays gated out at build time, which changes nothing at
-  runtime since every Rust chunkgen path was already default off.
-  Measured on 26.3: a 1021-zombie nether farm on a 4-core dedicated
-  server holds 20 TPS at 17 ms/tick mean over 3.5 min, and cramming
-  reads 10.3 ms against 16.4 ms with the Rust path off at 1106
-  zombies on a desktop dedicated server. Entity query and collider
-  oracles report zero mismatches on both.
+- **Targets Minecraft 26.3**, built against Fabric API 0.161.0 and
+  Loader 0.19.5. The Rust density ports stay out of this build until
+  they are redone for the new 26.3 density code. They were off by
+  default, so nothing changes at runtime. With 1021 zombies on a
+  4-core dedicated server, cramming on runs 15.9 ms/tick against 26.2
+  off, 5 min per arm. Both settings hold 20 TPS, and the entity query
+  oracles report zero mismatches.
 
 ### Fixed
-- **Declared loader minimum was wrong** (#17). 0.7.3 was built against
-  Fabric Mixin 0.17.4, which compiles every `@Redirect` `at` as an
-  array. MixinExtras 0.5.4, bundled in Loader 0.19.3 and 0.19.4, cannot
-  read that shape and the game crashed at launch with a
-  ClassCastException on the first Entity mixin. Loader 0.19.5 bundles
-  MixinExtras 0.5.5, which reads it. The manifest now requires
-  `fabricloader >=0.19.5`, so an older loader reports a dependency
-  error instead of crashing.
+- **Crash at launch on Loader 0.19.3 and 0.19.4** (#17). Both bundle
+  MixinExtras 0.5.4, which cannot read the mixins in this build.
+  Ferrite now requires Loader 0.19.5, so an older loader shows a
+  dependency error instead.
 
 ## [0.7.3-alpha] - 2026-09-03
 
