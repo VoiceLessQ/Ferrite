@@ -65,6 +65,9 @@ public class ExampleMod implements ModInitializer {
 						? "on" : (me.apika.apikaprobe.monitor.MonitorLog.SMALL_HEAP
 								? "off(small-heap)" : "off"));
 
+		if (Boolean.getBoolean("ferrite.bulkChunkDensity")) {
+			LOGGER.warn("[chunkgen] -Dferrite.bulkChunkDensity has no effect on 26.3: the kernel is gated out with the density rewrite");
+		}
 		TpsMonitor.register();
 		// NoiseStageMonitor and AquiferMonitor must register BEFORE ChunkGenMonitor
 		// so their tick listeners fire first and can read sync-noise counters

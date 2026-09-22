@@ -174,9 +174,9 @@ public final class FerriteCommand {
 										.executes(ctx -> biomePredict(ctx,
 												IntegerArgumentType.getInteger(ctx, "radius")))))
 						.then(Commands.literal("route")
-								.then(Commands.literal("on").executes(FerriteCommand::biomeRouteOn))
-								.then(Commands.literal("off").executes(FerriteCommand::biomeRouteOff))
-								.then(Commands.literal("status").executes(FerriteCommand::biomeRouteStatus))))
+								.then(Commands.literal("on").executes(FerriteCommand::biomeRouteGated))
+								.then(Commands.literal("off").executes(FerriteCommand::biomeRouteGated))
+								.then(Commands.literal("status").executes(FerriteCommand::biomeRouteGated))))
 				.then(Commands.literal("prewarm")
 						.then(Commands.literal("on").executes(FerriteCommand::prewarmOn))
 						.then(Commands.literal("off").executes(FerriteCommand::prewarmOff))
@@ -237,9 +237,9 @@ public final class FerriteCommand {
 						.then(Commands.literal("dump-biomes").executes(FerriteCommand::surfaceDumpBiomes))
 						.then(Commands.literal("dump").executes(FerriteCommand::surfaceDump))
 						.then(Commands.literal("dispatch")
-								.then(Commands.literal("on").executes(FerriteCommand::enableSurfaceDispatch))
-								.then(Commands.literal("off").executes(FerriteCommand::disableSurfaceDispatch))
-								.then(Commands.literal("status").executes(FerriteCommand::statusSurfaceDispatch)))
+								.then(Commands.literal("on").executes(FerriteCommand::surfaceGated))
+								.then(Commands.literal("off").executes(FerriteCommand::surfaceGated))
+								.then(Commands.literal("status").executes(FerriteCommand::surfaceGated)))
 						.then(Commands.literal("heightmap-parity")
 								.then(Commands.literal("on").executes(FerriteCommand::heightmapParityOn))
 								.then(Commands.literal("off").executes(FerriteCommand::heightmapParityOff))
@@ -247,13 +247,13 @@ public final class FerriteCommand {
 								.then(Commands.literal("reset").executes(FerriteCommand::heightmapParityReset))))
 				.then(Commands.literal("aquifer")
 						.then(Commands.literal("rust")
-								.then(Commands.literal("on").executes(FerriteCommand::aquiferRustOn))
-								.then(Commands.literal("off").executes(FerriteCommand::aquiferRustOff))
-								.then(Commands.literal("status").executes(FerriteCommand::aquiferRustStatus)))
+								.then(Commands.literal("on").executes(FerriteCommand::aquiferGated))
+								.then(Commands.literal("off").executes(FerriteCommand::aquiferGated))
+								.then(Commands.literal("status").executes(FerriteCommand::aquiferGated)))
 						.then(Commands.literal("parity")
-								.then(Commands.literal("on").executes(FerriteCommand::aquiferParityOn))
-								.then(Commands.literal("off").executes(FerriteCommand::aquiferParityOff))
-								.then(Commands.literal("reset").executes(FerriteCommand::aquiferParityReset))))
+								.then(Commands.literal("on").executes(FerriteCommand::aquiferGated))
+								.then(Commands.literal("off").executes(FerriteCommand::aquiferGated))
+								.then(Commands.literal("reset").executes(FerriteCommand::aquiferGated))))
 				.then(Commands.literal("probe")
 						.then(Commands.literal("dispatcher")
 								.then(Commands.literal("on").executes(FerriteCommand::dispatcherProbeOn))
@@ -1613,6 +1613,22 @@ public final class FerriteCommand {
 	}
 
 	// Bulk density ports are gated out until the 26.3 DF port lands.
+	// 26.3 build: these toggles have no hook, so say so instead of flipping a dead flag.
+	private static int surfaceGated(CommandContext<CommandSourceStack> ctx) {
+		sendFeedback(ctx, "[surface-dispatch] inactive on 26.x: the dispatcher lost its hooks in the 26.1 port (efae14b); vanilla surface rules run", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int aquiferGated(CommandContext<CommandSourceStack> ctx) {
+		sendFeedback(ctx, "[aquifer-rust] unavailable on 26.3: the aquifer port is gated out with the density rewrite; vanilla aquifers run", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int biomeRouteGated(CommandContext<CommandSourceStack> ctx) {
+		sendFeedback(ctx, "[biome-route] inactive on 26.3: the router mixin has no target in this build; vanilla biome lookup runs", false);
+		return Command.SINGLE_SUCCESS;
+	}
+
 	private static int noiseRustGated(CommandContext<CommandSourceStack> ctx) {
 		sendFeedback(ctx, "[noise-rust] unavailable on 26.3: density function ports are gated pending the 26.3 rewrite port", false);
 		return Command.SINGLE_SUCCESS;
