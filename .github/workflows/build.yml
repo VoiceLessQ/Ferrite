@@ -50,6 +50,9 @@ jobs:
         run: |
           rustup component add clippy
           cargo clippy --release --target x86_64-unknown-linux-gnu --manifest-path=rust/mod/Cargo.toml
+      - name: cargo test (parity fixtures)
+        shell: bash
+        run: cargo test --release --target x86_64-unknown-linux-gnu --manifest-path=rust/mod/Cargo.toml
       - name: cargo build (x86_64-unknown-linux-gnu)
         shell: bash
         run: cargo build --release --target x86_64-unknown-linux-gnu --manifest-path=rust/mod/Cargo.toml
@@ -118,6 +121,14 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v4
+      - name: declared loader floor covers the compile loader (#17)
+        shell: bash
+        run: |
+          compile=$(sed -n 's/^loader_version=//p' gradle.properties)
+          floor=$(sed -n 's/.*"fabricloader": *">=\([0-9.]*\)".*/\1/p' src/main/resources/fabric.mod.json)
+          echo "compile loader $compile, declared floor >=$floor"
+          test -n "$compile" && test -n "$floor"
+          test "$(printf '%s\n' "$compile" "$floor" | sort -V | head -1)" = "$compile" || { echo "::error::fabricloader floor $floor is below loader_version $compile"; exit 1; }
       - name: validate gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
       - name: setup jdk 25
@@ -156,7 +167,9 @@ jobs:
 
   # Auto-publishes a GitHub Release when a tag matching v* is pushed.
   # Body is the newest versioned section of CHANGELOG.md at the tag's
-  # commit (the first "## [x.y.z]" block, Unreleased skipped). Pre-release
+  # commit (the first "## [x.y.z]" block, Unreleased skipped). The job
+  # fails unless the tag is v<mod_version> and that block is the same
+  # version without the +mc suffix. Pre-release
   # flag is auto-set if the tag name contains "alpha" or "beta".
   #
   # Bypass: don't push a tag and this job never runs. Manual releases
@@ -180,13 +193,19 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - name: checkout (need CHANGELOG.md at tag commit)
+      - name: checkout (need CHANGELOG.md and gradle.properties at tag commit)
         uses: actions/checkout@v4
-      - name: extract release notes from CHANGELOG.md
+      - name: release metadata (tag, changelog section, game version)
+        id: meta
         shell: bash
         run: |
+          ver=$(sed -n 's/^mod_version=//p' gradle.properties)
+          test "v$ver" = "$GITHUB_REF_NAME" || { echo "::error::tag $GITHUB_REF_NAME does not match mod_version $ver"; exit 1; }
           awk '/^## \[[0-9]/{if(f)exit; f=1} f' CHANGELOG.md > release-notes.md
-          test -s release-notes.md
+          head -1 release-notes.md | grep -qF "## [${ver%%+*}]" || { echo "::error::newest CHANGELOG.md section is not ${ver%%+*}"; exit 1; }
+          mc=$(sed -n 's/^minecraft_version=//p' gradle.properties)
+          test -n "$mc"
+          echo "mc=$mc" >> "$GITHUB_OUTPUT"
           cat release-notes.md
       - name: download jar artifact
         uses: actions/download-artifact@v4
@@ -220,7 +239,7 @@ jobs:
           name: "Ferrite ${{ github.ref_name }}"
           changelog-file: release-notes.md
           loaders: fabric
-          game-versions: "26.3"
+          game-versions: ${{ steps.meta.outputs.mc }}
           dependencies: |
             fabric-api(required){modrinth:P7dR8mSH}
           fail-mode: fail
