@@ -7,6 +7,14 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Fixed
+- **Dead toggles now say so.** `/ferrite surface dispatch`,
+  `/ferrite aquifer rust`, `/ferrite aquifer parity` and
+  `/ferrite biome route` have had no hook since the 26.x ports, but
+  still reported success. They now answer that they are inactive on
+  this build and vanilla runs. `-Dferrite.bulkChunkDensity=true` logs
+  a warning at boot for the same reason.
+
 ## [0.7.4-alpha] - 2026-09-19
 
 ### Changed
