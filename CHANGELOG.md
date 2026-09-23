@@ -13,9 +13,10 @@ marks pre-release research builds.
   that places the same blocks with the same random draws as vanilla.
   On a 24-core desktop, ore placement takes 12 to 17% less time and a
   5041-chunk pregen finishes 2.6 to 5% sooner. A built-in oracle
-  replays vanilla on a copy for 1 in 64 veins and logs any difference;
-  across 1.26M checked veins in the overworld and nether it found
-  none. `/ferrite ore report` shows the counters.
+  replays vanilla on a copy for 1 in 64 veins and logs any difference.
+  Checking every vein instead, 1.5M of them on a fresh world across
+  the overworld and nether, found none. `/ferrite ore report` shows
+  the counters.
 
 ### Fixed
 - **Biome validator counts exact ties as ties.** When two biomes sit
