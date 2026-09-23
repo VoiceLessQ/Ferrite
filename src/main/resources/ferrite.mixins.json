@@ -61,6 +61,8 @@
 		"ChunkStageTimingMixin",
 		"TerrainPoolTimingMixin",
 		"FeaturePlacerTimingMixin",
+		"OreFeatureMixin",
+		"WorldGenRegionAccessor",
 		"DensityVolumeTimingMixin",
 		"PerlinVolumeTimingMixin",
 		"SmearedPerlinVolumeTimingMixin",

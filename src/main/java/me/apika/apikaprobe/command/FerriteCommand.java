@@ -19,6 +19,7 @@ import me.apika.apikaprobe.worldgen.chunk.PregenDriver;
 import me.apika.apikaprobe.worldgen.chunk.PregenProgressListener;
 import me.apika.apikaprobe.entity.CrammingDispatcher;
 import me.apika.apikaprobe.worldgen.DensityParity;
+import me.apika.apikaprobe.worldgen.OreKernel;
 import me.apika.apikaprobe.bridge.ExampleMod;
 import me.apika.apikaprobe.worldgen.RustAquiferDispatch;
 import me.apika.apikaprobe.worldgen.RustBiomeRouter;
@@ -182,6 +183,15 @@ public final class FerriteCommand {
 						.then(Commands.literal("off").executes(FerriteCommand::prewarmOff))
 						.then(Commands.literal("status").executes(FerriteCommand::prewarmStatus))
 						.then(Commands.literal("clear").executes(FerriteCommand::prewarmClear)))
+				.then(Commands.literal("ore")
+						.then(Commands.literal("off").executes(ctx -> oreMode(ctx, OreKernel.OFF)))
+						.then(Commands.literal("scan").executes(ctx -> oreMode(ctx, OreKernel.SCAN)))
+						.then(Commands.literal("full").executes(ctx -> oreMode(ctx, OreKernel.FULL)))
+						.then(Commands.literal("oracle")
+								.then(Commands.argument("n", IntegerArgumentType.integer(0, 1000000))
+										.executes(FerriteCommand::oreOracle)))
+						.then(Commands.literal("report").executes(FerriteCommand::oreReport))
+						.then(Commands.literal("reset").executes(FerriteCommand::oreReset)))
 				.then(Commands.literal("chunkforce")
 						.then(Commands.literal("on").executes(FerriteCommand::chunkForceOn))
 						.then(Commands.literal("off").executes(FerriteCommand::chunkForceOff))
@@ -1728,6 +1738,41 @@ public final class FerriteCommand {
 			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		String msg = FerriteDispatcherProbe.diagSummary();
 		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int oreMode(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx, int mode) {
+		OreKernel.mode = mode;
+		String msg = "[ferrite/ore] mode=" + OreKernel.modeName(mode) + " (oracle 1/" + OreKernel.oracleRate + ")";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int oreOracle(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		OreKernel.oracleRate = IntegerArgumentType.getInteger(ctx, "n");
+		String msg = "[ferrite/ore] oracle 1/" + OreKernel.oracleRate + " (0 = off)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int oreReport(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		String msg = OreKernel.report();
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int oreReset(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		OreKernel.reset();
+		String msg = "[ferrite/ore] counters reset";
+		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;
 	}

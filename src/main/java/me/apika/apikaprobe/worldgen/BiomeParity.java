@@ -3,8 +3,15 @@ package me.apika.apikaprobe.worldgen;
 import me.apika.apikaprobe.bridge.ExampleMod;
 import me.apika.apikaprobe.RustBridge;
 
+import com.mojang.datafixers.util.Pair;
+import net.minecraft.world.level.biome.Climate;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
+
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -30,7 +37,9 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p>Pass criterion: zero mismatches at any quantized target. The
  * R-tree is a discrete classifier, so a single divergence means a real
- * algorithm bug — no IEEE float epsilon to negotiate.
+ * algorithm bug, except an exact fitness tie: both answers are nearest
+ * and tree descent order picks one (JOURNEY "Biome 1999/2000"). Those
+ * count as ties, not fails.
  */
 public final class BiomeParity {
 	private static final AtomicReference<Object> lastBiomeSource = new AtomicReference<>();
@@ -248,8 +257,11 @@ public final class BiomeParity {
 			return "[biome-parity] could not resolve MultiNoiseBiomeSource.getNoiseBiome(TargetPoint)";
 		}
 
+		Map<String, List<Climate.ParameterPoint>> pointsByBiome = pointsByBiome(biomeSource);
+
 		Random rng = new Random(0xBEEFCAFEL);
 		int pass = 0;
+		int tie = 0;
 		int fail = 0;
 		int firstFailIdx = -1;
 		long firstFailT = 0, firstFailH = 0, firstFailC = 0;
@@ -293,6 +305,9 @@ public final class BiomeParity {
 
 			if (rustName.equals(yarnName)) {
 				pass++;
+			} else if (isFitnessTie(pointsByBiome, rustName, yarnName,
+					new Climate.TargetPoint(t, h, c, e, d, w))) {
+				tie++;
 			} else {
 				fail++;
 				if (firstFailIdx < 0) {
@@ -307,17 +322,50 @@ public final class BiomeParity {
 
 		String summary;
 		if (fail == 0) {
-			summary = String.format("[biome-parity] %d samples, %d pass, 0 fail — bit-exact",
-					sampleCount, pass);
+			summary = String.format("[biome-parity] %d samples, %d pass, %d tie, 0 fail, bit-exact",
+					sampleCount, pass, tie);
 		} else {
 			summary = String.format(
-					"[biome-parity] %d samples, %d pass, %d fail — first miss @(%d,%d,%d,%d,%d,%d) rust=%s yarn=%s",
-					sampleCount, pass, fail,
+					"[biome-parity] %d samples, %d pass, %d tie, %d fail, first miss @(%d,%d,%d,%d,%d,%d) rust=%s yarn=%s",
+					sampleCount, pass, tie, fail,
 					firstFailT, firstFailH, firstFailC, firstFailE, firstFailD, firstFailW,
 					firstFailRust, firstFailYarn);
 		}
 		ExampleMod.LOGGER.info(summary);
 		return summary;
+	}
+
+	/** Vanilla parameter points grouped by biome id; null if the private list is unreachable. */
+	private static Map<String, List<Climate.ParameterPoint>> pointsByBiome(Object biomeSource) {
+		try {
+			Method m = MultiNoiseBiomeSource.class.getDeclaredMethod("parameters");
+			m.setAccessible(true);
+			Climate.ParameterList<?> list = (Climate.ParameterList<?>) m.invoke(biomeSource);
+			Map<String, List<Climate.ParameterPoint>> out = new HashMap<>();
+			for (Pair<Climate.ParameterPoint, ?> entry : list.values()) {
+				out.computeIfAbsent(resolveBiomeIdentifier(entry.getSecond()), k -> new ArrayList<>())
+						.add(entry.getFirst());
+			}
+			return out;
+		} catch (ReflectiveOperationException | RuntimeException ex) {
+			return null;
+		}
+	}
+
+	/** Both answers sit at the same minimum fitness, so either is nearest. */
+	private static boolean isFitnessTie(Map<String, List<Climate.ParameterPoint>> pointsByBiome,
+			String rustName, String yarnName, Climate.TargetPoint target) {
+		if (pointsByBiome == null) return false;
+		List<Climate.ParameterPoint> rustPoints = pointsByBiome.get(rustName);
+		List<Climate.ParameterPoint> yarnPoints = pointsByBiome.get(yarnName);
+		if (rustPoints == null || yarnPoints == null) return false;
+		return minFitness(rustPoints, target) == minFitness(yarnPoints, target);
+	}
+
+	private static long minFitness(List<Climate.ParameterPoint> points, Climate.TargetPoint target) {
+		long best = Long.MAX_VALUE;
+		for (Climate.ParameterPoint p : points) best = Math.min(best, p.fitness(target));
+		return best;
 	}
 
 	/**
