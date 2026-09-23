@@ -17,7 +17,7 @@ import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.feature.OreFeature;
 
-// Replays vanilla place() up to the scan, then OreKernel's scan and doPlace; default off, once per placement.
+// Replays vanilla place() up to the scan, then OreKernel's scan and doPlace; default on, once per placement.
 @Mixin(OreFeature.class)
 public abstract class OreFeatureMixin {
 

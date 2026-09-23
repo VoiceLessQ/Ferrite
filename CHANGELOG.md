@@ -8,15 +8,20 @@ marks pre-release research builds.
 ## [Unreleased]
 
 ### Added
-- **Ore placement kernel, default off.** `/ferrite ore full` (or
-  `-Dferrite.orekernel=full`) runs ore veins through a faster path
-  that places the same blocks with the same random draws as vanilla.
-  On a 24-core desktop, ore placement takes 12 to 17% less time and a
-  5041-chunk pregen finishes 2.6 to 5% sooner. A built-in oracle
-  replays vanilla on a copy for 1 in 64 veins and logs any difference.
-  Checking every vein instead, 1.5M of them on a fresh world across
-  the overworld and nether, found none. `/ferrite ore report` shows
-  the counters.
+- **Ore placement kernel, on by default.** Ore veins go through a
+  faster path that places the same blocks with the same random draws
+  as vanilla. With its oracle running, ore placement takes 9% less
+  time on a 24-core desktop and 15% less on a 4-core server, where a
+  2601-chunk pregen finished about 6% sooner. The oracle replays
+  vanilla on a copy for 1 in 64 veins and logs any difference; it
+  found none in those runs. Checking every vein instead, 1.5M of them
+  on a fresh world across the overworld and nether, found none either.
+  `/ferrite ore off` or `-Dferrite.orekernel=off` turns it off, and
+  `/ferrite ore report` shows the counters. FYI, this needs testing
+  by veteran miners. If ore in freshly generated chunks looks wrong
+  to you (vein size, height, how often veins touch air), open an
+  issue with the seed and coordinates, and include the
+  `/ferrite ore report` line.
 
 ### Fixed
 - **Biome validator counts exact ties as ties.** When two biomes sit

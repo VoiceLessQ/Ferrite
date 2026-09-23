@@ -38,7 +38,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.NotRuleTest;
 import net.minecraft.world.level.levelgen.structure.templatesystem.RuleTest;
 import net.minecraft.world.level.levelgen.structure.templatesystem.TagMatchTest;
 
-// OreFeature.place scan and doPlace with vanilla's draws and writes; default off (-Dferrite.orekernel=scan|full).
+// OreFeature.place scan and doPlace with vanilla's draws and writes; default full (-Dferrite.orekernel=off|scan).
 public final class OreKernel {
 
 	private OreKernel() {}
@@ -47,7 +47,7 @@ public final class OreKernel {
 	public static final int SCAN = 1;
 	public static final int FULL = 2;
 
-	public static volatile int mode = parseMode(System.getProperty("ferrite.orekernel", "off"));
+	public static volatile int mode = parseMode(System.getProperty("ferrite.orekernel", "full"));
 
 	// 1 in N place calls rerun the vanilla scan and shadow doPlace on section copies; 0 disables.
 	public static volatile int oracleRate = Integer.getInteger("ferrite.orekernel.oracle", 64);
