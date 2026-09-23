@@ -2673,3 +2673,70 @@ write into neighbouring chunks, which is the determinism reason
 Mojang keeps them serial in the first place. Owning that would mean
 owning the scheduler, and I closed that door on purpose. So the envy
 is real, and so is the door.
+
+## Grouped by the wrong key (2026-09-23)
+
+On the 6th i closed the features stage because the histogram was flat.
+A hundred features, none over 9 percent. That table was keyed on the
+registry id, and ore is split across ore_iron, ore_coal, ore_granite,
+ore_diorite and a dozen more, each small, all running the same
+OreFeature.place. Group the JFR samples by class instead of by id
+and ore comes out at 36 to 44 percent of feature time, about 1 ms a
+chunk. The fat row was there the whole time, cut into slices.
+
+Ore veins almost always place something, so there was nothing to skip.
+I had to make the placing itself cheaper. A HEAD inject on
+OreFeature.place replays the three draws vanilla makes, reads the
+heightmap straight off the ProtoChunk, then runs a copy of doPlace that
+checks the write zone once per box instead of once per block and holds
+the chunk sections in a small slot array. Same blocks, same random
+draws, same order.
+
+The first measurement said -3 percent on features. That looked like
+the JIT wall again, and i almost wrote it down that way. Then
+`jfr_lines.py` put 73 percent of the kernel samples on the memo miss
+path. My memo held one (state, y) pair, and the blob spheres step y
+between almost every pair of new blocks, so it missed nearly always.
+Two entries per box row fixed it: 92 percent of reads answered, 3.1M
+rule calls for 38M block reads across 5041 chunks.
+
+The oracle came before any timing i trusted. At 1 in N it runs the
+kernel on section copies with a cloned random, lets vanilla write for
+real, and compares the box, the return value and where the random
+ended up. A zero proves nothing until the thing can fail, so i planted
+three bugs in a throwaway patch: a false scan hit, one skipped write,
+one extra draw. They showed up as 1067, 24056 and 3864 mismatches. Then
+the real code at 1 in 1, and again on a clean build of the commit on a
+fresh world: 1.5M veins across the overworld and nether, zero.
+
+Paired A/B on one seed, four strips, the order swapped between two
+boots because a boot effect near 5 percent otherwise eats the answer.
+24 cores.
+
+| | replicate 1 | replicate 2 |
+|---|---|---|
+| ore placement time | -17% | -12% |
+| features stage per chunk | -6.5% | -5.3% |
+| pregen wall, 5041 chunks | -5.0% | -2.6% |
+
+Smaller than i hoped. Every block still matches vanilla, though.
+
+By then i was tired. Too tired, honestly, but still willing to dig up
+and test a whole load of crap, so i went looking for the next slice
+with a 1 ms JFR instead of the default profile, which had only been
+giving me about 570 lane samples. Nothing past ore is bigger than
+about 3 percent. The geode wants a skip bound on its noise, but the
+noise term alone is about as large as the crust threshold, so the
+bound rules out almost nothing.
+Sculk spends about 10 of 1140 samples on work nobody reads. The biome
+zoom hash was the interesting one: a fiddle cache benched at 2x in the
+scratchpad, passed its oracle over 494M hits, and then lost on every
+paired strip in game, freeze_top_layer 13 to 35 percent slower. Hit
+rate 38 to 66 percent, one cell built per 2.3 hits, and a Redirect in a
+hot vanilla method costs something even with the flag off. That one
+left the tree entirely.
+
+The ore kernel stays default off for now: `/ferrite ore full`, or
+`-Dferrite.orekernel=full`. It has not run on the 4-core box yet, and
+on 4 cores ore is a bigger share of a busier lane, so i do not know
+which way that number goes.
