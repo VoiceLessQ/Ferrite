@@ -7,7 +7,21 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Added
+- **Ore placement kernel, default off.** `/ferrite ore full` (or
+  `-Dferrite.orekernel=full`) runs ore veins through a faster path
+  that places the same blocks with the same random draws as vanilla.
+  On a 24-core desktop, ore placement takes 12 to 17% less time and a
+  5041-chunk pregen finishes 2.6 to 5% sooner. A built-in oracle
+  replays vanilla on a copy for 1 in 64 veins and logs any difference;
+  across 1.26M checked veins in the overworld and nether it found
+  none. `/ferrite ore report` shows the counters.
+
 ### Fixed
+- **Biome validator counts exact ties as ties.** When two biomes sit
+  at the same distance from a climate point, either answer is correct.
+  It used to count as a miss. Over 2000 samples on 26.3 the validator
+  now reads 1999 pass, 1 tie, 0 fail.
 - **Dead toggles now say so.** `/ferrite surface dispatch`,
   `/ferrite aquifer rust`, `/ferrite aquifer parity` and
   `/ferrite biome route` have had no hook since the 26.x ports, but
