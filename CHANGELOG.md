@@ -22,6 +22,11 @@ marks pre-release research builds.
   to you (vein size, height, how often veins touch air), open an
   issue with the seed and coordinates, and include the
   `/ferrite ore report` line.
+- **Entity tracker probe.** `/ferrite probe tracker on|report|reset`
+  times the per-tick entity tracker pass and reports it as ms per
+  tick and share of the tick. Off by default. On a 4-core server with
+  1021 zombies it read 0.45 ms/tick with nobody online and 0.66 ms
+  with two bots inside the farm, under 3% of the tick either way.
 
 ### Fixed
 - **Biome validator counts exact ties as ties.** When two biomes sit

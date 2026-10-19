@@ -2740,3 +2740,48 @@ The ore kernel stays default off for now: `/ferrite ore full`, or
 `-Dferrite.orekernel=full`. It has not run on the 4-core box yet, and
 on 4 cores ore is a bigger share of a busier lane, so i do not know
 which way that number goes.
+
+## The packets nobody sees (2026-10-19)
+
+The idea came from the client side. Some mods skip drawing mobs that
+are hidden behind blocks, and i wondered what the server version of
+that would be. Skipping the tick of a hidden mob changes how farms
+behave, so that was out from the start. The tracker is different.
+Every tick ChunkMap.tick walks every tracked entity, rechecks which
+players should see it and builds its move and metadata packets. Drop
+the packets for a zombie behind a wall and the simulation stays the
+same; the client just gets less to draw.
+
+Nobody had timed that walk. The tick-phase monitor never had a tracker
+bucket. So before writing anything clever i wrote the rule down: under
+5 percent of the tick closes it, over 15 opens a lane, and anything in
+between needs a second world.
+
+The probe is two nanoTime calls at HEAD and RETURN of ChunkMap.tick,
+once per level per tick. An older chunkTick hook cost 1.1 ms just by
+splitting ServerLevel.tick around an INVOKE, so this one sits on the
+method itself. `/ferrite probe tracker on`, default off.
+
+craftymc, 4 cores, the 1021-zombie farm forceloaded, 120 s windows:
+
+| | tracker | share of tick |
+|---|---|---|
+| no players, 4 runs | 0.44 to 0.45 ms | 2.7 to 2.8% |
+| two Carpet bots inside the farm | 0.66 ms | 2.9% |
+
+That is about 0.1 ms per viewer. The tick grew 6 ms when the bots
+joined, and 4 ms of that landed in "other", which is chunk tracking
+and spawning around the bots. The tracker share hardly moved. Closed
+at 2.9 percent.
+
+Then i broke the farm. To see what distance does i moved the bots to
+y=200, a hundred blocks out, and forgot that vanilla despawns any
+zombie more than 128 blocks from the nearest player. All 1021 were
+gone within a tick and the stop saved the empty world. The farm came
+back from the September backup, and those two arms measured nothing.
+
+Crowd size is the one thing that could reopen it. At 0.1 ms each,
+twenty real players standing in one farm would put the tracker near
+2.5 ms. Carpet bots throw their packets away, but encoding happens on
+the netty thread anyway, so real clients should cost the main thread
+about the same.

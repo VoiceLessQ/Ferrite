@@ -40,6 +40,7 @@ import me.apika.apikaprobe.surface.SurfaceValidator;
 import me.apika.apikaprobe.monitor.FerriteDispatcherProbe;
 import me.apika.apikaprobe.monitor.ChunkStageTiming;
 import me.apika.apikaprobe.monitor.FeatureTiming;
+import me.apika.apikaprobe.monitor.TrackerTiming;
 
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.CommandSourceStack;
@@ -279,7 +280,12 @@ public final class FerriteCommand {
 								.then(Commands.literal("on").executes(FerriteCommand::featureProbeOn))
 								.then(Commands.literal("off").executes(FerriteCommand::featureProbeOff))
 								.then(Commands.literal("report").executes(FerriteCommand::featureProbeReport))
-								.then(Commands.literal("reset").executes(FerriteCommand::featureProbeReset))))
+								.then(Commands.literal("reset").executes(FerriteCommand::featureProbeReset)))
+						.then(Commands.literal("tracker")
+								.then(Commands.literal("on").executes(FerriteCommand::trackerProbeOn))
+								.then(Commands.literal("off").executes(FerriteCommand::trackerProbeOff))
+								.then(Commands.literal("report").executes(FerriteCommand::trackerProbeReport))
+								.then(Commands.literal("reset").executes(FerriteCommand::trackerProbeReset))))
 				.then(Commands.literal("log")
 						.then(Commands.literal("monitors")
 								.then(Commands.literal("on").executes(FerriteCommand::logMonitorsOn))
@@ -1846,6 +1852,42 @@ public final class FerriteCommand {
 			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		FeatureTiming.reset();
 		String msg = "[ferrite/feature-probe] reset";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int trackerProbeOn(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		TrackerTiming.reset(ctx.getSource().getServer());
+		TrackerTiming.ENABLED = true;
+		String msg = "[ferrite/tracker-probe] enabled (samples reset; report with /ferrite probe tracker report)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int trackerProbeOff(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		TrackerTiming.ENABLED = false;
+		String msg = "[ferrite/tracker-probe] disabled";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int trackerProbeReport(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		String msg = TrackerTiming.report(ctx.getSource().getServer());
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int trackerProbeReset(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		TrackerTiming.reset(ctx.getSource().getServer());
+		String msg = "[ferrite/tracker-probe] reset";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;

@@ -61,6 +61,7 @@
 		"ChunkStageTimingMixin",
 		"TerrainPoolTimingMixin",
 		"FeaturePlacerTimingMixin",
+		"ChunkMapTrackerTimingMixin",
 		"OreFeatureMixin",
 		"WorldGenRegionAccessor",
 		"DensityVolumeTimingMixin",
