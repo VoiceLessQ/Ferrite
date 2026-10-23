@@ -14,7 +14,7 @@ Every port keeps vanilla behavior bit for bit and comes with an oracle that chec
 - **Hopper highway** (`/ferrite hopper highway on`, off by default). Per-slot cooldowns and round-robin routing, about 3.1x chain throughput. Off by default because sorters timed to the vanilla 8-tick clock can saturate.
 - **World-creation pre-gen** (`/ferrite pregen <radius>`). Generates a border on a strong machine so a weak server reads chunks from disk. Re-running skips finished chunks.
 
-The mod also logs where the server spends its time every 5 seconds. The `[hw]` line at boot describes the machine, so log excerpts in an issue self-describe.
+The mod also logs where the server spends its time every 5 seconds. On heaps of 3 GB or less that log starts off, see [Running on low-end hardware](#running-on-low-end-hardware). The `[hw]` line at boot describes the machine, so log excerpts in an issue self-describe.
 
 ## Measured results
 
