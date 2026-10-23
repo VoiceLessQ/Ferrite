@@ -7,55 +7,43 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+## [0.7.5-alpha] - 2026-10-23
+
 ### Added
-- **Ore placement kernel, on by default.** Ore veins go through a
-  faster path that places the same blocks with the same random draws
-  as vanilla. With its oracle running, ore placement takes 9% less
-  time on a 24-core desktop and 15% less on a 4-core server, where a
-  2601-chunk pregen finished about 6% sooner. The oracle replays
-  vanilla on a copy for 1 in 64 veins and logs any difference; it
-  found none in those runs. Checking every vein instead, 1.5M of them
-  on a fresh world across the overworld and nether, found none either.
-  `/ferrite ore off` or `-Dferrite.orekernel=off` turns it off, and
-  `/ferrite ore report` shows the counters. FYI, this needs testing
-  by veteran miners. If ore in freshly generated chunks looks wrong
-  to you (vein size, height, how often veins touch air), open an
-  issue with the seed and coordinates, and include the
-  `/ferrite ore report` line.
+- **Ore placement kernel, on by default.** Same blocks and random
+  draws as vanilla, 9% less ore time on a 24-core desktop and 15% on a
+  4-core server (pregen about 6% sooner). An oracle replays 1 in 64
+  veins; a full check of 1.5M veins in the overworld and nether found
+  no differences. Off: `/ferrite ore off` or `-Dferrite.orekernel=off`.
+  Counters: `/ferrite ore report`. Odd ore in new chunks? Open an
+  issue with seed, coordinates and the report line.
 - **Entity tracker probe.** `/ferrite probe tracker on|report|reset`
-  times the per-tick entity tracker pass and reports it as ms per
-  tick and share of the tick. Off by default. On a 4-core server with
-  1021 zombies it read 0.45 ms/tick with nobody online and 0.66 ms
-  with two bots inside the farm, under 3% of the tick either way.
-- **Surface rule compiler, on by default.** On 26.3 the surface step
-  runs the whole material rule tree for every solid block, about
-  30,000 times per chunk, through shared call sites the JIT cannot
-  inline. Ferrite now compiles that tree into a small class per chunk
-  shape. The rules inside are still the vanilla objects, called in the
-  same order, so datapack rules work as written. Surface time drops
-  16-27% on a 24-core desktop and 18-33% on a 4-core server. Pregens
-  finish about 3-4% sooner. An oracle reruns vanilla on 1 in 64 chunks
-  and keeps the vanilla blocks whenever the two disagree; a full check
-  of every block, about 240M of them across five world types and all
-  three dimensions, found none that did. It steps aside when another
-  mod changes the material rule classes. `/ferrite rules off` or
-  `-Dferrite.rules=off` turns it off, `-Dferrite.rules=on` forces it
-  on, and `/ferrite rules report` shows the counters. If surface blocks
-  in new chunks look wrong (grass, sand, terracotta bands, where
-  deepslate starts), open an issue with the seed, the coordinates and
-  the report line.
+  reports tracker cost in ms per tick. Off by default. With 1021
+  zombies on a 4-core server: 0.45 to 0.66 ms/tick, under 3%.
+- **Surface rule compiler, on by default.** The 26.3 material rule
+  tree is compiled into one class per chunk shape, still calling the
+  vanilla rules in vanilla order, so datapacks work as written.
+  Surface time drops 16-27% on a 24-core desktop and 18-33% on a
+  4-core server; pregens finish 3-4% sooner. An oracle reruns vanilla
+  on 1 in 64 chunks and keeps vanilla blocks on any mismatch; a full
+  check of 240M blocks over five world types and three dimensions
+  found none. Steps aside when another mod changes the material rule
+  classes. Off: `/ferrite rules off` or `-Dferrite.rules=off`; force
+  on: `-Dferrite.rules=on`. Counters: `/ferrite rules report`. Odd
+  surface blocks in new chunks? Open an issue with seed, coordinates
+  and the report line.
+- **Ore kernel and rule compiler together.** Pregens finish about 8%
+  sooner on a 4-core server. On a 24-core desktop wall time stays
+  flat because workers already sit partly idle, but worker CPU drops
+  9%. Both oracles ran at 1 in 64 and found no mismatches.
 
 ### Fixed
-- **Biome validator counts exact ties as ties.** When two biomes sit
-  at the same distance from a climate point, either answer is correct.
-  It used to count as a miss. Over 2000 samples on 26.3 the validator
-  now reads 1999 pass, 1 tie, 0 fail.
+- **Biome validator counts exact ties as ties.** Over 2000 samples on
+  26.3 it reads 1999 pass, 1 tie, 0 fail.
 - **Dead toggles now say so.** `/ferrite surface dispatch`,
   `/ferrite aquifer rust`, `/ferrite aquifer parity` and
-  `/ferrite biome route` have had no hook since the 26.x ports, but
-  still reported success. They now answer that they are inactive on
-  this build and vanilla runs. `-Dferrite.bulkChunkDensity=true` logs
-  a warning at boot for the same reason.
+  `/ferrite biome route` report inactive instead of success, and
+  `-Dferrite.bulkChunkDensity=true` logs a boot warning.
 
 ## [0.7.4-alpha] - 2026-09-19
 
