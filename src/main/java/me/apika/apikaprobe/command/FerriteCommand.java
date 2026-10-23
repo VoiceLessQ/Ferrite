@@ -20,6 +20,7 @@ import me.apika.apikaprobe.worldgen.chunk.PregenProgressListener;
 import me.apika.apikaprobe.entity.CrammingDispatcher;
 import me.apika.apikaprobe.worldgen.DensityParity;
 import me.apika.apikaprobe.worldgen.OreKernel;
+import me.apika.apikaprobe.worldgen.RuleCompiler;
 import me.apika.apikaprobe.bridge.ExampleMod;
 import me.apika.apikaprobe.worldgen.RustAquiferDispatch;
 import me.apika.apikaprobe.worldgen.RustBiomeRouter;
@@ -193,6 +194,14 @@ public final class FerriteCommand {
 										.executes(FerriteCommand::oreOracle)))
 						.then(Commands.literal("report").executes(FerriteCommand::oreReport))
 						.then(Commands.literal("reset").executes(FerriteCommand::oreReset)))
+				.then(Commands.literal("rules")
+						.then(Commands.literal("on").executes(ctx -> rulesMode(ctx, true)))
+						.then(Commands.literal("off").executes(ctx -> rulesMode(ctx, false)))
+						.then(Commands.literal("oracle")
+								.then(Commands.argument("n", IntegerArgumentType.integer(0, 1000000))
+										.executes(FerriteCommand::rulesOracle)))
+						.then(Commands.literal("report").executes(FerriteCommand::rulesReport))
+						.then(Commands.literal("reset").executes(FerriteCommand::rulesReset)))
 				.then(Commands.literal("chunkforce")
 						.then(Commands.literal("on").executes(FerriteCommand::chunkForceOn))
 						.then(Commands.literal("off").executes(FerriteCommand::chunkForceOff))
@@ -1778,6 +1787,41 @@ public final class FerriteCommand {
 			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
 		OreKernel.reset();
 		String msg = "[ferrite/ore] counters reset";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int rulesMode(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx, boolean on) {
+		RuleCompiler.enabled = on;
+		String msg = "[ferrite/rules] mode=" + (on ? "on" : "off") + " (oracle 1/" + RuleCompiler.oracleRate + ")";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int rulesOracle(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		RuleCompiler.oracleRate = IntegerArgumentType.getInteger(ctx, "n");
+		String msg = "[ferrite/rules] oracle 1/" + RuleCompiler.oracleRate + " chunks (0 = off)";
+		sendFeedback(ctx, msg, true);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int rulesReport(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		String msg = RuleCompiler.report();
+		sendFeedback(ctx, msg, false);
+		ExampleMod.LOGGER.info(msg);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int rulesReset(
+			com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
+		RuleCompiler.reset();
+		String msg = "[ferrite/rules] counters reset";
 		sendFeedback(ctx, msg, true);
 		ExampleMod.LOGGER.info(msg);
 		return Command.SINGLE_SUCCESS;

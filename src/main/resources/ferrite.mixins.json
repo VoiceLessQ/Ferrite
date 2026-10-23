@@ -63,6 +63,7 @@
 		"FeaturePlacerTimingMixin",
 		"ChunkMapTrackerTimingMixin",
 		"OreFeatureMixin",
+		"MaterialSystemRuleCompilerMixin",
 		"WorldGenRegionAccessor",
 		"DensityVolumeTimingMixin",
 		"PerlinVolumeTimingMixin",

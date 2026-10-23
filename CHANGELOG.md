@@ -27,6 +27,23 @@ marks pre-release research builds.
   tick and share of the tick. Off by default. On a 4-core server with
   1021 zombies it read 0.45 ms/tick with nobody online and 0.66 ms
   with two bots inside the farm, under 3% of the tick either way.
+- **Surface rule compiler, on by default.** On 26.3 the surface step
+  runs the whole material rule tree for every solid block, about
+  30,000 times per chunk, through shared call sites the JIT cannot
+  inline. Ferrite now compiles that tree into a small class per chunk
+  shape. The rules inside are still the vanilla objects, called in the
+  same order, so datapack rules work as written. Surface time drops
+  16-27% on a 24-core desktop and 18-33% on a 4-core server. Pregens
+  finish about 3-4% sooner. An oracle reruns vanilla on 1 in 64 chunks
+  and keeps the vanilla blocks whenever the two disagree; a full check
+  of every block, about 240M of them across five world types and all
+  three dimensions, found none that did. It steps aside when another
+  mod changes the material rule classes. `/ferrite rules off` or
+  `-Dferrite.rules=off` turns it off, `-Dferrite.rules=on` forces it
+  on, and `/ferrite rules report` shows the counters. If surface blocks
+  in new chunks look wrong (grass, sand, terracotta bands, where
+  deepslate starts), open an issue with the seed, the coordinates and
+  the report line.
 
 ### Fixed
 - **Biome validator counts exact ties as ties.** When two biomes sit

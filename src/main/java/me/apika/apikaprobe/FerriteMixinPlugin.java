@@ -46,8 +46,17 @@ public class FerriteMixinPlugin implements IMixinConfigPlugin {
 		return null;
 	}
 
+	// Another mod mixing into vanilla's material rules turns the rule compiler's auto mode off; a property, so no game class loads here.
 	@Override
 	public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {
+		for (String target : otherTargets) {
+			String name = target.replace('/', '.');
+			if (name.startsWith("net.minecraft.world.level.levelgen.material.")) {
+				System.setProperty("ferrite.rules.yield", name);
+				LOGGER.info("[ferrite] another mod mixes into {}: rule compiler off (-Dferrite.rules=on overrides)", name);
+				return;
+			}
+		}
 	}
 
 	@Override
