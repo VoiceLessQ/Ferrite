@@ -1,0 +1,67 @@
+name: Bug report
+description: A crash, a mod conflict, or something that behaves differently with Ferrite installed
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: The log matters more than anything else in this form. Search it for `rust_mod` and `[ferrite]` if you want to check what Ferrite reported.
+  - type: input
+    id: ferrite
+    attributes:
+      label: Ferrite version
+      placeholder: 0.7.5-alpha+26.3
+    validations:
+      required: true
+  - type: input
+    id: minecraft
+    attributes:
+      label: Minecraft and Fabric Loader versions
+      placeholder: 26.3, loader 0.19.5
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows x86_64
+        - Linux x86_64
+        - Linux aarch64
+        - macOS
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: side
+    attributes:
+      label: Where does it happen?
+      options:
+        - Dedicated server
+        - Singleplayer
+        - Both
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, what you saw, and how to make it happen again if you know.
+    validations:
+      required: true
+  - type: textarea
+    id: mods
+    attributes:
+      label: Other mods
+      description: The full list, or "none".
+  - type: textarea
+    id: killswitch
+    attributes:
+      label: Does turning a feature off fix it?
+      description: Optional. For example `/ferrite cramming off`, or one of the kill switches in the README feature list.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Attach latest.log or the crash report, or paste a link to it.
+    validations:
+      required: true

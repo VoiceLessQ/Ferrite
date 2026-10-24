@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Performance reports and questions
+    url: https://github.com/VoiceLessQ/Ferrite/discussions
+    about: Timing lines, hardware results and questions fit better in Discussions.
+  - name: Security problem
+    url: https://github.com/VoiceLessQ/Ferrite/blob/26.3.x/SECURITY.md
+    about: Please report security issues privately, not as a public issue.

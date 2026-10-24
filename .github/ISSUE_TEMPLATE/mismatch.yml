@@ -1,0 +1,51 @@
+name: Oracle mismatch
+description: A line containing MISMATCH showed up in the log
+labels: [oracle]
+body:
+  - type: markdown
+    attributes:
+      value: Some features compare their result against vanilla while you play. A MISMATCH line means the two disagreed. Paste the lines exactly as logged.
+  - type: textarea
+    id: lines
+    attributes:
+      label: MISMATCH lines
+      description: Every line from latest.log that contains MISMATCH.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: ferrite
+    attributes:
+      label: Ferrite version
+      placeholder: 0.7.5-alpha+26.3
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows x86_64
+        - Linux x86_64
+        - Linux aarch64
+        - macOS
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: doing
+    attributes:
+      label: What was going on
+      description: For example a mob farm, flying through new chunks, a pregen run, or a redstone build.
+    validations:
+      required: true
+  - type: input
+    id: seed
+    attributes:
+      label: World seed
+      description: Optional, but it lets worldgen mismatches be replayed.
+  - type: textarea
+    id: mods
+    attributes:
+      label: Other mods
+      description: The full list, or "none".
