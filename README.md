@@ -85,7 +85,7 @@ If the native library fails to load on your platform, Ferrite falls back to vani
 
 ## Building from source
 
-Needs JDK 25, stable Rust via [rustup](https://rustup.rs/), and a C linker (mingw-w64 on Windows, see [docs/SETUP_MINGW.md](docs/SETUP_MINGW.md); system GCC on Linux; Xcode tools on macOS).
+Needs JDK 25, [rustup](https://rustup.rs/) (it installs the nightly pinned in `rust-toolchain.toml` on the first build), and a C linker (mingw-w64 on Windows, see [docs/SETUP_MINGW.md](docs/SETUP_MINGW.md); system GCC on Linux; Xcode tools on macOS).
 
 ```
 git clone https://github.com/VoiceLessQ/Ferrite.git
