@@ -73,7 +73,8 @@ public final class CrammingDispatcher {
 	 * server tick. Returns true if Rust handled the batch (caller should
 	 * cancel the vanilla body); false if the caller should let vanilla run.
 	 */
-	public static boolean onTickCramming(LivingEntity caller) {
+	// Async can invoke this from multiple entity workers; the batch reuses static buffers and scratch state.
+	public static synchronized boolean onTickCramming(LivingEntity caller) {
 		if (!ENABLED || !RustBridge.NATIVE_AVAILABLE) return false;
 		if (!(caller.level() instanceof ServerLevel world)) return false;
 
