@@ -126,6 +126,11 @@ crate is one of the three patterns above.
 These are safe under the current vanilla execution model but rely
 on assumptions that some future mod could break.
 
+Ferrite's cramming batch runs at the server-thread entity profiler marker
+before mob iteration. Async workers only read the volatile completion
+marker; they do not access the reusable cramming buffers or mutate other
+mobs through the batch path.
+
 ### Entity tick scratch buffers and counters
 
 Code-level audit pass enumerated every non-`volatile`, non-`Atomic*`,
@@ -138,7 +143,6 @@ mixins and drained on `END_SERVER_TICK`. Worst case under hypothetical
 parallel entity ticking: lost increments produce slightly wrong log
 numbers, no game state involved.
 
-- `CrammingDispatcher.lastProcessedTick` and `diag*` counters
 - `PhysicsDispatcher.diag*` counters (build / dispatch / fallback /
   rebuild / bucket counters)
 - `PhysicsHandoff.cellScratch` (grow-on-demand `int[]`, written

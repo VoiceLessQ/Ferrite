@@ -42,8 +42,6 @@ public final class CrammingDispatcher {
 
 	public static volatile boolean ENABLED = true;
 
-	// The pre-entity hook writes this once on the server thread; entity workers
-	// only read the immutable completion marker before deciding to cancel vanilla.
 	private static final CrammingTickState<ServerLevel> COMPLETED_TICK = new CrammingTickState<>();
 	private static final List<LivingEntity> MOB_SCRATCH = new ArrayList<>(1024);
 
@@ -69,9 +67,8 @@ public final class CrammingDispatcher {
 
 	private CrammingDispatcher() {}
 
-	/** Runs the reusable batch before this world's entity workers are started. */
 	public static void onPreEntityTick(ServerLevel world) {
-		if (!ENABLED || !RustBridge.NATIVE_AVAILABLE) return;
+		if (!ENABLED || !RustBridge.NATIVE_AVAILABLE || !world.tickRateManager().runsNormally()) return;
 		long tick = world.getGameTime();
 		if (COMPLETED_TICK.runOnceOnServerThread(
 				world, tick, world.getServer().isSameThread(), () -> runBatch(world))) {
@@ -79,11 +76,6 @@ public final class CrammingDispatcher {
 		}
 	}
 
-	/**
-	 * Async entity workers consult this after the server-thread pre-entity
-	 * hook. Vanilla remains active until Ferrite completed the batch for this
-	 * exact world tick.
-	 */
 	public static boolean shouldCancelVanilla(LivingEntity caller) {
 		if (!ENABLED || !RustBridge.NATIVE_AVAILABLE) return false;
 		if (!(caller.level() instanceof ServerLevel world)) return false;

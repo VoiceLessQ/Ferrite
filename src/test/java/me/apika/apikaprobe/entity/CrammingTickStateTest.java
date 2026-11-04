@@ -21,6 +21,7 @@ class CrammingTickStateTest {
 	void workerThreadsCannotRunTheBatchAndObserveItsCompletion() throws Exception {
 		CrammingTickState<Object> state = new CrammingTickState<>();
 		Object world = new Object();
+		Object otherWorld = new Object();
 		AtomicInteger batchCalls = new AtomicInteger();
 		int workerCount = 8;
 		CountDownLatch ready = new CountDownLatch(workerCount);
@@ -53,6 +54,8 @@ class CrammingTickStateTest {
 				return true;
 			}));
 			assertTrue(state.isCompleted(world, 42));
+			assertFalse(state.isCompleted(world, 43));
+			assertFalse(state.isCompleted(otherWorld, 42));
 			assertFalse(state.runOnceOnServerThread(world, 42, true, () -> {
 				batchCalls.incrementAndGet();
 				return true;

@@ -13,9 +13,8 @@ import me.apika.apikaprobe.entity.PhysicsDispatcher;
 import net.minecraft.server.level.ServerLevel;
 
 /**
- * Fires once per world, per tick, at the start of ServerLevel.tick.
- * Cramming runs here on the server thread before Async starts entity
- * workers; PhysicsDispatcher also builds its per-world tick state here.
+ * Fires at ServerLevel's "entities" profiler marker, after the world time
+ * advances and before the entity list is ticked.
  *
  * Anchored at the "entities" profiler string constant — the vanilla
  * marker immediately before entityTickList.forEach(). Stable across
@@ -26,7 +25,7 @@ public abstract class PhysicsPreTickMixin {
 
 	@Inject(
 		method = "tick(Ljava/util/function/BooleanSupplier;)V",
-		at = @At("HEAD")
+		at = @At(value = "CONSTANT", args = "stringValue=entities")
 	)
 	private void ferrite$onPreEntityTick(BooleanSupplier shouldKeepTicking, CallbackInfo ci) {
 		ServerLevel world = (ServerLevel) (Object) this;
