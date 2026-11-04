@@ -7,6 +7,9 @@ marks pre-release research builds.
 
 ## [Unreleased]
 
+### Fixed
+- Run cramming batches on the server thread before parallel entity ticking, avoiding shared-buffer races and unsafe cross-entity mutation with Async.
+
 ## [0.7.5-alpha] - 2026-10-23
 
 ### Added

@@ -11,13 +11,12 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 
 /**
- * Intercepts LivingEntity.tickCramming() for Mob subclasses and
- * cancels the vanilla body when the Rust batched dispatcher has already
- * (or will now) handle it for this tick.
+ * Intercepts LivingEntity.tickCramming() for Mob subclasses and cancels the
+ * vanilla body only after the server-thread pre-entity hook completed the
+ * Rust batch for this world tick.
  *
- * First Mob tickCramming of the tick triggers the batch; every
- * subsequent call in the same tick just cancels (batch is idempotent
- * via CrammingDispatcher.lastProcessedTick).
+ * Entity worker threads never build or mutate the batch. They only read its
+ * published completion marker before deciding whether to cancel vanilla.
  */
 @Mixin(LivingEntity.class)
 public abstract class CrammingCancelMixin {
@@ -27,7 +26,7 @@ public abstract class CrammingCancelMixin {
 		if (!((Object) this instanceof Mob)) {
 			return; // let vanilla handle non-mobs (players, etc.)
 		}
-		if (CrammingDispatcher.onTickCramming((LivingEntity) (Object) this)) {
+		if (CrammingDispatcher.shouldCancelVanilla((LivingEntity) (Object) this)) {
 			ci.cancel();
 		}
 	}

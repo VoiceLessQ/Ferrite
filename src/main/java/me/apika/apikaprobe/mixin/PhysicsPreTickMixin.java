@@ -7,14 +7,15 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import me.apika.apikaprobe.entity.CrammingDispatcher;
 import me.apika.apikaprobe.entity.PhysicsDispatcher;
 
 import net.minecraft.server.level.ServerLevel;
 
 /**
- * Fires once per world, per tick, just before entity iteration begins.
- * This is the moment PhysicsDispatcher can build the shared world
- * snapshot used by every mob's adjustMovementForCollisions redirect.
+ * Fires once per world, per tick, at the start of ServerLevel.tick.
+ * Cramming runs here on the server thread before Async starts entity
+ * workers; PhysicsDispatcher also builds its per-world tick state here.
  *
  * Anchored at the "entities" profiler string constant — the vanilla
  * marker immediately before entityTickList.forEach(). Stable across
@@ -28,6 +29,8 @@ public abstract class PhysicsPreTickMixin {
 		at = @At("HEAD")
 	)
 	private void ferrite$onPreEntityTick(BooleanSupplier shouldKeepTicking, CallbackInfo ci) {
-		PhysicsDispatcher.onPreEntityTick((ServerLevel) (Object) this);
+		ServerLevel world = (ServerLevel) (Object) this;
+		CrammingDispatcher.onPreEntityTick(world);
+		PhysicsDispatcher.onPreEntityTick(world);
 	}
 }
