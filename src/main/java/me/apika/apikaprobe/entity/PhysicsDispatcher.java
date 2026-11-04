@@ -24,8 +24,11 @@ import net.minecraft.world.phys.Vec3;
  *
  * Per tick:
  *   1. PhysicsPreTickMixin fires at ServerLevel.tick HEAD →
- *      onPreEntityTick(world). Walk entities once, partition Mob
- *      into HashMap<chunkKey, List<Entity>>. No snapshots built yet.
+ *      onPreEntityTick(world), so physics state is ready for block
+ *      events. Walk entities once, partition Mob into
+ *      HashMap<chunkKey, List<Entity>>. No snapshots built yet.
+ *      CrammingPreTickMixin runs separately at the "entities" marker,
+ *      after world time advances and before entity ticking.
  *   2. Each mob's move() triggers MovementRedirectMixin → adjust().
  *      Compute the mob's chunk key; if SNAPSHOT_BUF currently holds a
  *      different bucket, rebuild snapshot for this mob's bucket and
