@@ -10,8 +10,8 @@ public final class MoveControlMonitor {
 	// long[1] not boxed Long: fires per mob per tick.
 	private static final ThreadLocal<long[]> TICK_START = ThreadLocal.withInitial(() -> new long[1]);
 
-	private static long thisTickCalls = 0L;
-	private static long thisTickNs    = 0L;
+	private static final AtomicLong THIS_TICK_CALLS = new AtomicLong();
+	private static final AtomicLong THIS_TICK_NS = new AtomicLong();
 
 	private static final AtomicLong TOTAL_CALLS = new AtomicLong();
 	private static final AtomicLong TICK_COUNT  = new AtomicLong();
@@ -35,17 +35,17 @@ public final class MoveControlMonitor {
 		long start = s[0];
 		if (start == 0L) return;
 		s[0] = 0L;
-		thisTickCalls++;
-		thisTickNs += System.nanoTime() - start;
+		THIS_TICK_CALLS.incrementAndGet();
+		THIS_TICK_NS.addAndGet(System.nanoTime() - start);
 	}
 
 	private static void onServerTickEnd() {
-		if (thisTickCalls > 0L) {
-			TOTAL_CALLS.addAndGet(thisTickCalls);
-			TICK_COST.record(thisTickNs);
+		long calls = THIS_TICK_CALLS.getAndSet(0L);
+		long tickNs = THIS_TICK_NS.getAndSet(0L);
+		if (calls > 0L) {
+			TOTAL_CALLS.addAndGet(calls);
+			TICK_COST.record(tickNs);
 		}
-		thisTickCalls = 0L;
-		thisTickNs    = 0L;
 		TICK_COUNT.incrementAndGet();
 		maybeReport();
 	}

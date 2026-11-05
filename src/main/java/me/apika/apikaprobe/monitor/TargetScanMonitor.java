@@ -25,9 +25,9 @@ public final class TargetScanMonitor {
 	// long[1] not boxed Long: fires per canStart scan.
 	private static final ThreadLocal<long[]> SCAN_START = ThreadLocal.withInitial(() -> new long[1]);
 
-	private static long thisTickCanStart = 0L;
-	private static long thisTickScanCount = 0L;
-	private static long thisTickScanNs = 0L;
+	private static final AtomicLong THIS_TICK_CAN_START = new AtomicLong();
+	private static final AtomicLong THIS_TICK_SCAN_COUNT = new AtomicLong();
+	private static final AtomicLong THIS_TICK_SCAN_NS = new AtomicLong();
 
 	private static final AtomicLong TOTAL_CAN_START = new AtomicLong();
 	private static final AtomicLong TOTAL_SCAN_COUNT = new AtomicLong();
@@ -44,7 +44,7 @@ public final class TargetScanMonitor {
 	}
 
 	public static void onCanStartCalled() {
-		thisTickCanStart++;
+		THIS_TICK_CAN_START.incrementAndGet();
 	}
 
 	public static void onScanBegin() {
@@ -57,20 +57,20 @@ public final class TargetScanMonitor {
 		long start = s[0];
 		if (start == 0L) return;
 		s[0] = 0L;
-		thisTickScanCount++;
-		thisTickScanNs += System.nanoTime() - start;
+		THIS_TICK_SCAN_COUNT.incrementAndGet();
+		THIS_TICK_SCAN_NS.addAndGet(System.nanoTime() - start);
 	}
 
 	private static void onServerTickEnd() {
-		if (thisTickCanStart > 0L) TOTAL_CAN_START.addAndGet(thisTickCanStart);
-		if (thisTickScanCount > 0L) {
-			TOTAL_SCAN_COUNT.addAndGet(thisTickScanCount);
-			TOTAL_SCAN_NS.addAndGet(thisTickScanNs);
-			TICK_SCAN_COST.record(thisTickScanNs);
+		long canStart = THIS_TICK_CAN_START.getAndSet(0L);
+		long scanCount = THIS_TICK_SCAN_COUNT.getAndSet(0L);
+		long scanNs = THIS_TICK_SCAN_NS.getAndSet(0L);
+		if (canStart > 0L) TOTAL_CAN_START.addAndGet(canStart);
+		if (scanCount > 0L) {
+			TOTAL_SCAN_COUNT.addAndGet(scanCount);
+			TOTAL_SCAN_NS.addAndGet(scanNs);
+			TICK_SCAN_COST.record(scanNs);
 		}
-		thisTickCanStart = 0L;
-		thisTickScanCount = 0L;
-		thisTickScanNs = 0L;
 		TICK_COUNT.incrementAndGet();
 		maybeReport();
 	}

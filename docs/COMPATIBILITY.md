@@ -130,8 +130,11 @@ Ferrite's cramming batch runs at the server-thread entity profiler marker
 before mob iteration. Workers used for parallel entity ticking only read
 the volatile completion marker; they do not access the reusable cramming
 buffers or mutate other mobs through the batch path. `EntityTickMonitor`
-uses atomic per-tick counters and concurrent per-type statistics;
-`MonsterPhaseMonitor` uses atomic per-tick counters.
+uses atomic per-tick counters and concurrent per-type statistics.
+`MonsterPhaseMonitor`, `MovementInternalsMonitor`, `NavigationMonitor`,
+`MoveControlMonitor`, `LookControlMonitor`, `GoalSelectorMonitor`, and
+`TargetScanMonitor` use atomic per-tick counters. `EntityQueryMonitor`
+ignores calls from threads other than the server thread.
 
 ### Entity tick scratch buffers and counters
 
@@ -141,18 +144,16 @@ sub-classes by severity:
 
 **Sub-class A — undercount-on-race, no game-state corruption.**
 Per-tick accumulator counters that get incremented from per-call
-mixins and drained on `END_SERVER_TICK`. Worst case under hypothetical
-parallel entity ticking: lost increments produce slightly wrong log
-numbers, no game state involved.
+mixins and drained on `END_SERVER_TICK`. Under parallel entity ticking,
+lost increments produce slightly wrong log numbers, with no game state
+involved.
 
 - `PhysicsDispatcher.diag*` counters (build / dispatch / fallback /
   rebuild / bucket counters)
 - `PhysicsHandoff.cellScratch` (grow-on-demand `int[]`, written
   during snapshot build)
 - Monitor accumulators: `thisTick*` `long`/`int` fields in
-  `GoalSelectorMonitor`, `HopperMonitor`, `LookControlMonitor`,
-  `MoveControlMonitor`, `TargetScanMonitor`, `TpsMonitor`,
-  `MovementInternalsMonitor`, `RedstonePhaseMonitor` (8 classes).
+  `HopperMonitor`, `TpsMonitor`, and `RedstonePhaseMonitor` (3 classes).
   Same shape as the dispatchers: incremented from per-call mixin
   hooks, drained from `END_SERVER_TICK`.
 
