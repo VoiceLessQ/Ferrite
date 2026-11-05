@@ -1,6 +1,9 @@
 package me.apika.apikaprobe.monitor;
 
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongArray;
+import java.util.concurrent.atomic.LongAdder;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
@@ -29,8 +32,7 @@ import net.minecraft.world.entity.MobCategory;
  *   avg ms / tick  — total-ns-in-category / tick-count
  *   max ms / tick  — worst single-tick sum for that category
  *
- * Server tick is single-threaded, but window accumulators use AtomicLong
- * to match the pattern used by WorldTickMonitor.
+ * Entity ticks may run on worker threads, so shared accumulators are atomic.
  */
 public final class EntityTickMonitor {
 	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
@@ -51,22 +53,34 @@ public final class EntityTickMonitor {
 	private static final ThreadLocal<net.minecraft.world.entity.EntityType<?>> TICK_TYPE =
 			ThreadLocal.withInitial(() -> null);
 
-	// Misc-bucket breakdown: per-EntityType {total ns, max single-entity ns,
-	// count} for the window. Server-thread-owned, drained at report time.
+	// Misc-bucket breakdown for the window. Entity tick workers update these
+	// counters concurrently; the server thread drains the map at report time.
 	// Exists because a field report (PR #8, Pi 4B) showed misc spiking to
 	// 47.8 ms with no way to tell WHICH entity type was responsible.
-	private static final java.util.HashMap<net.minecraft.world.entity.EntityType<?>, long[]> MISC_BY_TYPE =
-			new java.util.HashMap<>();
+	private static final ConcurrentHashMap<net.minecraft.world.entity.EntityType<?>, MiscTypeStats> MISC_BY_TYPE =
+			new ConcurrentHashMap<>();
 	/** Emit the misc-top breakdown line when the window's worst misc tick exceeds this. */
 	private static final long MISC_TOP_THRESHOLD_NS = 5_000_000L;
 
-	// Per-tick running sums — one per category. Plain longs, server-thread-owned.
-	private static final long[] THIS_TICK_NS = new long[CAT_COUNT];
+	// Per-tick running sums. Updates can come from parallel entity workers.
+	private static final AtomicLongArray THIS_TICK_NS = new AtomicLongArray(CAT_COUNT);
 
 	// Window accumulators.
 	private static final AtomicLong[] TOTAL_NS = new AtomicLong[CAT_COUNT];
 	private static final AtomicLong[] MAX_TICK_NS = new AtomicLong[CAT_COUNT];
 	private static final AtomicLong TICK_COUNT = new AtomicLong();
+
+	private static final class MiscTypeStats {
+		private final LongAdder totalNs = new LongAdder();
+		private final AtomicLong maxNs = new AtomicLong();
+		private final LongAdder count = new LongAdder();
+
+		void record(long duration) {
+			totalNs.add(duration);
+			maxNs.accumulateAndGet(duration, Math::max);
+			count.increment();
+		}
+	}
 
 	static {
 		for (int i = 0; i < CAT_COUNT; i++) {
@@ -107,15 +121,12 @@ public final class EntityTickMonitor {
 			return;
 		}
 		long duration = System.nanoTime() - start;
-		THIS_TICK_NS[cat] += duration;
+		THIS_TICK_NS.addAndGet(cat, duration);
 		if (cat == CAT_MISC) {
 			net.minecraft.world.entity.EntityType<?> type = TICK_TYPE.get();
 			if (type != null) {
 				TICK_TYPE.set(null);
-				long[] slot = MISC_BY_TYPE.computeIfAbsent(type, t -> new long[3]);
-				slot[0] += duration;
-				if (duration > slot[1]) slot[1] = duration;
-				slot[2]++;
+				MISC_BY_TYPE.computeIfAbsent(type, t -> new MiscTypeStats()).record(duration);
 			}
 		}
 	}
@@ -143,13 +154,12 @@ public final class EntityTickMonitor {
 
 	private static void onServerTickEnd() {
 		for (int i = 0; i < CAT_COUNT; i++) {
-			long thisTick = THIS_TICK_NS[i];
+			long thisTick = THIS_TICK_NS.getAndSet(i, 0L);
 			if (thisTick > 0L) {
 				TOTAL_NS[i].addAndGet(thisTick);
 				final long snapshot = thisTick;
 				MAX_TICK_NS[i].updateAndGet(prev -> Math.max(prev, snapshot));
 			}
-			THIS_TICK_NS[i] = 0L;
 		}
 		TICK_COUNT.incrementAndGet();
 		maybeReport();
@@ -191,18 +201,18 @@ public final class EntityTickMonitor {
 		// hot tick this window, then reset for the next window either way.
 		if (!MISC_BY_TYPE.isEmpty()) {
 			if (maxes[CAT_MISC] >= MISC_TOP_THRESHOLD_NS) {
-				java.util.List<java.util.Map.Entry<net.minecraft.world.entity.EntityType<?>, long[]>> top =
+				java.util.List<java.util.Map.Entry<net.minecraft.world.entity.EntityType<?>, MiscTypeStats>> top =
 						new java.util.ArrayList<>(MISC_BY_TYPE.entrySet());
-				top.sort((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0]));
+				top.sort((a, b) -> Long.compare(b.getValue().totalNs.sum(), a.getValue().totalNs.sum()));
 				StringBuilder mb = new StringBuilder("[entity-tick] misc-top:");
 				int limit = Math.min(3, top.size());
 				for (int i = 0; i < limit; i++) {
-					long[] v = top.get(i).getValue();
+					MiscTypeStats v = top.get(i).getValue();
 					mb.append(' ')
 					  .append(net.minecraft.world.entity.EntityType.getKey(top.get(i).getKey()).getPath())
-					  .append(" total=").append(formatMs(v[0]))
-					  .append(" maxSingle=").append(formatMs(v[1]))
-					  .append(" n=").append(v[2]);
+					  .append(" total=").append(formatMs(v.totalNs.sum()))
+					  .append(" maxSingle=").append(formatMs(v.maxNs.get()))
+					  .append(" n=").append(v.count.sum());
 				}
 				MonitorLog.info(mb.toString());
 			}

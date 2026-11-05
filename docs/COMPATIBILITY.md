@@ -127,9 +127,10 @@ These are safe under the current vanilla execution model but rely
 on assumptions that some future mod could break.
 
 Ferrite's cramming batch runs at the server-thread entity profiler marker
-before mob iteration. Async workers only read the volatile completion
-marker; they do not access the reusable cramming buffers or mutate other
-mobs through the batch path.
+before mob iteration. Workers used for parallel entity ticking only read
+the volatile completion marker; they do not access the reusable cramming
+buffers or mutate other mobs through the batch path. Entity tick timing
+uses atomic per-tick counters and concurrent per-type statistics.
 
 ### Entity tick scratch buffers and counters
 
