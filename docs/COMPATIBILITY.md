@@ -129,8 +129,9 @@ on assumptions that some future mod could break.
 Ferrite's cramming batch runs at the server-thread entity profiler marker
 before mob iteration. Workers used for parallel entity ticking only read
 the volatile completion marker; they do not access the reusable cramming
-buffers or mutate other mobs through the batch path. Entity tick timing
-uses atomic per-tick counters and concurrent per-type statistics.
+buffers or mutate other mobs through the batch path. `EntityTickMonitor`
+uses atomic per-tick counters and concurrent per-type statistics;
+`MonsterPhaseMonitor` uses atomic per-tick counters.
 
 ### Entity tick scratch buffers and counters
 

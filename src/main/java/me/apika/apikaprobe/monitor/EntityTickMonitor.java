@@ -1,9 +1,6 @@
 package me.apika.apikaprobe.monitor;
 
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicLongArray;
-import java.util.concurrent.atomic.LongAdder;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
@@ -57,30 +54,15 @@ public final class EntityTickMonitor {
 	// counters concurrently; the server thread drains the map at report time.
 	// Exists because a field report (PR #8, Pi 4B) showed misc spiking to
 	// 47.8 ms with no way to tell WHICH entity type was responsible.
-	private static final ConcurrentHashMap<net.minecraft.world.entity.EntityType<?>, MiscTypeStats> MISC_BY_TYPE =
-			new ConcurrentHashMap<>();
+	private static final ConcurrentTickStats<net.minecraft.world.entity.EntityType<?>> TICK_STATS =
+			new ConcurrentTickStats<>(CAT_COUNT);
 	/** Emit the misc-top breakdown line when the window's worst misc tick exceeds this. */
 	private static final long MISC_TOP_THRESHOLD_NS = 5_000_000L;
-
-	// Per-tick running sums. Updates can come from parallel entity workers.
-	private static final AtomicLongArray THIS_TICK_NS = new AtomicLongArray(CAT_COUNT);
 
 	// Window accumulators.
 	private static final AtomicLong[] TOTAL_NS = new AtomicLong[CAT_COUNT];
 	private static final AtomicLong[] MAX_TICK_NS = new AtomicLong[CAT_COUNT];
 	private static final AtomicLong TICK_COUNT = new AtomicLong();
-
-	private static final class MiscTypeStats {
-		private final LongAdder totalNs = new LongAdder();
-		private final AtomicLong maxNs = new AtomicLong();
-		private final LongAdder count = new LongAdder();
-
-		void record(long duration) {
-			totalNs.add(duration);
-			maxNs.accumulateAndGet(duration, Math::max);
-			count.increment();
-		}
-	}
 
 	static {
 		for (int i = 0; i < CAT_COUNT; i++) {
@@ -121,14 +103,12 @@ public final class EntityTickMonitor {
 			return;
 		}
 		long duration = System.nanoTime() - start;
-		THIS_TICK_NS.addAndGet(cat, duration);
+		net.minecraft.world.entity.EntityType<?> type = null;
 		if (cat == CAT_MISC) {
-			net.minecraft.world.entity.EntityType<?> type = TICK_TYPE.get();
-			if (type != null) {
-				TICK_TYPE.set(null);
-				MISC_BY_TYPE.computeIfAbsent(type, t -> new MiscTypeStats()).record(duration);
-			}
+			type = TICK_TYPE.get();
+			TICK_TYPE.set(null);
 		}
+		TICK_STATS.record(cat, duration, type);
 	}
 
 	private static int categorize(Entity entity) {
@@ -154,7 +134,7 @@ public final class EntityTickMonitor {
 
 	private static void onServerTickEnd() {
 		for (int i = 0; i < CAT_COUNT; i++) {
-			long thisTick = THIS_TICK_NS.getAndSet(i, 0L);
+			long thisTick = TICK_STATS.drainCategory(i);
 			if (thisTick > 0L) {
 				TOTAL_NS[i].addAndGet(thisTick);
 				final long snapshot = thisTick;
@@ -199,24 +179,24 @@ public final class EntityTickMonitor {
 
 		// Misc breakdown: name the top offenders when the misc bucket had a
 		// hot tick this window, then reset for the next window either way.
-		if (!MISC_BY_TYPE.isEmpty()) {
+		if (!TICK_STATS.byType().isEmpty()) {
 			if (maxes[CAT_MISC] >= MISC_TOP_THRESHOLD_NS) {
-				java.util.List<java.util.Map.Entry<net.minecraft.world.entity.EntityType<?>, MiscTypeStats>> top =
-						new java.util.ArrayList<>(MISC_BY_TYPE.entrySet());
-				top.sort((a, b) -> Long.compare(b.getValue().totalNs.sum(), a.getValue().totalNs.sum()));
+				java.util.List<java.util.Map.Entry<net.minecraft.world.entity.EntityType<?>, ConcurrentTickStats.PerTypeStats>> top =
+						new java.util.ArrayList<>(TICK_STATS.byType().entrySet());
+				top.sort((a, b) -> Long.compare(b.getValue().totalNanos.sum(), a.getValue().totalNanos.sum()));
 				StringBuilder mb = new StringBuilder("[entity-tick] misc-top:");
 				int limit = Math.min(3, top.size());
 				for (int i = 0; i < limit; i++) {
-					MiscTypeStats v = top.get(i).getValue();
+					ConcurrentTickStats.PerTypeStats v = top.get(i).getValue();
 					mb.append(' ')
 					  .append(net.minecraft.world.entity.EntityType.getKey(top.get(i).getKey()).getPath())
-					  .append(" total=").append(formatMs(v.totalNs.sum()))
-					  .append(" maxSingle=").append(formatMs(v.maxNs.get()))
+					  .append(" total=").append(formatMs(v.totalNanos.sum()))
+					  .append(" maxSingle=").append(formatMs(v.maxNanos.get()))
 					  .append(" n=").append(v.count.sum());
 				}
 				MonitorLog.info(mb.toString());
 			}
-			MISC_BY_TYPE.clear();
+			TICK_STATS.byType().clear();
 		}
 	}
 

@@ -8,10 +8,8 @@ marks pre-release research builds.
 ## [Unreleased]
 
 ### Fixed
-- **Cramming crash with parallel entity ticking (#22).** Above 2048 mobs,
-  Ferrite now falls back to vanilla cramming instead of skipping it.
-- **Entity tick monitor crash with parallel entity ticking.** Shared
-  counters and per-type statistics are now thread-safe.
+- **Cramming crash with parallel entity ticking (#22).** Batches run before entity ticks; above 2048 mobs, vanilla cramming runs.
+- **Entity tick monitor crash with parallel entity ticking.** Shared counters are thread-safe.
 
 ## [0.7.5-alpha] - 2026-10-23
 

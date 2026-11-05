@@ -1,6 +1,7 @@
 package me.apika.apikaprobe.monitor;
 
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongArray;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
@@ -25,8 +26,7 @@ import org.slf4j.LoggerFactory;
  * stress-test scenarios monsters dominate 88%/11%, so the numbers are
  * effectively monster-phase anyway.
  *
- * Server tick is single-threaded; window accumulators use AtomicLong
- * for consistency with the other monitors.
+ * Per-tick accumulators are atomic because entity ticks may run on workers.
  */
 public final class MonsterPhaseMonitor {
 	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
@@ -40,8 +40,8 @@ public final class MonsterPhaseMonitor {
 	// Per-thread start timestamps, one per phase.
 	private static final ThreadLocal<long[]> PHASE_START = ThreadLocal.withInitial(() -> new long[PHASE_COUNT]);
 
-	// Per-tick running sums per phase (server-thread owned, reset each tick).
-	private static final long[] THIS_TICK_NS = new long[PHASE_COUNT];
+	// Per-tick running sums per phase; entity workers update them concurrently.
+	private static final AtomicLongArray THIS_TICK_NS = new AtomicLongArray(PHASE_COUNT);
 
 	// Window accumulators per phase.
 	private static final AtomicLong[] TOTAL_NS = new AtomicLong[PHASE_COUNT];
@@ -111,18 +111,17 @@ public final class MonsterPhaseMonitor {
 		}
 		starts[phase] = 0L;
 		long duration = System.nanoTime() - start;
-		THIS_TICK_NS[phase] += duration;
+		THIS_TICK_NS.addAndGet(phase, duration);
 	}
 
 	private static void onServerTickEnd() {
 		for (int i = 0; i < PHASE_COUNT; i++) {
-			long thisTick = THIS_TICK_NS[i];
+			long thisTick = THIS_TICK_NS.getAndSet(i, 0L);
 			if (thisTick > 0L) {
 				TOTAL_NS[i].addAndGet(thisTick);
 				final long snapshot = thisTick;
 				MAX_TICK_NS[i].updateAndGet(prev -> Math.max(prev, snapshot));
 			}
-			THIS_TICK_NS[i] = 0L;
 		}
 		TICK_COUNT.incrementAndGet();
 		maybeReport();
