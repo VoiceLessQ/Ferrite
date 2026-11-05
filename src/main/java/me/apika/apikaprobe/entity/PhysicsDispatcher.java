@@ -23,9 +23,10 @@ import net.minecraft.world.phys.Vec3;
  * Option A — chunk-column bucketing with lazy snapshot rebuild.
  *
  * Per tick:
- *   1. PhysicsPreTickMixin fires at ServerLevel.tick HEAD →
- *      onPreEntityTick(world). Walk entities once, partition Mob
- *      into HashMap<chunkKey, List<Entity>>. No snapshots built yet.
+ *   1. PhysicsPreTickMixin prepares physics state at ServerLevel.tick
+ *      HEAD; CrammingPreTickMixin dispatches cramming at the "entities"
+ *      marker, after world time advances and before entity ticking.
+ *      Walk entities once, partition Mob into HashMap<chunkKey, List<Entity>>.
  *   2. Each mob's move() triggers MovementRedirectMixin → adjust().
  *      Compute the mob's chunk key; if SNAPSHOT_BUF currently holds a
  *      different bucket, rebuild snapshot for this mob's bucket and

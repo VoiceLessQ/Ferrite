@@ -43,6 +43,7 @@
 		"EntityAdjustInvoker",
 		"MovementRedirectMixin",
 		"PhysicsPreTickMixin",
+		"CrammingPreTickMixin",
 		"CrammingCancelMixin",
 		"ServerTickPhaseMixin",
 		"RedstoneWireMixin",

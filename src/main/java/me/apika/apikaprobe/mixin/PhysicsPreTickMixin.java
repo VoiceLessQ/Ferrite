@@ -12,13 +12,8 @@ import me.apika.apikaprobe.entity.PhysicsDispatcher;
 import net.minecraft.server.level.ServerLevel;
 
 /**
- * Fires once per world, per tick, just before entity iteration begins.
- * This is the moment PhysicsDispatcher can build the shared world
- * snapshot used by every mob's adjustMovementForCollisions redirect.
- *
- * Anchored at the "entities" profiler string constant — the vanilla
- * marker immediately before entityTickList.forEach(). Stable across
- * versions; only breaks if Mojang renames the profiler scope.
+ * Fires once per world tick at the start of ServerLevel.tick so the
+ * physics dispatcher has current world state for earlier block events.
  */
 @Mixin(ServerLevel.class)
 public abstract class PhysicsPreTickMixin {
@@ -28,6 +23,7 @@ public abstract class PhysicsPreTickMixin {
 		at = @At("HEAD")
 	)
 	private void ferrite$onPreEntityTick(BooleanSupplier shouldKeepTicking, CallbackInfo ci) {
-		PhysicsDispatcher.onPreEntityTick((ServerLevel) (Object) this);
+		ServerLevel world = (ServerLevel) (Object) this;
+		PhysicsDispatcher.onPreEntityTick(world);
 	}
 }
