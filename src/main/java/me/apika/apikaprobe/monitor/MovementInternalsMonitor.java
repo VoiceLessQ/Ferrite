@@ -1,6 +1,7 @@
 package me.apika.apikaprobe.monitor;
 
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongArray;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
@@ -29,8 +30,8 @@ import org.slf4j.LoggerFactory;
  * listener fires first and reads MonsterPhaseMonitor.getMovementSelfNs()
  * before that monitor resets its own counters.
  *
- * Same AtomicLong + ThreadLocal per-phase start + per-tick accumulator
- * + 5-second window pattern as MonsterPhaseMonitor.
+ * Same atomic per-tick accumulator + ThreadLocal per-phase start +
+ * 5-second window pattern as MonsterPhaseMonitor.
  */
 public final class MovementInternalsMonitor {
 	private static final Logger LOGGER = LoggerFactory.getLogger("ferrite");
@@ -48,7 +49,7 @@ public final class MovementInternalsMonitor {
 	private static final int PHASE_COUNT = 9;
 
 	private static final ThreadLocal<long[]> PHASE_START = ThreadLocal.withInitial(() -> new long[PHASE_COUNT]);
-	private static final long[] THIS_TICK_NS = new long[PHASE_COUNT];
+	private static final AtomicLongArray THIS_TICK_NS = new AtomicLongArray(PHASE_COUNT);
 
 	private static final AtomicLong[] TOTAL_NS = new AtomicLong[PHASE_COUNT];
 	private static final AtomicLong[] MAX_TICK_NS = new AtomicLong[PHASE_COUNT];
@@ -162,18 +163,17 @@ public final class MovementInternalsMonitor {
 		}
 		starts[phase] = 0L;
 		long duration = System.nanoTime() - start;
-		THIS_TICK_NS[phase] += duration;
+		THIS_TICK_NS.addAndGet(phase, duration);
 	}
 
 	private static void onServerTickEnd() {
 		for (int i = 0; i < PHASE_COUNT; i++) {
-			long thisTick = THIS_TICK_NS[i];
+			long thisTick = THIS_TICK_NS.getAndSet(i, 0L);
 			if (thisTick > 0L) {
 				TOTAL_NS[i].addAndGet(thisTick);
 				final long snapshot = thisTick;
 				MAX_TICK_NS[i].updateAndGet(prev -> Math.max(prev, snapshot));
 			}
-			THIS_TICK_NS[i] = 0L;
 		}
 		TICK_COUNT.incrementAndGet();
 		maybeReport();

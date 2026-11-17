@@ -12,6 +12,7 @@ base {
 
 repositories {
 	mavenLocal()
+	mavenCentral()
 	maven { url = 'https://maven.neoforged.net/releases' }
 	maven { url = 'https://maven.architectury.dev/' }
 }
@@ -175,6 +176,12 @@ dependencies {
 	// Plain implementation (not modImplementation) for the same reason.
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+	testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.test {
+	useJUnitPlatform()
 }
 
 // ---------------------------------------------------------------------------

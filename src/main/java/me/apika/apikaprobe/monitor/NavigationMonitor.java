@@ -57,11 +57,9 @@ public final class NavigationMonitor {
 		}
 	}
 
-	// Per-tick aggregate path cost across all categories. thisTickPathNs is
-	// non-atomic because pathfinding all happens on the server thread; matches
-	// the MoveControlMonitor / LookControlMonitor pattern. Drained once per
-	// server tick into TICK_PATH_COST.
-	private static long thisTickPathNs = 0L;
+	// Pathfinding can run on entity workers; drain the shared per-tick sum on
+	// the server thread into TICK_PATH_COST.
+	private static final AtomicLong THIS_TICK_PATH_NS = new AtomicLong();
 	private static final LatencyHistogram TICK_PATH_COST = new LatencyHistogram();
 
 	private static final AtomicLong TICK_COUNT = new AtomicLong();
@@ -71,8 +69,8 @@ public final class NavigationMonitor {
 
 	public static void register() {
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
-			if (thisTickPathNs > 0L) TICK_PATH_COST.record(thisTickPathNs);
-			thisTickPathNs = 0L;
+			long pathNs = THIS_TICK_PATH_NS.getAndSet(0L);
+			if (pathNs > 0L) TICK_PATH_COST.record(pathNs);
 			TICK_COUNT.incrementAndGet();
 			maybeReport();
 		});
@@ -87,7 +85,7 @@ public final class NavigationMonitor {
 		if (start == 0L) return;
 		START_NS.get()[0] = 0L;
 		long duration = System.nanoTime() - start;
-		thisTickPathNs += duration;
+		THIS_TICK_PATH_NS.addAndGet(duration);
 		Category cat = classify(entity);
 		COST.get(cat).record(duration);
 		TOTAL_PATHS.get(cat).incrementAndGet();

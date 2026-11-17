@@ -33,10 +33,10 @@ public final class GoalSelectorMonitor {
 	// long[] not boxed Long: fires per mob per tick.
 	private static final ThreadLocal<long[]> STARTS = ThreadLocal.withInitial(() -> new long[3]);
 
-	private static long thisTickCallCount   = 0L;
-	private static long thisTickTotalNs     = 0L;
-	private static long thisTickGoalsTrueNs  = 0L;
-	private static long thisTickGoalsFalseNs = 0L;
+	private static final AtomicLong THIS_TICK_CALL_COUNT = new AtomicLong();
+	private static final AtomicLong THIS_TICK_TOTAL_NS = new AtomicLong();
+	private static final AtomicLong THIS_TICK_GOALS_TRUE_NS = new AtomicLong();
+	private static final AtomicLong THIS_TICK_GOALS_FALSE_NS = new AtomicLong();
 
 	private static final AtomicLong TOTAL_CALLS        = new AtomicLong();
 	private static final AtomicLong TOTAL_NS           = new AtomicLong();
@@ -64,8 +64,8 @@ public final class GoalSelectorMonitor {
 		long start = starts[0];
 		if (start == 0L) return;
 		starts[0] = 0L;
-		thisTickCallCount++;
-		thisTickTotalNs += System.nanoTime() - start;
+		THIS_TICK_CALL_COUNT.incrementAndGet();
+		THIS_TICK_TOTAL_NS.addAndGet(System.nanoTime() - start);
 	}
 
 	public static void onTickGoalsBegin(boolean tickAll) {
@@ -80,25 +80,25 @@ public final class GoalSelectorMonitor {
 		if (start == 0L) return;
 		starts[slot] = 0L;
 		if (tickAll) {
-			thisTickGoalsTrueNs += System.nanoTime() - start;
+			THIS_TICK_GOALS_TRUE_NS.addAndGet(System.nanoTime() - start);
 		} else {
-			thisTickGoalsFalseNs += System.nanoTime() - start;
+			THIS_TICK_GOALS_FALSE_NS.addAndGet(System.nanoTime() - start);
 		}
 	}
 
 	// --- Internals -----------------------------------------------------------
 
 	private static void onServerTickEnd() {
-		if (thisTickCallCount > 0L) {
-			TOTAL_CALLS.addAndGet(thisTickCallCount);
-			TOTAL_NS.addAndGet(thisTickTotalNs);
-			TOTAL_GOALS_TRUE_NS.addAndGet(thisTickGoalsTrueNs);
-			TOTAL_GOALS_FALSE_NS.addAndGet(thisTickGoalsFalseNs);
+		long callCount = THIS_TICK_CALL_COUNT.getAndSet(0L);
+		long totalNs = THIS_TICK_TOTAL_NS.getAndSet(0L);
+		long goalsTrueNs = THIS_TICK_GOALS_TRUE_NS.getAndSet(0L);
+		long goalsFalseNs = THIS_TICK_GOALS_FALSE_NS.getAndSet(0L);
+		if (callCount > 0L) {
+			TOTAL_CALLS.addAndGet(callCount);
+			TOTAL_NS.addAndGet(totalNs);
+			TOTAL_GOALS_TRUE_NS.addAndGet(goalsTrueNs);
+			TOTAL_GOALS_FALSE_NS.addAndGet(goalsFalseNs);
 		}
-		thisTickCallCount    = 0L;
-		thisTickTotalNs      = 0L;
-		thisTickGoalsTrueNs  = 0L;
-		thisTickGoalsFalseNs = 0L;
 		TICK_COUNT.incrementAndGet();
 		maybeReport();
 	}

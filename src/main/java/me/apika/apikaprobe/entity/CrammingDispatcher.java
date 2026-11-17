@@ -17,8 +17,8 @@ import net.minecraft.server.level.ServerLevel;
 /**
  * Batched mob-vs-mob cramming dispatcher.
  *
- * First LivingEntity.tickCramming() call within a given server tick
- * triggers the batch:
+ * The ServerLevel pre-entity hook runs the batch once per world tick on the
+ * server thread, before Async dispatches entity workers:
  *   1. Collect every Mob in the world.
  *   2. Fill CrammingHandoff.REQUEST_BUF with positions, AABBs, flags,
  *      and root vehicle ids.
@@ -32,8 +32,8 @@ import net.minecraft.server.level.ServerLevel;
  *      (entity.getRandom().nextInt(4) == 0). Mirrors vanilla
  *      LivingEntity.pushEntities (Yarn: tickCramming) bit-for-bit.
  *
- * Subsequent tickCramming calls in the same server tick are cancelled
- * by the Mixin without re-triggering — the tick guard is `world.getGameTime()`.
+ * Mob tickCramming calls are cancelled only after the batch completes for
+ * that world tick. If Ferrite cannot handle the batch, vanilla remains active.
  *
  * ENABLED=true by default. /ferrite cramming off lets users fall back
  * to vanilla without restart for A/B verification.
@@ -42,8 +42,7 @@ public final class CrammingDispatcher {
 
 	public static volatile boolean ENABLED = true;
 
-	// --- Per-server-tick state ---------------------------------------------
-	private static long lastProcessedTick = Long.MIN_VALUE;
+	private static final CrammingTickState<ServerLevel> COMPLETED_TICK = new CrammingTickState<>();
 	private static final List<LivingEntity> MOB_SCRATCH = new ArrayList<>(1024);
 
 	// Rate limiter for the "too many mobs to batch" warning. Without this,
@@ -68,31 +67,26 @@ public final class CrammingDispatcher {
 
 	private CrammingDispatcher() {}
 
-	/**
-	 * Called from CrammingCancelMixin on the first tickCramming call of a
-	 * server tick. Returns true if Rust handled the batch (caller should
-	 * cancel the vanilla body); false if the caller should let vanilla run.
-	 */
-	public static boolean onTickCramming(LivingEntity caller) {
+	public static void onPreEntityTick(ServerLevel world) {
+		if (!ENABLED || !RustBridge.NATIVE_AVAILABLE || !world.tickRateManager().runsNormally()) return;
+		long tick = world.getGameTime();
+		if (COMPLETED_TICK.runOnceOnServerThread(
+				world, tick, world.getServer().isSameThread(), () -> runBatch(world))) {
+			maybeLogDiag();
+		}
+	}
+
+	public static boolean shouldCancelVanilla(LivingEntity caller) {
 		if (!ENABLED || !RustBridge.NATIVE_AVAILABLE) return false;
 		if (!(caller.level() instanceof ServerLevel world)) return false;
-
-		long tick = world.getGameTime();
-		if (tick == lastProcessedTick) {
-			// Batch already processed this tick — still cancel vanilla body.
-			return true;
-		}
-		lastProcessedTick = tick;
-		runBatch(world);
-		maybeLogDiag();
-		return true;
+		return COMPLETED_TICK.isCompleted(world, world.getGameTime());
 	}
 
 	// =========================================================================
 	// Batch
 	// =========================================================================
 
-	private static void runBatch(ServerLevel world) {
+	private static boolean runBatch(ServerLevel world) {
 		// 1. Collect all eligible mobs in this world.
 		MOB_SCRATCH.clear();
 		for (Entity e : world.getAllEntities()) {
@@ -101,12 +95,11 @@ public final class CrammingDispatcher {
 			}
 		}
 		int count = MOB_SCRATCH.size();
-		if (count == 0) return;
+		if (count == 0) return true;
 		if (count > CrammingHandoff.MAX_ENTITIES) {
-			// Too many mobs — fall back. The Mixin already cancelled, so
-			// vanilla won't run. Rare; safer than partial batching.
+			// Too many mobs — leave this tick unmarked so every Mob uses vanilla.
 			maybeLogOverflow(count);
-			return;
+			return false;
 		}
 
 		// 2–4. Build, dispatch, read.
@@ -157,6 +150,7 @@ public final class CrammingDispatcher {
 		diagMobs += count;
 		diagPushed += pushedThisBatch;
 		diagDamaged += damagedThisBatch;
+		return true;
 	}
 
 	private static void maybeLogOverflow(int count) {
